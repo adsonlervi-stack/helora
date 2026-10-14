@@ -8,7 +8,8 @@ import {
   Building2,
   Users,
   Clock3,
-  Smartphone
+  Smartphone,
+  Pencil
 } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
 import {
@@ -25,7 +26,11 @@ import {
   createDepartmentApi,
   removeDepartment,
   getTeam,
-  setProfileDepartmentsApi
+  setProfileDepartmentsApi,
+  createTeamMemberApi,
+  updateTeamMemberApi,
+  setTeamMemberPasswordApi,
+  removeTeamMemberApi
 } from "../api.js";
 
 const CARDS = [
@@ -64,7 +69,7 @@ const CARDS = [
   }
 ];
 
-export default function SettingsPage({ onGoToChannels }) {
+export default function SettingsPage({ onGoToChannels, canManage = false }) {
   const [tab, setTab] = useState(null);
 
   if (tab === null) {
@@ -105,7 +110,7 @@ export default function SettingsPage({ onGoToChannels }) {
       {tab === "canned" && <CannedResponsesTab />}
       {tab === "labels" && <LabelsTab />}
       {tab === "departments" && <DepartmentsTab />}
-      {tab === "team" && <TeamTab />}
+      {tab === "team" && <TeamTab canManage={canManage} />}
       {tab === "scheduled" && <ScheduledMessagesTab />}
     </div>
   );
@@ -382,9 +387,158 @@ function DepartmentsTab() {
   );
 }
 
-function TeamTab() {
+const ROLE_LABEL = { owner: "Gestor", agent: "Atendente" };
+
+function NewMemberForm({ onCreated }) {
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "agent" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await createTeamMemberApi({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password || undefined,
+        role: form.role
+      });
+      setMsg({
+        type: "success",
+        text: r.invited
+          ? `Convite enviado para ${form.email}.`
+          : `${form.name} criado. Já pode entrar com ${form.email} e a senha definida.`
+      });
+      setForm({ name: "", email: "", password: "", role: "agent" });
+      onCreated();
+    } catch (err) {
+      setMsg({ type: "error", text: err.response?.data?.error || err.message });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card-title">Novo usuário</div>
+      <div className="card-subtitle">
+        Com senha, a pessoa já entra direto. Sem senha, recebe um convite por e-mail para criar a dela.
+      </div>
+      <form className="admin-create-grid" onSubmit={submit}>
+        <input className="response" placeholder="Nome *" value={form.name} onChange={set("name")} />
+        <input className="response" type="email" placeholder="E-mail de login *" value={form.email} onChange={set("email")} />
+        <input className="response" type="password" placeholder="Senha (mín. 6)" value={form.password} onChange={set("password")} autoComplete="new-password" />
+        <select className="deal-stage-select" value={form.role} onChange={set("role")}>
+          <option value="agent">Atendente</option>
+          <option value="owner">Gestor</option>
+        </select>
+        <button type="submit" className="connect-btn" disabled={busy || !form.name.trim() || !form.email.trim()}>
+          {busy ? "Criando..." : "Criar usuário"}
+        </button>
+      </form>
+      {msg && <div className={`admin-feedback ${msg.type}`}>{msg.text}</div>}
+    </div>
+  );
+}
+
+function MemberEditor({ member, onClose, onSaved }) {
+  const [name, setName] = useState(member.name || "");
+  const [role, setRole] = useState(member.role);
+  const [password, setPassword] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const run = async (fn, okText, close) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await fn();
+      onSaved();
+      if (close) return onClose();
+      setMsg({ type: "success", text: okText });
+    } catch (err) {
+      setMsg({ type: "error", text: err.response?.data?.error || err.message });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card deal-modal team-editor" onClick={(e) => e.stopPropagation()}>
+        <h3>Editar usuário</h3>
+        {member.email && <p style={{ marginTop: -6 }}>Login: {member.email}</p>}
+
+        <label className="login-field">
+          <span>Nome</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="login-field">
+          <span>Papel</span>
+          <select className="deal-stage-select" value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="agent">Atendente (vê só os setores dele)</option>
+            <option value="owner">Gestor (vê tudo e administra a empresa)</option>
+          </select>
+        </label>
+        <button
+          className="connect-btn"
+          disabled={busy || !name.trim()}
+          onClick={() => run(() => updateTeamMemberApi(member.id, { name, role }), "Dados salvos.")}
+        >
+          Salvar
+        </button>
+
+        <div className="team-editor-section">
+          <label className="login-field">
+            <span>Nova senha</span>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="mín. 6 caracteres" autoComplete="new-password" />
+          </label>
+          <button
+            className="resolve-btn"
+            disabled={busy || password.length < 6}
+            onClick={() =>
+              run(() => setTeamMemberPasswordApi(member.id, password), "Senha alterada.").then(() => setPassword(""))
+            }
+          >
+            Definir nova senha
+          </button>
+        </div>
+
+        <div className="team-editor-section">
+          {!confirmRemove ? (
+            <button className="reply-delete team-remove-btn" disabled={busy} onClick={() => setConfirmRemove(true)}>
+              <Trash2 size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
+              Remover usuário
+            </button>
+          ) : (
+            <div className="wa-confirm">
+              <span>Remover {member.name}? Ele perde o acesso; as conversas continuam na empresa.</span>
+              <button className="connect-btn wa-danger" disabled={busy} onClick={() => run(() => removeTeamMemberApi(member.id), "", true)}>
+                Sim, remover
+              </button>
+              <button className="resolve-btn" onClick={() => setConfirmRemove(false)}>
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
+
+        {msg && msg.text && <div className={`admin-feedback ${msg.type}`}>{msg.text}</div>}
+
+        <button className="modal-close" onClick={onClose}>
+          Fechar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TeamTab({ canManage }) {
   const [team, setTeam] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [editing, setEditing] = useState(null);
 
   const load = () => {
     getTeam().then(setTeam).catch(console.error);
@@ -403,55 +557,67 @@ function TeamTab() {
   };
 
   return (
-    <div className="card">
-      <div className="card-title">Equipe</div>
-      <div className="card-subtitle">
-        Escolha os setores de cada atendente. Quem é <strong>Gestor</strong> vê tudo, sem
-        restrição.
+    <>
+      {canManage && <NewMemberForm onCreated={load} />}
+
+      <div className="card">
+        <div className="card-title">Equipe ({team.length})</div>
+        <div className="card-subtitle">
+          Escolha os setores de cada atendente. Quem é <strong>Gestor</strong> vê tudo e pode criar e
+          editar usuários.
+        </div>
+
+        <div>
+          {team.map((member) => (
+            <div className="team-member-row" key={member.id}>
+              <div className="team-member-info">
+                <span className="team-member-name">{member.name || "Sem nome"}</span>
+                <span className={`team-role-badge ${member.role}`}>
+                  {member.isSuperAdmin ? "Admin do sistema" : ROLE_LABEL[member.role]}
+                </span>
+                {member.email && <span className="team-member-email">{member.email}</span>}
+              </div>
+              {member.role === "agent" ? (
+                <div className="team-dept-chips">
+                  {departments.map((d) => {
+                    const active = member.departments.some((md) => md.id === d.id);
+                    return (
+                      <button
+                        key={d.id}
+                        className={`filter-tab ${active ? "active" : ""}`}
+                        onClick={() => canManage && toggleDept(member, d.id)}
+                        disabled={!canManage}
+                      >
+                        {d.name}
+                      </button>
+                    );
+                  })}
+                  {departments.length === 0 && (
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                      Crie um setor primeiro na aba Setores.
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span style={{ color: "var(--text-muted)", fontSize: 12 }}>Acesso total à empresa</span>
+              )}
+              {canManage && !member.isSuperAdmin && (
+                <button className="resolve-btn team-edit-btn" onClick={() => setEditing(member)}>
+                  <Pencil size={13} style={{ marginRight: 5, verticalAlign: -2 }} />
+                  Editar
+                </button>
+              )}
+            </div>
+          ))}
+          {team.length === 0 && (
+            <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0" }}>
+              Nenhum usuário cadastrado ainda.
+            </div>
+          )}
+        </div>
       </div>
 
-      <div>
-        {team.map((member) => (
-          <div className="team-member-row" key={member.id}>
-            <div className="team-member-info">
-              <span className="team-member-name">{member.name || "Sem nome"}</span>
-              <span className={`team-role-badge ${member.role}`}>
-                {member.role === "owner" ? "Gestor" : "Atendente"}
-              </span>
-            </div>
-            {member.role === "agent" ? (
-              <div className="team-dept-chips">
-                {departments.map((d) => {
-                  const active = member.departments.some((md) => md.id === d.id);
-                  return (
-                    <button
-                      key={d.id}
-                      className={`filter-tab ${active ? "active" : ""}`}
-                      onClick={() => toggleDept(member, d.id)}
-                    >
-                      {d.name}
-                    </button>
-                  );
-                })}
-                {departments.length === 0 && (
-                  <span style={{ color: "var(--text-muted)", fontSize: 12 }}>
-                    Crie um setor primeiro na aba Setores.
-                  </span>
-                )}
-              </div>
-            ) : (
-              <span style={{ color: "var(--text-muted)", fontSize: 12 }}>Acesso total à conta</span>
-            )}
-          </div>
-        ))}
-        {team.length === 0 && (
-          <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0" }}>
-            Nenhum atendente cadastrado ainda.
-          </div>
-        )}
-      </div>
-    </div>
+      {editing && <MemberEditor member={editing} onClose={() => setEditing(null)} onSaved={load} />}
+    </>
   );
 }
-
-

@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Building2, Megaphone, Trash2 } from "lucide-react";
+import { Building2, Megaphone, Trash2, LogIn, Briefcase } from "lucide-react";
+import { DashboardTab, InvoicesTab, CommercialEditor, brl } from "./GestaoTabs.jsx";
 import {
   getAdminAccounts,
   createAdminAccount,
+  updateAdminAccountApi,
+  enterAccount,
   getAdminUsers,
   getAdminAnnouncements,
   createAdminAnnouncement,
@@ -14,18 +17,25 @@ function formatDate(iso) {
 }
 
 const TABS = [
-  { key: "accounts", label: "Contas" },
+  { key: "dashboard", label: "Painel" },
+  { key: "accounts", label: "Empresas" },
+  { key: "invoices", label: "Cobranças" },
   { key: "users", label: "Usuários" },
   { key: "announcements", label: "Comunicados" }
 ];
 
+const STATUS_LABEL = { active: "Ativa", suspended: "Suspensa", trial: "Teste" };
+
 function AccountsTab() {
   const [accounts, setAccounts] = useState([]);
   const [name, setName] = useState("");
-  const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const load = () => getAdminAccounts().then(setAccounts).catch(console.error);
 
@@ -35,18 +45,28 @@ function AccountsTab() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !ownerEmail.trim()) return;
+    if (!name.trim()) return;
     setLoading(true);
     setFeedback(null);
     try {
-      await createAdminAccount(name.trim(), ownerEmail.trim(), ownerName.trim());
+      const r = await createAdminAccount({
+        name: name.trim(),
+        ownerName: ownerName.trim() || undefined,
+        ownerEmail: ownerEmail.trim() || undefined,
+        ownerPassword: ownerPassword || undefined
+      });
       setFeedback({
         type: "success",
-        text: `Conta "${name}" criada. Um e-mail de convite foi enviado para ${ownerEmail}.`
+        text: !ownerEmail.trim()
+          ? `Empresa "${name}" criada. Clique em "Entrar" para cadastrar os usuários dela.`
+          : r.invited
+            ? `Empresa "${name}" criada. Convite enviado para ${ownerEmail}.`
+            : `Empresa "${name}" criada. O gestor já pode entrar com ${ownerEmail} e a senha definida.`
       });
       setName("");
-      setOwnerEmail("");
       setOwnerName("");
+      setOwnerEmail("");
+      setOwnerPassword("");
       load();
     } catch (err) {
       setFeedback({ type: "error", text: err.response?.data?.error || err.message });
@@ -54,37 +74,34 @@ function AccountsTab() {
     setLoading(false);
   };
 
+  const toggleStatus = async (a) => {
+    setBusyId(a.id);
+    try {
+      await updateAdminAccountApi(a.id, { status: a.status === "suspended" ? "active" : "suspended" });
+      load();
+    } catch (err) {
+      setFeedback({ type: "error", text: err.response?.data?.error || err.message });
+    }
+    setBusyId(null);
+  };
+
   return (
     <>
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">Nova conta (cliente)</div>
+        <div className="card-title">Nova empresa</div>
         <div className="card-subtitle">
-          Cria a conta e envia um e-mail de convite pro dono definir a senha dele. A conexão do
-          WhatsApp já fica pronta pra gerar QR Code assim que ele entrar.
+          Só o nome é obrigatório. Depois é só clicar em <strong>Entrar</strong> para configurar
+          tudo por dentro (usuários, WhatsApp, setores). Se já quiser criar o gestor, preencha
+          e-mail e senha; sem senha, ele recebe convite por e-mail.
         </div>
 
-        <form className="reply-form" onSubmit={handleCreate} style={{ flexWrap: "wrap" }}>
-          <input
-            className="response"
-            placeholder="Nome do cliente"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            className="response"
-            type="email"
-            placeholder="E-mail do dono"
-            value={ownerEmail}
-            onChange={(e) => setOwnerEmail(e.target.value)}
-          />
-          <input
-            className="response"
-            placeholder="Nome do dono (opcional)"
-            value={ownerName}
-            onChange={(e) => setOwnerName(e.target.value)}
-          />
-          <button type="submit" disabled={loading}>
-            {loading ? "Criando..." : "Criar conta"}
+        <form className="admin-create-grid" onSubmit={handleCreate}>
+          <input className="response" placeholder="Nome da empresa *" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="response" placeholder="Nome do gestor (opcional)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
+          <input className="response" type="email" placeholder="E-mail do gestor (opcional)" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} />
+          <input className="response" type="password" placeholder="Senha do gestor (mín. 6)" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} autoComplete="new-password" />
+          <button type="submit" className="connect-btn" disabled={loading || !name.trim()}>
+            {loading ? "Criando..." : "Criar empresa"}
           </button>
         </form>
 
@@ -92,31 +109,44 @@ function AccountsTab() {
       </div>
 
       <div className="card">
-        <div className="card-title">Contas cadastradas</div>
+        <div className="card-title">Empresas cadastradas</div>
         <div className="card-subtitle">{accounts.length} no total</div>
 
         <div>
           {accounts.map((a) => (
-            <div className="reply-item" key={a.id}>
+            <div className="reply-item admin-account-row" key={a.id}>
               <span className="agent-avatar" style={{ marginBottom: 0, width: 32, height: 32 }}>
                 <Building2 size={15} />
               </span>
               <span className="reply-response">
                 <strong>{a.name}</strong>
-                <span style={{ color: "var(--text-muted)", marginLeft: 8 }}>
-                  criada em {formatDate(a.created_at)}
+                <span style={{ color: "var(--text-muted)", marginLeft: 8, fontSize: 12 }}>
+                  {a.plan_name ? `${a.plan_name} · ` : ""}{brl(a.monthly_price)}/mês · vence dia {a.due_day ?? 10} ·{" "}
+                  {a.usersCount} usuário(s) · desde {formatDate(a.created_at)}
                 </span>
               </span>
-              <span className={`account-status-badge ${a.status}`}>{a.status}</span>
+              <span className={`account-status-badge ${a.status}`}>{STATUS_LABEL[a.status] || a.status}</span>
+              <button className="connect-btn admin-enter-btn" onClick={() => enterAccount(a)}>
+                <LogIn size={14} style={{ marginRight: 5, verticalAlign: -2 }} />
+                Entrar
+              </button>
+              <button className="resolve-btn" onClick={() => setEditing(a)}>
+                <Briefcase size={13} style={{ marginRight: 5, verticalAlign: -2 }} />
+                Comercial
+              </button>
+              <button className="resolve-btn" disabled={busyId === a.id} onClick={() => toggleStatus(a)}>
+                {a.status === "suspended" ? "Reativar" : "Suspender"}
+              </button>
             </div>
           ))}
           {accounts.length === 0 && (
             <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0" }}>
-              Nenhuma conta cadastrada ainda.
+              Nenhuma empresa cadastrada ainda.
             </div>
           )}
         </div>
       </div>
+      {editing && <CommercialEditor account={editing} onClose={() => setEditing(null)} onSaved={load} />}
     </>
   );
 }
@@ -402,7 +432,7 @@ function AnnouncementsTab() {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState("accounts");
+  const [tab, setTab] = useState("dashboard");
 
   return (
     <div className="page">
@@ -418,7 +448,9 @@ export default function AdminPage() {
         ))}
       </div>
 
+      {tab === "dashboard" && <DashboardTab />}
       {tab === "accounts" && <AccountsTab />}
+      {tab === "invoices" && <InvoicesTab />}
       {tab === "users" && <UsersTab />}
       {tab === "announcements" && <AnnouncementsTab />}
     </div>
