@@ -4138,3 +4138,35 @@ h3 {
 .wa-confirm { display: flex; flex-direction: column; gap: 8px; align-items: stretch; width: 100%; font-size: 13px; color: var(--text, #111); }
 .wa-danger { background: #d93025 !important; }
 .wa-error { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: #fdecea; color: #b3261e; font-size: 13px; text-align: left; }
+
+/* ---------- Gestão de usuários / empresas ---------- */
+.acting-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 16px; background: #fff4d6; color: #6b4e00; font-size: 13px; border-bottom: 1px solid #f0d58a; }
+.acting-banner button { border: 0; background: #6b4e00; color: #fff; padding: 6px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.admin-create-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: center; margin-top: 10px; }
+.admin-create-grid .connect-btn { width: auto; }
+.admin-account-row { flex-wrap: wrap; gap: 10px; }
+.admin-enter-btn { width: auto !important; padding: 7px 12px !important; }
+.team-member-email { color: var(--text-muted, #667); font-size: 12px; }
+.team-edit-btn { margin-left: auto; white-space: nowrap; }
+.team-editor { text-align: left; }
+.team-editor .connect-btn, .team-editor .resolve-btn { width: 100%; }
+.team-editor-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(0,0,0,.08); }
+.team-remove-btn { display: inline-flex; align-items: center; color: #b3261e; font-size: 13px; }
+.gestao-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.gestao-card-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted, #667); }
+.gestao-card-value { font-size: 26px; font-weight: 700; margin: 8px 0 4px; }
+.gestao-card-hint { font-size: 12px; color: var(--text-muted, #667); }
+.gestao-card.danger .gestao-card-value { color: #b3261e; }
+.gestao-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.gestao-row input[type="month"] { max-width: 180px; }
+.gestao-muted { color: var(--text-muted, #667); font-size: 12px; }
+.gestao-table { margin-top: 12px; }
+.gestao-invoice { flex-wrap: wrap; gap: 10px; }
+.gestao-pay { max-width: 190px; }
+.gestao-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0 12px; }
+.gestao-editor { max-width: 560px; width: 100%; }
+.gestao-editor textarea { width: 100%; border: 1px solid #dfe3e6; border-radius: 8px; padding: 8px; font: inherit; }
+.invoice-badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: #eef1f3; color: #445; }
+.invoice-badge.paid { background: #e3f5ea; color: #1a7f45; }
+.invoice-badge.overdue { background: #fdecea; color: #b3261e; }
+.invoice-badge.canceled { background: #f1f1f1; color: #888; text-decoration: line-through; }

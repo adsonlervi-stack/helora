@@ -14,8 +14,33 @@ api.interceptors.request.use(async (config) => {
   if (data.session) {
     config.headers.Authorization = `Bearer ${data.session.access_token}`;
   }
+  // Super admin "dentro" de uma empresa: o backend só aceita isso de super admin.
+  const acting = getActingAccount();
+  if (acting?.id) config.headers["X-Account-Id"] = acting.id;
   return config;
 });
+
+// ---- Super admin: entrar numa empresa ----
+const ACTING_KEY = "helora_acting_account";
+export function getActingAccount() {
+  try {
+    return JSON.parse(localStorage.getItem(ACTING_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+export function enterAccount(account) {
+  try {
+    localStorage.setItem(ACTING_KEY, JSON.stringify({ id: account.id, name: account.name }));
+  } catch {}
+  window.location.reload();
+}
+export function leaveAccount() {
+  try {
+    localStorage.removeItem(ACTING_KEY);
+  } catch {}
+  window.location.reload();
+}
 
 // ---- Conversas ----
 export const getConversations = () => api.get("/conversations").then((r) => r.data);
@@ -58,6 +83,10 @@ export const removeDepartment = (id) => api.delete(`/departments/${id}`);
 
 // ---- Equipe ----
 export const getTeam = () => api.get("/team").then((r) => r.data);
+export const createTeamMemberApi = (data) => api.post("/team", data).then((r) => r.data);
+export const updateTeamMemberApi = (id, patch) => api.patch(`/team/${id}`, patch).then((r) => r.data);
+export const setTeamMemberPasswordApi = (id, password) => api.post(`/team/${id}/password`, { password });
+export const removeTeamMemberApi = (id) => api.delete(`/team/${id}`);
 export const setProfileDepartmentsApi = (profileId, departmentIds) =>
   api.post(`/team/${profileId}/departments`, { departmentIds }).then((r) => r.data);
 
@@ -122,8 +151,8 @@ export const saveBotFlow = (flow) => api.post("/bot-flow", { flow }).then((r) =>
 
 // ---- Admin (só super admin) ----
 export const getAdminAccounts = () => api.get("/admin/accounts").then((r) => r.data);
-export const createAdminAccount = (name, ownerEmail, ownerName) =>
-  api.post("/admin/accounts", { name, ownerEmail, ownerName }).then((r) => r.data);
+export const createAdminAccount = (data) => api.post("/admin/accounts", data).then((r) => r.data);
+export const updateAdminAccountApi = (id, patch) => api.patch(`/admin/accounts/${id}`, patch).then((r) => r.data);
 export const getAdminUsers = () => api.get("/admin/users").then((r) => r.data);
 
 // ---- Comunicados ----
@@ -158,3 +187,10 @@ export const removeDeal = (id) => api.delete(`/deals/${id}`);
 export const getDealActivities = (id) => api.get(`/deals/${id}/activities`).then((r) => r.data);
 export const addDealActivityApi = (id, description) =>
   api.post(`/deals/${id}/activities`, { description }).then((r) => r.data);
+
+// ---- Gestão Helora (super admin) ----
+export const getManagementDashboard = () => api.get("/admin/dashboard").then((r) => r.data);
+export const getInvoices = (params = {}) => api.get("/admin/invoices", { params }).then((r) => r.data);
+export const generateInvoicesApi = (reference) => api.post("/admin/invoices/generate", { reference }).then((r) => r.data);
+export const createInvoiceApi = (data) => api.post("/admin/invoices", data).then((r) => r.data);
+export const updateInvoiceApi = (id, patch) => api.patch(`/admin/invoices/${id}`, patch).then((r) => r.data);

@@ -20,7 +20,7 @@ export const NAV_ITEMS = [
 ];
 
 // Só aparece pra quem é super admin (dono da Helora) — ver App.jsx
-export const ADMIN_NAV_ITEM = { key: "admin", label: "Admin", icon: ShieldCheck };
+export const ADMIN_NAV_ITEM = { key: "admin", label: "Gestão", icon: ShieldCheck };
 
 export const SECTION_TITLES = {
   home: "Início",
@@ -30,5 +30,5 @@ export const SECTION_TITLES = {
   conversations: "Conversas",
   channels: "Canais",
   settings: "Configurações",
-  admin: "Administração"
+  admin: "Gestão Helora"
 };

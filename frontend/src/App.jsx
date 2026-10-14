@@ -13,7 +13,7 @@ import AdminPage from "./components/AdminPage.jsx";
 import ChannelsPage from "./components/ChannelsPage.jsx";
 import WhatsAppConnectModal from "./components/WhatsAppConnectModal.jsx";
 import FooterBar from "./components/FooterBar.jsx";
-import { getConversations, getWhatsAppStatus, getAccount } from "./api.js";
+import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
 import { NAV_ITEMS, ADMIN_NAV_ITEM } from "./navConfig.js";
 
@@ -82,13 +82,16 @@ export default function App() {
           return;
         }
 
+        // Super admin "dentro" de uma empresa: age como gestor dela.
+        const acting = data.is_super_admin ? getActingAccount() : null;
         setProfile({
-          accountId: data.account_id,
-          role: data.role,
+          accountId: acting?.id || data.account_id,
+          role: acting ? "owner" : data.role,
           isSuperAdmin: data.is_super_admin,
           name: data.name,
           avatarUrl: data.avatar_url,
-          accountName: data.accounts?.name
+          accountName: acting?.name || data.accounts?.name,
+          acting: !!acting
         });
       });
 
@@ -178,7 +181,10 @@ export default function App() {
     return <div className="auth-loading">Carregando sua conta...</div>;
   }
 
-  const navItems = profile.isSuperAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
+  // Super admin fora de uma empresa = Painel Helora (só gestão).
+  const isHeloraPanel = profile.isSuperAdmin && !profile.acting;
+  const navItems = isHeloraPanel ? [ADMIN_NAV_ITEM] : NAV_ITEMS;
+  const activeSection = isHeloraPanel ? "admin" : section === "admin" ? "home" : section;
   const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
   const canEditFooter = profile.role === "owner" || profile.isSuperAdmin;
   const handleAvatarUpdated = (avatarUrl) => setProfile((p) => ({ ...p, avatarUrl }));
@@ -187,7 +193,7 @@ export default function App() {
     <div className="shell">
       <IconRail
         items={navItems}
-        section={section}
+        section={activeSection}
         onChange={setSection}
         unreadTotal={unreadTotal}
         profile={profile}
@@ -195,20 +201,29 @@ export default function App() {
       />
 
       <div className="shell-main">
+        {profile.acting && (
+          <div className="acting-banner">
+            <span>
+              Você está dentro da empresa <strong>{profile.accountName}</strong> como administrador.
+            </span>
+            <button onClick={leaveAccount}>Sair da empresa</button>
+          </div>
+        )}
         <TopBar
-          section={section}
+          section={activeSection}
           whatsappStatus={whatsappStatus}
           onOpenConnect={() => setShowConnectModal(true)}
           profile={profile}
+          hideWhatsApp={isHeloraPanel}
         />
 
         <div className="shell-content">
-          {section === "home" && (
+          {activeSection === "home" && (
             <HomePage profile={profile} conversations={conversations} onNavigate={setSection} />
           )}
-          {section === "overview" && <OverviewPage refreshKey={statsVersion} />}
-          {section === "agents" && <AgentsPage onGoToSettings={() => setSection("settings")} />}
-          {section === "conversations" && (
+          {activeSection === "overview" && <OverviewPage refreshKey={statsVersion} />}
+          {activeSection === "agents" && <AgentsPage onGoToSettings={() => setSection("settings")} />}
+          {activeSection === "conversations" && (
             <ConversationsPage
               conversations={conversations}
               refreshConversations={refreshConversations}
@@ -218,16 +233,18 @@ export default function App() {
               onOpenConversationHandled={() => setPendingConversationId(null)}
             />
           )}
-          {section === "deals" && <DealsPage onOpenConversation={openConversation} />}
-          {section === "settings" && <SettingsPage onGoToChannels={() => setSection("channels")} />}
-          {section === "channels" && <ChannelsPage />}
-          {section === "admin" && profile.isSuperAdmin && <AdminPage />}
+          {activeSection === "deals" && <DealsPage onOpenConversation={openConversation} />}
+          {activeSection === "settings" && (
+            <SettingsPage onGoToChannels={() => setSection("channels")} canManage={profile.role === "owner" || profile.isSuperAdmin} />
+          )}
+          {activeSection === "channels" && <ChannelsPage />}
+          {activeSection === "admin" && profile.isSuperAdmin && <AdminPage />}
         </div>
       </div>
 
       <BottomTabBar
         items={navItems}
-        section={section}
+        section={activeSection}
         onChange={setSection}
         unreadTotal={unreadTotal}
         profile={profile}
