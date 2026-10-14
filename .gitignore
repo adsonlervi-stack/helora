@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+# Sessões do WhatsApp: contêm as chaves de acesso dos números. NUNCA subir.
+sessions/
+backend/sessions/
+# Cópia dos arquivos antes das mudanças de 14/10/2026
+_backup_original_2026-10-14/
+.DS_Store
+helora-github.zip
+1-rodar-primeiro-schema.sql
+2-rodar-depois-super-admin.sql
+3-rodar-gestao-cobrancas.sql
