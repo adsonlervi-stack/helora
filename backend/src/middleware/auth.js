@@ -37,9 +37,30 @@ export async function requireAuth(req, res, next) {
   req.role = profile.role;
   req.isSuperAdmin = profile.is_super_admin;
   req.userName = profile.name;
+  req.actingAsAccount = false;
+
+  // Super admin "entrando" numa empresa: o painel manda o cabeçalho
+  // X-Account-Id e, SÓ para super admin, o backend passa a operar
+  // dentro daquela conta com poderes de gestor.
+  const actAs = req.headers["x-account-id"];
+  if (profile.is_super_admin && actAs && actAs !== profile.account_id) {
+    const { data: target } = await supabase.from("accounts").select("id").eq("id", actAs).maybeSingle();
+    if (!target) return res.status(404).json({ error: "Empresa não encontrada." });
+    req.accountId = target.id;
+    req.role = "owner";
+    req.actingAsAccount = true;
+  }
+
+  // Empresa suspensa: ninguém dela entra (o super admin continua entrando).
+  if (!profile.is_super_admin) {
+    const { data: acc } = await supabase.from("accounts").select("status").eq("id", profile.account_id).maybeSingle();
+    if (acc?.status === "suspended") {
+      return res.status(403).json({ error: "Esta empresa está suspensa. Fale com o administrador." });
+    }
+  }
   // "Visão de túnel": um atendente (role 'agent') só enxerga os tickets do
   // próprio setor ou atribuídos a ele. Gestor (role 'owner') vê tudo.
-  req.departmentIds = profile.role === "agent" ? await getProfileDepartmentIds(userData.user.id) : [];
+  req.departmentIds = req.role === "agent" ? await getProfileDepartmentIds(userData.user.id) : [];
 
   next();
 }
