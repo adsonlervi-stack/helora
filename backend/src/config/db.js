@@ -1156,3 +1156,253 @@ export async function getOverviewStats(accountId, filters = {}) {
   if (error) throw error;
   return data;
 }
+
+
+// ============================================================
+// Gestão de usuários (criar / editar / remover) e contas
+// ============================================================
+
+/** Cria o login no Supabase Auth (com senha) ou manda convite por e-mail. */
+export async function createAuthUser({ email, password }) {
+  if (password) {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true
+    });
+    if (error) throw error;
+    return data.user;
+  }
+  const { data, error } = await supabase.auth.admin.inviteUserByEmail(email);
+  if (error) throw error;
+  return data.user;
+}
+
+export async function getProfileInAccount(accountId, profileId) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, account_id, role, is_super_admin, name")
+    .eq("id", profileId)
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProfileInAccount(accountId, profileId, { name, role }) {
+  const patch = {};
+  if (typeof name === "string") patch.name = name.trim();
+  if (role === "owner" || role === "agent") patch.role = role;
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(patch)
+    .eq("id", profileId)
+    .eq("account_id", accountId)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function countOwners(accountId) {
+  const { count, error } = await supabase
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", accountId)
+    .eq("role", "owner");
+  if (error) throw error;
+  return count || 0;
+}
+
+export async function getAuthEmails(userIds) {
+  const emails = {};
+  await Promise.all(
+    userIds.map(async (id) => {
+      const { data } = await supabase.auth.admin.getUserById(id);
+      if (data?.user) emails[id] = data.user.email;
+    })
+  );
+  return emails;
+}
+
+export async function setUserPassword(userId, password) {
+  const { error } = await supabase.auth.admin.updateUserById(userId, { password });
+  if (error) throw error;
+}
+
+export async function deleteAuthUser(userId) {
+  // Apagar o usuário do Auth apaga o perfil junto (on delete cascade).
+  const { error } = await supabase.auth.admin.deleteUser(userId);
+  if (error) throw error;
+}
+
+export async function setAccountStatus(accountId, status) {
+  const { data, error } = await supabase
+    .from("accounts")
+    .update({ status })
+    .eq("id", accountId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function renameAccount(accountId, name) {
+  const { data, error } = await supabase
+    .from("accounts")
+    .update({ name: name.trim() })
+    .eq("id", accountId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listAccountsWithStats() {
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("*, profiles(count), channels(count)")
+    .order("created_at");
+  if (error) throw error;
+  return data.map((a) => ({
+    ...a,
+    usersCount: a.profiles?.[0]?.count ?? 0,
+    channelsCount: a.channels?.[0]?.count ?? 0
+  }));
+}
+
+// ============================================================
+// Gestão Helora: dados comerciais + cobranças (só super admin)
+// ============================================================
+
+const ACCOUNT_COMMERCIAL_FIELDS = {
+  planName: "plan_name",
+  monthlyPrice: "monthly_price",
+  dueDay: "due_day",
+  document: "document",
+  contactName: "contact_name",
+  contactPhone: "contact_phone",
+  contactEmail: "contact_email",
+  notes: "notes",
+  soldAt: "sold_at"
+};
+
+export async function updateAccountCommercial(accountId, body) {
+  const patch = {};
+  for (const [key, col] of Object.entries(ACCOUNT_COMMERCIAL_FIELDS)) {
+    if (body[key] === undefined) continue;
+    let v = body[key];
+    if (key === "monthlyPrice") v = Number(String(v).replace(",", ".")) || 0;
+    if (key === "dueDay") v = Math.min(28, Math.max(1, parseInt(v, 10) || 10));
+    if (typeof v === "string") v = v.trim() || null;
+    patch[col] = v;
+  }
+  if (!Object.keys(patch).length) return getAccount(accountId);
+  const { data, error } = await supabase.from("accounts").update(patch).eq("id", accountId).select().single();
+  if (error) throw error;
+  return data;
+}
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+export async function listInvoices({ status, reference } = {}) {
+  let q = supabase
+    .from("invoices")
+    .select("*, accounts(id, name, status)")
+    .order("due_date", { ascending: false })
+    .limit(500);
+  if (reference) q = q.eq("reference", reference);
+  if (status === "overdue") q = q.eq("status", "pending").lt("due_date", todayISO());
+  else if (status) q = q.eq("status", status);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map((i) => ({
+    ...i,
+    accountName: i.accounts?.name,
+    overdue: i.status === "pending" && i.due_date < todayISO()
+  }));
+}
+
+/** Gera as cobranças do mês para todas as empresas ativas com valor > 0 (não duplica). */
+export async function generateMonthlyInvoices(reference) {
+  const [y, m] = reference.split("-").map(Number);
+  const { data: accounts, error } = await supabase
+    .from("accounts")
+    .select("id, monthly_price, due_day, status")
+    .eq("status", "active")
+    .gt("monthly_price", 0);
+  if (error) throw error;
+  const rows = accounts.map((a) => ({
+    account_id: a.id,
+    reference,
+    amount: a.monthly_price,
+    due_date: `${y}-${String(m).padStart(2, "0")}-${String(a.due_day || 10).padStart(2, "0")}`
+  }));
+  if (!rows.length) return { created: 0 };
+  const { data, error: insErr } = await supabase
+    .from("invoices")
+    .upsert(rows, { onConflict: "account_id,reference", ignoreDuplicates: true })
+    .select("id");
+  if (insErr) throw insErr;
+  return { created: data?.length || 0, eligible: rows.length };
+}
+
+export async function createInvoice({ accountId, reference, amount, dueDate, notes }) {
+  const { data, error } = await supabase
+    .from("invoices")
+    .insert({
+      account_id: accountId,
+      reference,
+      amount: Number(String(amount).replace(",", ".")),
+      due_date: dueDate,
+      notes: notes || null
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateInvoice(id, { status, paymentMethod, notes, amount, dueDate }) {
+  const patch = {};
+  if (status) {
+    patch.status = status;
+    patch.paid_at = status === "paid" ? new Date().toISOString() : null;
+  }
+  if (paymentMethod !== undefined) patch.payment_method = paymentMethod || null;
+  if (notes !== undefined) patch.notes = notes || null;
+  if (amount !== undefined) patch.amount = Number(String(amount).replace(",", "."));
+  if (dueDate) patch.due_date = dueDate;
+  const { data, error } = await supabase.from("invoices").update(patch).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getManagementDashboard() {
+  const today = todayISO();
+  const monthStart = today.slice(0, 7) + "-01";
+  const [{ data: accounts, error: e1 }, { data: invoices, error: e2 }] = await Promise.all([
+    supabase.from("accounts").select("id, status, monthly_price, created_at"),
+    supabase.from("invoices").select("amount, status, due_date, paid_at")
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+  const sum = (arr) => Math.round(arr.reduce((s, x) => s + Number(x.amount ?? x.monthly_price ?? 0), 0) * 100) / 100;
+  const active = accounts.filter((a) => a.status === "active");
+  const pending = invoices.filter((i) => i.status === "pending");
+  const overdue = pending.filter((i) => i.due_date < today);
+  const paidThisMonth = invoices.filter((i) => i.status === "paid" && i.paid_at && i.paid_at.slice(0, 10) >= monthStart);
+  return {
+    accounts: {
+      total: accounts.length,
+      active: active.length,
+      trial: accounts.filter((a) => a.status === "trial").length,
+      suspended: accounts.filter((a) => a.status === "suspended").length,
+      newThisMonth: accounts.filter((a) => a.created_at.slice(0, 10) >= monthStart).length
+    },
+    mrr: sum(active.map((a) => ({ amount: a.monthly_price }))),
+    receivable: { count: pending.length, amount: sum(pending) },
+    overdue: { count: overdue.length, amount: sum(overdue) },
+    receivedThisMonth: { count: paidThisMonth.length, amount: sum(paidThisMonth) }
+  };
+}
