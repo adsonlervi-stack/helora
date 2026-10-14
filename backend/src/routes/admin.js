@@ -8,9 +8,18 @@ import {
   supabase,
   listAllAnnouncements,
   createAnnouncement,
-  deleteAnnouncement
+  deleteAnnouncement,
+  createAuthUser,
+  setAccountStatus,
+  renameAccount,
+  listAccountsWithStats,
+  updateAccountCommercial,
+  listInvoices,
+  generateMonthlyInvoices,
+  createInvoice,
+  updateInvoice,
+  getManagementDashboard
 } from "../config/db.js";
-import { startWhatsAppForChannel } from "../whatsapp/baileysClient.js";
 import { requireAuth, requireSuperAdmin } from "../middleware/auth.js";
 
 const router = Router();
@@ -18,50 +27,126 @@ const router = Router();
 router.use(requireAuth, requireSuperAdmin);
 
 router.get("/accounts", async (req, res) => {
-  res.json(await listAccounts());
+  res.json(await listAccountsWithStats());
 });
 
 router.get("/users", async (req, res) => {
   res.json(await listAllUsers());
 });
 
-// Cria uma conta nova (cliente) e convida o dono por e-mail.
+// Cria uma empresa nova. O dono é opcional: dá pra criar a empresa,
+// "Entrar" nela e cadastrar os usuários por dentro (Configurações → Equipe).
+// Com senha, o dono já entra direto; sem senha, recebe convite por e-mail.
 router.post("/accounts", async (req, res) => {
-  const { name, ownerEmail, ownerName } = req.body;
-  if (!name || !ownerEmail) {
-    return res.status(400).json({ error: "name e ownerEmail são obrigatórios" });
+  const { name, ownerEmail, ownerName, ownerPassword } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "Informe o nome da empresa." });
+  if (ownerPassword && String(ownerPassword).length < 6) {
+    return res.status(400).json({ error: "A senha do gestor precisa ter pelo menos 6 caracteres." });
   }
 
-  const account = await createAccount({ name });
+  // Cria o login antes da empresa: se o e-mail já existir, nada fica pela metade.
+  let ownerUser = null;
+  if (ownerEmail?.trim()) {
+    try {
+      ownerUser = await createAuthUser({ email: ownerEmail.trim().toLowerCase(), password: ownerPassword });
+    } catch (err) {
+      const msg = /already|registered|exists/i.test(err.message)
+        ? "Já existe um usuário com esse e-mail."
+        : `Falha ao criar o login do gestor: ${err.message}`;
+      return res.status(400).json({ error: msg });
+    }
+  }
 
-  // Envia um e-mail de convite (magic link) pra pessoa definir a senha dela.
-  const { data: invited, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
-    ownerEmail
-  );
+  const account = await createAccount({ name: name.trim() });
 
-  if (inviteError) {
-    return res.status(500).json({
-      error: `Conta criada, mas falhou ao convidar o usuário: ${inviteError.message}`,
-      account
+  if (ownerUser) {
+    await createProfile({
+      userId: ownerUser.id,
+      accountId: account.id,
+      role: "owner",
+      name: ownerName?.trim() || ownerEmail.trim(),
+      isSuperAdmin: false
     });
   }
 
-  await createProfile({
-    userId: invited.user.id,
-    accountId: account.id,
-    role: "owner",
-    name: ownerName || ownerEmail,
-    isSuperAdmin: false
-  });
+  // Primeiro dispositivo de WhatsApp já criado; o QR é gerado quando
+  // alguém clicar em "Conectar" (não fica gerando QR sem ninguém olhando).
+  await createChannel({ accountId: account.id, platform: "whatsapp", name: "Principal" });
 
-  // Cria o primeiro dispositivo de WhatsApp dessa conta e já deixa a
-  // conexão pronta pra gerar QR Code assim que o dono entrar no painel.
-  const channel = await createChannel({ accountId: account.id, platform: "whatsapp", name: "Principal" });
-  startWhatsAppForChannel(channel.id, account.id).catch((err) => {
-    console.error(`[WhatsApp] Erro ao iniciar dispositivo da conta recém-criada ${account.id}:`, err);
-  });
+  res.status(201).json({ account, ownerEmail: ownerEmail || null, invited: !!ownerUser && !ownerPassword });
+});
 
-  res.status(201).json({ account, ownerEmail, invited: true });
+// Suspender / reativar / renomear empresa.
+router.patch("/accounts/:id", async (req, res) => {
+  const { status, name } = req.body || {};
+  try {
+    let account = null;
+    if (status) {
+      if (!["active", "suspended", "trial"].includes(status)) {
+        return res.status(400).json({ error: "Status inválido." });
+      }
+      account = await setAccountStatus(req.params.id, status);
+    }
+    if (name?.trim()) account = await renameAccount(req.params.id, name);
+    account = await updateAccountCommercial(req.params.id, req.body || {});
+    res.json(account);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------- Gestão: painel e cobranças ----------
+
+router.get("/dashboard", async (req, res) => {
+  try {
+    res.json(await getManagementDashboard());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/invoices", async (req, res) => {
+  try {
+    res.json(await listInvoices({ status: req.query.status, reference: req.query.reference }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Gera as cobranças do mês (ex: { reference: "2026-11" }) para todas as empresas ativas.
+router.post("/invoices/generate", async (req, res) => {
+  const reference = req.body?.reference;
+  if (!/^\d{4}-\d{2}$/.test(reference || "")) return res.status(400).json({ error: "Mês inválido (use AAAA-MM)." });
+  try {
+    res.json(await generateMonthlyInvoices(reference));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/invoices", async (req, res) => {
+  const { accountId, reference, amount, dueDate } = req.body || {};
+  if (!accountId || !/^\d{4}-\d{2}$/.test(reference || "") || !amount || !dueDate) {
+    return res.status(400).json({ error: "Informe empresa, mês (AAAA-MM), valor e vencimento." });
+  }
+  try {
+    res.status(201).json(await createInvoice(req.body));
+  } catch (err) {
+    const msg = /duplicate|unique/i.test(err.message) ? "Essa empresa já tem cobrança nesse mês." : err.message;
+    res.status(400).json({ error: msg });
+  }
+});
+
+router.patch("/invoices/:id", async (req, res) => {
+  const { status } = req.body || {};
+  if (status && !["pending", "paid", "canceled"].includes(status)) {
+    return res.status(400).json({ error: "Status inválido." });
+  }
+  try {
+    res.json(await updateInvoice(req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ---------- Comunicados (avisos do super admin pras contas/usuários) ----------

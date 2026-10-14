@@ -52,7 +52,15 @@ import {
   getMessage,
   addReaction,
   getAccount,
-  updateAccountFooterNote
+  updateAccountFooterNote,
+  createAuthUser,
+  createProfile,
+  getProfileInAccount,
+  updateProfileInAccount,
+  countOwners,
+  getAuthEmails,
+  setUserPassword,
+  deleteAuthUser
 } from "../config/db.js";
 import {
   getWhatsAppStatus,
@@ -177,7 +185,93 @@ router.delete("/departments/:id", requireOwner, async (req, res) => {
 // ---------- Equipe (atendentes + setores de cada um) ----------
 
 router.get("/team", async (req, res) => {
-  res.json(await listTeam(req.accountId));
+  const team = await listTeam(req.accountId);
+  // Gestor vê o e-mail de login de cada um (pra saber com qual entrar).
+  if (req.role === "owner" || req.isSuperAdmin) {
+    const emails = await getAuthEmails(team.map((m) => m.id)).catch(() => ({}));
+    team.forEach((m) => (m.email = emails[m.id] || null));
+  }
+  res.json(team);
+});
+
+// ---------- Usuários da empresa (gestor ou super admin) ----------
+
+const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || ""));
+
+// Cria um usuário na empresa. Com senha: já entra direto. Sem senha: convite por e-mail.
+router.post("/team", requireOwner, async (req, res) => {
+  const { name, email, password, role } = req.body || {};
+  if (!name?.trim()) return res.status(400).json({ error: "Informe o nome." });
+  if (!isValidEmail(email)) return res.status(400).json({ error: "E-mail inválido." });
+  if (password && String(password).length < 6) {
+    return res.status(400).json({ error: "A senha precisa ter pelo menos 6 caracteres." });
+  }
+  try {
+    const user = await createAuthUser({ email: email.trim().toLowerCase(), password });
+    await createProfile({
+      userId: user.id,
+      accountId: req.accountId,
+      role: role === "owner" ? "owner" : "agent",
+      name: name.trim(),
+      isSuperAdmin: false
+    });
+    res.status(201).json({ id: user.id, invited: !password });
+  } catch (err) {
+    const msg = /already|registered|exists/i.test(err.message)
+      ? "Já existe um usuário com esse e-mail."
+      : err.message;
+    res.status(400).json({ error: msg });
+  }
+});
+
+// Edita nome e/ou papel (Gestor/Atendente).
+router.patch("/team/:profileId", requireOwner, async (req, res) => {
+  const member = await getProfileInAccount(req.accountId, req.params.profileId);
+  if (!member) return res.status(404).json({ error: "Usuário não encontrado nesta empresa." });
+  if (member.is_super_admin && req.userId !== member.id) {
+    return res.status(403).json({ error: "Não é possível editar o administrador do sistema." });
+  }
+  const { name, role } = req.body || {};
+  if (member.role === "owner" && role === "agent" && (await countOwners(req.accountId)) <= 1) {
+    return res.status(400).json({ error: "A empresa precisa ter pelo menos um Gestor." });
+  }
+  res.json(await updateProfileInAccount(req.accountId, member.id, { name, role }));
+});
+
+// Define uma nova senha para o usuário.
+router.post("/team/:profileId/password", requireOwner, async (req, res) => {
+  const member = await getProfileInAccount(req.accountId, req.params.profileId);
+  if (!member) return res.status(404).json({ error: "Usuário não encontrado nesta empresa." });
+  if (member.is_super_admin && req.userId !== member.id) {
+    return res.status(403).json({ error: "Não é possível alterar a senha do administrador do sistema." });
+  }
+  const { password } = req.body || {};
+  if (!password || String(password).length < 6) {
+    return res.status(400).json({ error: "A senha precisa ter pelo menos 6 caracteres." });
+  }
+  try {
+    await setUserPassword(member.id, String(password));
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Remove o usuário (perde o acesso; as conversas dele continuam na empresa).
+router.delete("/team/:profileId", requireOwner, async (req, res) => {
+  const member = await getProfileInAccount(req.accountId, req.params.profileId);
+  if (!member) return res.status(404).json({ error: "Usuário não encontrado nesta empresa." });
+  if (member.id === req.userId) return res.status(400).json({ error: "Você não pode remover a si mesmo." });
+  if (member.is_super_admin) return res.status(403).json({ error: "Não é possível remover o administrador do sistema." });
+  if (member.role === "owner" && (await countOwners(req.accountId)) <= 1) {
+    return res.status(400).json({ error: "A empresa precisa ter pelo menos um Gestor." });
+  }
+  try {
+    await deleteAuthUser(member.id);
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.post("/team/:profileId/departments", requireOwner, async (req, res) => {
