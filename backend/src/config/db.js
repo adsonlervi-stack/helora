@@ -2562,7 +2562,8 @@ export async function getBilling(accountId) {
     account: {
       name: acc?.name, status: acc?.status, planName: plan?.name || acc?.plan_name || null,
       monthlyPrice: Number(acc?.monthly_price || 0), dueDay: acc?.due_day, creditsMonthly: acc?.credits_monthly || 0,
-      maxWhatsapp: acc?.max_whatsapp_channels ?? 1, maxUsers: acc?.max_users ?? null
+      maxWhatsapp: acc?.max_whatsapp_channels ?? 1, maxUsers: acc?.max_users ?? null,
+      blocked: acc?.status === "suspended" && acc?.blocked_reason === "billing"
     },
     plan,
     usage: { users: users || 0, numbers: numbers || 0 },
