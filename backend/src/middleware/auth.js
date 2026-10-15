@@ -36,7 +36,7 @@ export async function requireAuth(req, res, next) {
   req.accountId = profile.account_id;
   req.role = profile.role;
   req.isSuperAdmin = profile.is_super_admin;
-  req.userName = profile.name;
+  req.userName = profile.name || (userData.user.email || "").split("@")[0] || "Atendente";
   req.actingAsAccount = false;
 
   // Super admin "entrando" numa empresa: o painel manda o cabeçalho
