@@ -34,10 +34,21 @@ import {
 } from "../config/db.js";
 import { sendEmail, emailConfigured } from "../email.js";
 import { requireAuth, requireSuperAdmin } from "../middleware/auth.js";
+import { runMigration, migrationState } from "../migrateSupabase.js";
 
 const router = Router();
 
 router.use(requireAuth, requireSuperAdmin);
+
+// Migração do Supabase (uso único, só super admin)
+router.post("/migrate-supabase", async (req, res) => {
+  if (!process.env.NEW_SUPABASE_URL || !process.env.NEW_SUPABASE_SERVICE_ROLE_KEY)
+    return res.status(400).json({ error: "Configure NEW_SUPABASE_URL e NEW_SUPABASE_SERVICE_ROLE_KEY no Railway." });
+  if (migrationState.running) return res.status(409).json({ error: "Já está rodando." });
+  runMigration().catch(() => {});
+  res.status(202).json({ started: true });
+});
+router.get("/migrate-supabase", (req, res) => res.json(migrationState));
 
 router.get("/accounts", async (req, res) => {
   res.json(await listAccountsWithStats());
