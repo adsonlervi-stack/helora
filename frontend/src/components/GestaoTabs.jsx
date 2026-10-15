@@ -18,6 +18,10 @@ import {
   savePlanAdmin,
   deletePlanAdmin,
   setAccountPlanAdmin,
+  adminBillingStatus,
+  adminRunBilling,
+  adminChargeInvoice,
+  adminTestEmail,
   getAdminCredits,
   getAdminCreditLedger,
   setAdminMonthlyCredits,
@@ -249,6 +253,8 @@ export function InvoicesTab() {
         {msg && <div className={`admin-feedback ${msg.type}`}>{msg.text}</div>}
       </div>
 
+      <BillingAutomationCard onMsg={setMsg} />
+
       <div className="card">
         <div className="gestao-row" style={{ justifyContent: "space-between" }}>
           <div className="card-title" style={{ margin: 0 }}>Cobranças · {brl(total)}</div>
@@ -283,6 +289,20 @@ export function InvoicesTab() {
                     <option value="transferencia">Transferência</option>
                     <option value="dinheiro">Dinheiro</option>
                   </select>
+                  <button
+                    className="pill-btn"
+                    title="Gerar a cobrança PIX no Asaas"
+                    onClick={async () => {
+                      try {
+                        const r = await adminChargeInvoice(i.id);
+                        setMsg({ type: "success", text: `PIX gerado no Asaas (${r.asaasPaymentId}).` });
+                      } catch (e) {
+                        setMsg({ type: "error", text: errText(e) });
+                      }
+                    }}
+                  >
+                    PIX
+                  </button>
                   <button className="resolve-btn" onClick={() => setStatus(i, "canceled")}>Cancelar</button>
                 </>
               )}
@@ -592,6 +612,51 @@ export function PlansTab() {
           </form>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ------------------------------------------------- Cobrança automática (Asaas + EmailJS)
+function BillingAutomationCard({ onMsg }) {
+  const [st, setSt] = useState(null);
+  const [to, setTo] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    adminBillingStatus().then(setSt).catch(() => {});
+  }, []);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await adminRunBilling();
+      onMsg({ type: "success", text: r.log?.length ? r.log.join(" · ") : "Rodou: nada para fazer agora." });
+    } catch (e) {
+      onMsg({ type: "error", text: errText(e) });
+    }
+    setBusy(false);
+  };
+  const test = async () => {
+    try {
+      const r = await adminTestEmail(to);
+      onMsg({ type: r.sent ? "success" : "error", text: r.sent ? `E-mail de teste enviado para ${to}.` : "EmailJS ainda não configurado." });
+    } catch (e) {
+      onMsg({ type: "error", text: errText(e) });
+    }
+  };
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card-title">Cobrança automática</div>
+      <div className="card-subtitle">
+        10 dias antes do vencimento a fatura é gerada (PIX no Asaas) e a empresa recebe o e-mail; na véspera, lembrete;
+        2 dias após o vencimento sem pagamento, o painel da empresa é bloqueado. Pagou o PIX, libera sozinho.
+      </div>
+      <div className="gestao-row" style={{ flexWrap: "wrap", gap: 8 }}>
+        <span className={`invoice-badge ${st?.asaas ? "paid" : "overdue"}`}>Asaas {st?.asaas ? `conectado${st.sandbox ? " (teste)" : ""}` : "não configurado"}</span>
+        <span className={`invoice-badge ${st?.email ? "paid" : "overdue"}`}>E-mail {st?.email ? "configurado" : "não configurado"}</span>
+        <button className="pill-btn" disabled={busy} onClick={run}>{busy ? "Rodando…" : "Rodar cobrança agora"}</button>
+        <input className="response" style={{ maxWidth: 240 }} placeholder="E-mail para teste" value={to} onChange={(e) => setTo(e.target.value)} />
+        <button className="pill-btn" disabled={!to} onClick={test}>Enviar e-mail de teste</button>
+      </div>
     </div>
   );
 }
