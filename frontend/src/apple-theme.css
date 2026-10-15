@@ -447,3 +447,109 @@ input, select, textarea { font-family: var(--font-body); }
 .nav-sidebar-footer-menu button { display: flex; align-items: center; gap: 6px; width: 100%; }
 .nav-sidebar-footer-menu-photo { border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-main); text-align: left; }
 .nav-sidebar-footer-menu-photo:hover { background: rgba(0, 0, 0, 0.05); }
+
+/* ======================= ATENDIMENTO v2 ======================= */
+.chat-who { display: flex; align-items: center; gap: 12px; border: 0; background: transparent; padding: 4px 8px 4px 4px; border-radius: 14px; cursor: pointer; text-align: left; }
+.chat-who:hover { background: rgba(0, 0, 0, 0.04); }
+.cv-icon-btn.ok { color: #248a3d; }
+.cv-icon-btn.ok:hover { background: rgba(52, 199, 89, 0.15); }
+.cv-seg-count.dot { background: #ff3b30; color: #fff !important; border-radius: 9px; padding: 0 5px; }
+.cv-viewall { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; font-size: 12.5px; color: var(--text-muted); cursor: pointer; padding: 2px 0; align-self: flex-start; }
+.cv-switch { width: 30px; height: 18px; border-radius: 9px; background: rgba(118, 118, 128, 0.25); position: relative; transition: background 0.2s; flex-shrink: 0; }
+.cv-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); transition: transform 0.2s; }
+.cv-viewall.on { color: var(--text-main); }
+.cv-viewall.on .cv-switch { background: #34c759; }
+.cv-viewall.on .cv-switch::after { transform: translateX(12px); }
+
+.client-panel { width: 340px; flex-shrink: 0; border-radius: 0 !important; display: flex; flex-direction: column; overflow: hidden; box-shadow: -1px 0 0 var(--glass-edge) !important; }
+.client-panel .contact-panel-topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; font-weight: 600; }
+.client-identity { display: flex; align-items: center; gap: 12px; padding: 0 14px 12px; }
+.client-identity div { display: flex; flex-direction: column; min-width: 0; }
+.client-identity strong { font-size: 16px; }
+.client-identity span { font-size: 12.5px; color: var(--text-muted); }
+.client-tabs { margin: 0 14px 8px; width: auto !important; }
+.client-tabs button { display: inline-flex; align-items: center; gap: 4px; font-size: 12px !important; }
+.client-body { flex: 1; overflow-y: auto; padding: 6px 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.client-two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.client-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin: 12px 0 6px; letter-spacing: 0.02em; }
+.client-deal-form { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 14px; background: rgba(118, 118, 128, 0.08); margin-bottom: 8px; }
+.client-deals { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.client-deal { --stage: #0071e3; text-align: left; border: 0; border-left: 4px solid var(--stage); background: rgba(255, 255, 255, 0.85); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06); }
+.client-deal small { color: var(--text-muted); }
+.client-deal-stage { font-size: 11px; font-weight: 600; color: var(--stage); text-transform: uppercase; }
+.stage-novo_lead { --stage: #0a84ff; } .stage-contato { --stage: #bf5af2; } .stage-negociacao { --stage: #ff9f0a; }
+.stage-proposta { --stage: #ffd60a; } .stage-fechado { --stage: #30d158; } .stage-perdido { --stage: #ff453a; }
+@media (max-width: 1100px) { .client-panel { position: absolute; right: 0; top: 0; bottom: 0; z-index: 5; } }
+
+/* Permissões de usuário */
+.perm-picker { display: flex; flex-direction: column; gap: 12px; margin: 12px 0; padding: 12px; border-radius: 14px; background: rgba(118, 118, 128, 0.07); }
+.perm-title { font-weight: 600; font-size: 13px; }
+.perm-hint { font-size: 11.5px; color: var(--text-muted); margin-bottom: 6px; }
+.perm-owner { font-size: 12.5px; color: var(--text-muted); margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: rgba(0, 113, 227, 0.07); }
+.team-editor { max-height: calc(100vh - 40px); overflow-y: auto; }
+
+/* ======================= PIPELINE (estilo Trello) ======================= */
+.deals-page { display: flex; flex-direction: column; }
+.deals-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.kanban-wrap { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+.kanban-col {
+  --col: #0a84ff;
+  width: 284px; min-width: 284px; border-radius: 16px !important; border: 0 !important;
+  background: color-mix(in srgb, var(--col) 10%, #f2f2f7) !important;
+  padding: 0 0 10px !important; box-shadow: none !important; overflow: hidden;
+}
+.kanban-col.drag-over { background: color-mix(in srgb, var(--col) 22%, #f2f2f7) !important; outline: 2px dashed var(--col); outline-offset: -2px; }
+.kanban-col-head {
+  background: var(--col); color: #fff; padding: 10px 14px !important; margin: 0 !important;
+  display: flex; align-items: center; gap: 8px;
+}
+.kanban-col-head .col-title { color: #fff !important; font-weight: 700; font-size: 14px; flex: 1; }
+.kanban-col-head .col-count { background: rgba(255, 255, 255, 0.28) !important; color: #fff !important; border: 0 !important; border-radius: 980px; padding: 1px 8px; font-size: 12px; font-weight: 600; }
+.kanban-col .col-sum { padding: 8px 14px 4px; font-size: 12.5px; font-weight: 600; color: color-mix(in srgb, var(--col) 70%, #1d1d1f); }
+.col-dot { display: none !important; }
+.kanban-cards { padding: 4px 10px; display: flex; flex-direction: column; gap: 8px; }
+.deal-card {
+  --col: #0a84ff;
+  background: #fff !important; border: 0 !important; border-radius: 12px !important;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+  position: relative; padding: 12px 12px 10px !important; overflow: hidden;
+}
+.deal-card::before { content: ""; position: absolute; left: 0; top: 0; right: 0; height: 4px; background: var(--col); }
+.deal-card:hover { box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.22) !important; transform: translateY(-1px); }
+.deal-card-title { font-weight: 600; }
+.deal-card-contact { font-size: 12px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.deal-card-value { font-weight: 700; color: #1d1d1f; }
+.deal-origin-badge { border-radius: 980px !important; background: rgba(118, 118, 128, 0.12) !important; border: 0 !important; }
+.deal-card-owner { font-size: 11.5px; color: var(--text-muted); }
+.deal-card-owner::before, .deal-card-owner-dot, .owner-dot { display: none !important; }
+.kanban-empty { color: color-mix(in srgb, var(--col) 60%, #6e6e73); font-size: 12.5px; text-align: center; padding: 14px 0; border: 1.5px dashed color-mix(in srgb, var(--col) 35%, transparent); border-radius: 12px; }
+
+/* ======================= CAMPANHAS ======================= */
+.camp-icon { background: linear-gradient(180deg, #ff9f0a, #ff6b00) !important; }
+.camp-balance { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 980px; background: rgba(255, 204, 0, 0.18); color: #8a5a00; font-size: 13px; }
+.camp-row .contact-info { gap: 2px; }
+.camp-bar { height: 5px; border-radius: 3px; background: rgba(118, 118, 128, 0.15); overflow: hidden; margin-top: 6px; max-width: 360px; }
+.camp-bar div { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.camp-pause { color: #c93400; font-size: 11.5px; }
+.camp-new { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; }
+.camp-pick { margin: 8px 0; }
+.camp-pick-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px; border-radius: 12px; background: rgba(118, 118, 128, 0.06); }
+.camp-pick-list label { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.camp-pick-list label:hover { background: rgba(0, 0, 0, 0.04); }
+.camp-pick-list small { margin-left: auto; }
+.camp-cost { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 12px; border-radius: 12px; background: rgba(0, 113, 227, 0.07); font-size: 13px; margin: 10px 0 6px; }
+.camp-cost.warn { background: rgba(255, 159, 10, 0.14); color: #8a4b00; }
+.camp-risk { display: flex; gap: 6px; align-items: flex-start; font-size: 11.5px; color: var(--text-muted); margin-bottom: 10px; }
+.camp-detail { padding: 18px 20px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.camp-detail h2 { margin: 0; }
+.camp-msg { white-space: pre-wrap; background: rgba(118, 118, 128, 0.08); padding: 12px; border-radius: 12px; font-size: 14px; width: 100%; }
+.camp-detail .fe-insp-stats { width: 100%; }
+
+/* API e login */
+.api-key-new { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0; padding: 12px; border-radius: 12px; background: rgba(52, 199, 89, 0.12); }
+.api-key-new code { background: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12.5px; word-break: break-all; }
+.api-example { margin: 12px 0; }
+.api-example-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.api-example pre { background: #1d1d1f; color: #f5f5f7; padding: 12px 14px; border-radius: 12px; font-size: 12px; overflow-x: auto; white-space: pre; margin: 0; }
+.login-link { background: transparent !important; color: #0071e3 !important; border: 0 !important; box-shadow: none !important; font-weight: 500 !important; margin-top: 4px; }
+.login-info { background: rgba(52, 199, 89, 0.12); color: #1d6b34; padding: 10px 12px; border-radius: 10px; font-size: 13px; margin-bottom: 10px; }

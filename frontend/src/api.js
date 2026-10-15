@@ -219,3 +219,34 @@ export const saveFlowApi = (id, data) => api.put(`/flows/${id}`, data).then((r) 
 export const setFlowActiveApi = (id, active) => api.post(`/flows/${id}/active`, { active }).then((r) => r.data);
 export const deleteFlowApi = (id) => api.delete(`/flows/${id}`);
 export const simulateFlowApi = (id, data) => api.post(`/flows/${id}/simulate`, data).then((r) => r.data);
+
+// ---- Atendimento: transferir, não lido, painel do cliente ----
+export const transferConversationApi = (id, data) => api.post(`/conversations/${id}/transfer`, data).then((r) => r.data);
+export const markUnreadApi = (id) => api.post(`/conversations/${id}/unread`);
+export const getConversationContact = (id) => api.get(`/conversations/${id}/contact`).then((r) => r.data);
+export const updateContactLeadApi = (id, data) => api.patch(`/contacts/${id}/lead`, data).then((r) => r.data);
+export const createConversationDealApi = (id, data) => api.post(`/conversations/${id}/deals`, data).then((r) => r.data);
+
+// ---- Permissões e grupos ----
+export const getGroups = () => api.get("/groups").then((r) => r.data);
+export const getMemberPermissions = (id) => api.get(`/team/${id}/permissions`).then((r) => r.data);
+
+// ---- Créditos, campanhas e API ----
+export const getCredits = () => api.get("/credits").then((r) => r.data);
+export const getCampaigns = () => api.get("/campaigns").then((r) => r.data);
+export const getCampaignApi = (id) => api.get(`/campaigns/${id}`).then((r) => r.data);
+export const createCampaignApi = (data) => api.post("/campaigns", data).then((r) => r.data);
+export const campaignActionApi = (id, action) => api.post(`/campaigns/${id}/${action}`).then((r) => r.data);
+export const deleteCampaignApi = (id) => api.delete(`/campaigns/${id}`);
+export const getApiKeys = () => api.get("/api-keys").then((r) => r.data);
+export const createApiKeyApi = (name) => api.post("/api-keys", { name }).then((r) => r.data);
+export const revokeApiKeyApi = (id) => api.delete(`/api-keys/${id}`);
+
+// ---- Gestão: créditos ----
+export const getAdminCredits = () => api.get("/admin/credits").then((r) => r.data);
+export const getAdminCreditLedger = (accountId) => api.get(`/admin/credits/${accountId}`).then((r) => r.data);
+export const setAdminMonthlyCredits = (accountId, monthly) => api.patch(`/admin/credits/${accountId}`, { monthly }).then((r) => r.data);
+export const addAdminCredits = (accountId, amount, note) => api.post(`/admin/credits/${accountId}`, { amount, note }).then((r) => r.data);
+
+// ---- Recuperar senha (público) ----
+export const forgotPasswordApi = (email) => axios.post(`${API_BASE}/auth/forgot`, { email }).then((r) => r.data);

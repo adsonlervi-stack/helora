@@ -15,11 +15,13 @@ import WhatsAppConnectModal from "./components/WhatsAppConnectModal.jsx";
 import FooterBar from "./components/FooterBar.jsx";
 import ContactsPage from "./components/ContactsPage.jsx";
 import FlowsPage from "./components/FlowsPage.jsx";
+import ResetPasswordPage from "./components/ResetPasswordPage.jsx";
+import CampaignsPage from "./components/CampaignsPage.jsx";
 import SupportChat from "./components/SupportChat.jsx";
 import { showNotification } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
-import { NAV_ITEMS, ADMIN_NAV_ITEM } from "./navConfig.js";
+import { NAV_ITEMS, ADMIN_NAV_ITEM, GESTAO_NAV_ITEMS } from "./navConfig.js";
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = ainda não sabemos
@@ -38,6 +40,10 @@ export default function App() {
   const [pendingConversationId, setPendingConversationId] = useState(null);
   const [newConversationContact, setNewConversationContact] = useState(null);
   const [showSupport, setShowSupport] = useState(false);
+  // Veio do link "recuperar senha" do e-mail?
+  const [recovery, setRecovery] = useState(
+    () => typeof window !== "undefined" && /type=recovery/.test(window.location.hash + window.location.search)
+  );
 
   const openConversation = useCallback((conversationId) => {
     setSection("conversations");
@@ -48,7 +54,8 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
       setSession(newSession);
     });
 
@@ -177,6 +184,10 @@ export default function App() {
     return <LoginPage />;
   }
 
+  if (recovery && session) {
+    return <ResetPasswordPage onDone={() => setRecovery(false)} />;
+  }
+
   if (!profile) {
     if (profileError) {
       return (
@@ -197,8 +208,10 @@ export default function App() {
 
   // Super admin fora de uma empresa = Painel Helora (só gestão).
   const isHeloraPanel = profile.isSuperAdmin && !profile.acting;
-  const navItems = isHeloraPanel ? [ADMIN_NAV_ITEM] : NAV_ITEMS;
-  const activeSection = isHeloraPanel ? "admin" : section === "admin" ? "home" : section;
+  const navItems = isHeloraPanel ? GESTAO_NAV_ITEMS : NAV_ITEMS;
+  const activeSection = isHeloraPanel
+    ? (section.startsWith("g_") ? section : "g_dashboard")
+    : section.startsWith("g_") || section === "admin" ? "home" : section;
   const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
   const canEditFooter = profile.role === "owner" || profile.isSuperAdmin;
   const handleAvatarUpdated = (avatarUrl) => setProfile((p) => ({ ...p, avatarUrl }));
@@ -212,7 +225,7 @@ export default function App() {
         unreadTotal={unreadTotal}
         profile={profile}
         onAvatarUpdated={handleAvatarUpdated}
-        onHelp={() => (isHeloraPanel ? setSection("admin") : setShowSupport((v) => !v))}
+        onHelp={() => (isHeloraPanel ? setSection("g_support") : setShowSupport((v) => !v))}
       />
 
       <div className="shell-main">
@@ -241,6 +254,7 @@ export default function App() {
               openConversationId={pendingConversationId}
               onOpenConversationHandled={() => setPendingConversationId(null)}
               currentUserId={session.user.id}
+              canSeeAll={profile.role === "owner" || profile.isSuperAdmin}
               newConversationContact={newConversationContact}
               onNewConversationHandled={() => setNewConversationContact(null)}
             />
@@ -250,6 +264,7 @@ export default function App() {
             <SettingsPage onGoToChannels={() => setSection("channels")} canManage={profile.role === "owner" || profile.isSuperAdmin} />
           )}
           {activeSection === "channels" && <ChannelsPage />}
+          {activeSection === "campaigns" && <CampaignsPage canEdit={profile.role === "owner" || profile.isSuperAdmin} />}
           {activeSection === "contacts" && (
             <ContactsPage
               canDelete={profile.role === "owner" || profile.isSuperAdmin}
@@ -259,7 +274,7 @@ export default function App() {
               }}
             />
           )}
-          {activeSection === "admin" && profile.isSuperAdmin && <AdminPage />}
+          {activeSection.startsWith("g_") && profile.isSuperAdmin && <AdminPage tab={activeSection.slice(2)} />}
         </div>
       </div>
 
