@@ -102,7 +102,14 @@ import {
   revokeApiKey,
   updateMessageFields,
   listPhonesByLabels,
-  getMessage as getMessageById
+  getMessage as getMessageById,
+  supportQueuePosition,
+  getCannedResponse,
+  checkChannelLimit,
+  getAccountSettings,
+  updateAccountSettings,
+  updateMyName,
+  listStickerUrls
 } from "../config/db.js";
 import { runGraph } from "../bot/flowRunner.js";
 import {
@@ -120,7 +127,10 @@ import {
   fetchWhatsAppAvatar,
   deleteWhatsAppMessage,
   sendWhatsAppMediaUrl,
-  getWhatsAppStatus as waStatus
+  getWhatsAppStatus as waStatus,
+  sendPresence,
+  watchPresence,
+  sendWhatsAppPayload
 } from "../whatsapp/baileysClient.js";
 import { toJpeg, toWebp } from "../imageTools.js";
 import { sendMetaMessage } from "../meta/metaClient.js";
@@ -175,6 +185,38 @@ router.get("/profile", async (req, res) => {
   const profile = await getMyProfile(req.userId);
   if (!profile) return res.status(404).json({ error: "Perfil não encontrado." });
   res.json(profile);
+});
+
+// Meu perfil: qualquer usuário altera o próprio nome e senha (o e-mail não muda).
+router.patch("/profile", async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  if (name.length < 2) return res.status(400).json({ error: "Informe seu nome." });
+  await updateMyName(req.userId, name.slice(0, 80));
+  res.json(await getMyProfile(req.userId));
+});
+
+router.post("/profile/password", async (req, res) => {
+  const password = String(req.body?.password || "");
+  if (password.length < 6) return res.status(400).json({ error: "A senha precisa ter pelo menos 6 caracteres." });
+  try {
+    await setUserPassword(req.userId, password);
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Configurações da empresa (pesquisa de satisfação e horário de atendimento)
+router.get("/account-settings", async (req, res) => {
+  res.json(await getAccountSettings(req.accountId));
+});
+
+router.patch("/account-settings", requireOwner, async (req, res) => {
+  try {
+    res.json(await updateAccountSettings(req.accountId, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ error: /column/.test(err.message) ? "Rode a migration 017 no Supabase." : err.message });
+  }
 });
 
 // Comunicados relevantes pro usuário logado (mostrados no Início)
@@ -368,6 +410,11 @@ router.post("/channels", requireOwner, async (req, res) => {
   const { platform, name, departmentId, flowId } = req.body;
   if (!platform || !["whatsapp", "messenger", "instagram"].includes(platform)) {
     return res.status(400).json({ error: "platform inválida" });
+  }
+  try {
+    await checkChannelLimit(req.accountId, platform);
+  } catch (err) {
+    return res.status(403).json({ error: err.message });
   }
   let channel = await createChannel({ accountId: req.accountId, platform, name, departmentId });
   if (flowId) channel = (await updateChannel(req.accountId, channel.id, { flowId }).catch(() => null)) || channel;
@@ -572,7 +619,15 @@ router.get("/support", async (req, res) => {
     const thread = await getOpenSupportThread(req.accountId);
     if (!thread) return res.json({ thread: null, messages: [] });
     await markSupportRead(thread.id, "user");
-    res.json({ thread: { id: thread.id, status: thread.status }, messages: await listSupportMessages(thread.id) });
+    res.json({
+      thread: {
+        id: thread.id,
+        status: thread.status,
+        acceptedBy: thread.accepted_by || null,
+        queuePosition: thread.status === "waiting" ? await supportQueuePosition(thread.id) : null
+      },
+      messages: await listSupportMessages(thread.id)
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -791,7 +846,8 @@ router.post("/conversations/:id/status", async (req, res) => {
 
   // Dispara a pesquisa de satisfação só quando a conversa vira "resolvida"
   // agora (evita reenviar toda vez que reabre/resolve de novo).
-  if (status === "resolved" && before.status !== "resolved") {
+  const csatOn = (await getAccountSettings(req.accountId).catch(() => ({ csatEnabled: true }))).csatEnabled;
+  if (status === "resolved" && before.status !== "resolved" && csatOn && !conversation.isGroup) {
     try {
       if (conversation.platform === "whatsapp") {
         const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
@@ -890,6 +946,50 @@ router.post("/conversations/:id/send", async (req, res) => {
   }
 
   res.json(message);
+});
+
+// "Digitando…": o atendente avisa o cliente (WhatsApp) e o painel vê quando o cliente digita.
+router.post("/conversations/:id/typing", async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!conversation || conversation.platform !== "whatsapp" || conversation.isGroup) return res.sendStatus(204);
+  const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
+  sendPresence(channelId, conversation.externalId, req.body?.typing ? "composing" : "paused").catch(() => {});
+  res.sendStatus(204);
+});
+
+router.get("/conversations/:id/presence", async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!conversation || conversation.platform !== "whatsapp") return res.json({ typing: false });
+  const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
+  res.json(await watchPresence(channelId, conversation.externalId));
+});
+
+// Figurinhas: lista as recebidas (as do WhatsApp da empresa) e envia uma delas
+router.get("/stickers", async (req, res) => {
+  res.json(await listStickerUrls(req.accountId));
+});
+
+router.post("/conversations/:id/send-sticker", upload.single("file"), async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!(await assertConversationAccess(req, res, conversation))) return;
+  if (conversation.platform !== "whatsapp") return res.status(400).json({ error: "Figurinhas só no WhatsApp." });
+  try {
+    let buffer;
+    if (req.file) buffer = (await toWebp(req.file.buffer, { maxSize: 512, quality: 80 })) || req.file.buffer;
+    else if (req.body?.url) buffer = Buffer.from(await (await fetch(req.body.url)).arrayBuffer());
+    else return res.status(400).json({ error: "Escolha uma figurinha." });
+    const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
+    const waId = await sendWhatsAppPayload(channelId, conversation.externalId, { sticker: buffer });
+    const mediaUrl = req.body?.url || (await uploadMedia({ accountId: req.accountId, buffer, extension: "webp", contentType: "image/webp" }));
+    const message = await addMessage({
+      accountId: req.accountId, conversationId: conversation.id, direction: "out", author: "operator",
+      text: "", mediaUrl, mediaType: "sticker", whatsappMessageId: waId, senderName: req.userName, status: "sent"
+    });
+    await updateConversation(req.accountId, conversation.id, { mode: "human" });
+    res.json(message);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Contato (vCard) e localização
@@ -1323,7 +1423,7 @@ router.delete("/labels/:id", async (req, res) => {
 // ---------- Respostas prontas do atendente (canned responses) ----------
 
 router.get("/canned-responses", async (req, res) => {
-  res.json(await listCannedResponses(req.accountId));
+  res.json(await listCannedResponses(req.accountId, req.userId));
 });
 
 router.post("/canned-responses", async (req, res) => {
@@ -1331,10 +1431,20 @@ router.post("/canned-responses", async (req, res) => {
   if (!shortCode || !content) {
     return res.status(400).json({ error: "shortCode e content são obrigatórios" });
   }
-  res.json(await createCannedResponse({ accountId: req.accountId, shortCode, content }));
+  // Atendente só cria respostas pessoais; gestor escolhe (empresa ou só para ele).
+  const personal = req.role !== "owner" && !req.isSuperAdmin ? true : !!req.body.personal;
+  try {
+    res.json(await createCannedResponse({ accountId: req.accountId, shortCode, content, ownerId: personal ? req.userId : null }));
+  } catch (err) {
+    res.status(400).json({ error: /owner_id/.test(err.message) ? "Rode a migration 017 no Supabase." : err.message });
+  }
 });
 
 router.delete("/canned-responses/:id", async (req, res) => {
+  const c = await getCannedResponse(req.accountId, req.params.id);
+  if (!c) return res.sendStatus(204);
+  const isManager = req.role === "owner" || req.isSuperAdmin;
+  if (c.personal ? c.ownerId !== req.userId : !isManager) return res.status(403).json({ error: "Você não pode apagar esta resposta." });
   await deleteCannedResponse(req.accountId, req.params.id);
   res.sendStatus(204);
 });

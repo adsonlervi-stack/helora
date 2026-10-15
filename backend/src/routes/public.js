@@ -19,7 +19,9 @@ import {
   addMessage,
   createCampaign,
   updateCampaign,
-  onlyDigits
+  onlyDigits,
+  getChannelForAccountById,
+  listChannels
 } from "../config/db.js";
 import { resolveWhatsAppNumber, sendWhatsAppMessage, sendWhatsAppMediaUrl } from "../whatsapp/baileysClient.js";
 
@@ -49,14 +51,34 @@ router.get("/credits", async (req, res) => {
   res.json({ balance: await getCreditBalance(req.accountId) });
 });
 
-async function sendOne(accountId, phone, text, { mediaUrl, mediaType, name } = {}) {
+/** channelId opcional: escolhe qual número dispara quando a empresa tem vários. */
+async function pickChannel(accountId, channelId) {
+  if (channelId) {
+    const ch = await getChannelForAccountById(accountId, channelId);
+    if (!ch || ch.platform !== "whatsapp") {
+      const e = new Error("channelId não encontrado nesta empresa (veja GET /public/v1/channels).");
+      e.status = 400;
+      throw e;
+    }
+    return ch.id;
+  }
+  const id = await getPrimaryWhatsAppChannel(accountId);
+  if (!id) throw new Error("Nenhum WhatsApp cadastrado nesta empresa.");
+  return id;
+}
+
+router.get("/channels", async (req, res) => {
+  const list = await listChannels(req.accountId);
+  res.json(list.filter((c) => c.platform === "whatsapp").map((c) => ({ id: c.id, name: c.name })));
+});
+
+async function sendOne(accountId, phone, text, { mediaUrl, mediaType, name, channelId: wanted } = {}) {
   if ((await getCreditBalance(accountId)) <= 0) {
     const e = new Error("Sem créditos. Fale com a Helora para liberar mais.");
     e.status = 402;
     throw e;
   }
-  const channelId = await getPrimaryWhatsAppChannel(accountId);
-  if (!channelId) throw new Error("Nenhum WhatsApp cadastrado nesta empresa.");
+  const channelId = await pickChannel(accountId, wanted);
   const jid = await resolveWhatsAppNumber(channelId, phone);
   const id = mediaUrl
     ? await sendWhatsAppMediaUrl(channelId, jid, { url: mediaUrl, mediaType, caption: text })
@@ -85,7 +107,7 @@ router.post("/leads", async (req, res) => {
     });
     if (phone.length >= 10) await upsertContacts(req.accountId, null, [{ phone, name: b.name }], "importacao").catch(() => {});
     let whatsapp = null;
-    if (b.message && phone.length >= 10) whatsapp = await sendOne(req.accountId, phone, String(b.message), { name: b.name }).catch((e) => ({ error: e.message }));
+    if (b.message && phone.length >= 10) whatsapp = await sendOne(req.accountId, phone, String(b.message), { name: b.name, channelId: b.channelId }).catch((e) => ({ error: e.message }));
     res.status(201).json({ lead: { id: deal.id, title: deal.title, stage: deal.stage }, whatsapp });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -98,7 +120,7 @@ router.post("/messages", async (req, res) => {
   if (phone.length < 10) return res.status(400).json({ error: "phone inválido (use DDI + DDD + número, ex: 5584999998888)." });
   if (!b.text && !b.mediaUrl) return res.status(400).json({ error: "Envie text e/ou mediaUrl." });
   try {
-    res.status(201).json(await sendOne(req.accountId, phone, b.text || "", { mediaUrl: b.mediaUrl, mediaType: b.mediaType, name: b.name }));
+    res.status(201).json(await sendOne(req.accountId, phone, b.text || "", { mediaUrl: b.mediaUrl, mediaType: b.mediaType, name: b.name, channelId: b.channelId }));
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
@@ -110,6 +132,7 @@ router.post("/campaigns", async (req, res) => {
   if (!Array.isArray(b.recipients) || !b.recipients.length) return res.status(400).json({ error: "recipients deve ser uma lista [{ phone, name }]." });
   if (b.recipients.length > 5000) return res.status(400).json({ error: "Máximo de 5000 destinatários por campanha." });
   try {
+    if (b.channelId) await pickChannel(req.accountId, b.channelId);
     const balance = await getCreditBalance(req.accountId);
     if (balance < b.recipients.length) return res.status(402).json({ error: `Créditos insuficientes: saldo ${balance}, necessário ${b.recipients.length}.` });
     let c = await createCampaign(req.accountId, null, { ...b, name: b.name || "Campanha via API" }, b.recipients);

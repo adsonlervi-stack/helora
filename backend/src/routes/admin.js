@@ -23,6 +23,7 @@ import {
   listSupportMessages,
   addSupportMessage,
   markSupportRead,
+  acceptSupportThread,
   setSupportThreadStatus,
   listCreditsOverview,
   setMonthlyCredits,
@@ -179,8 +180,9 @@ router.get("/support/:id", async (req, res) => {
 router.post("/support/:id/messages", async (req, res) => {
   const text = String(req.body?.text || "").trim();
   if (!text) return res.status(400).json({ error: "Escreva uma mensagem." });
-  const { data: thread } = await supabase.from("support_threads").select("account_id").eq("id", req.params.id).maybeSingle();
+  const { data: thread } = await supabase.from("support_threads").select("account_id, status").eq("id", req.params.id).maybeSingle();
   if (!thread) return res.status(404).json({ error: "Conversa de suporte não encontrada." });
+  if (thread.status === "waiting") return res.status(409).json({ error: "Aceite o chamado antes de responder." });
   res.status(201).json(
     await addSupportMessage({
       accountId: thread.account_id,
@@ -191,6 +193,15 @@ router.post("/support/:id/messages", async (req, res) => {
       text
     })
   );
+});
+
+router.post("/support/:id/accept", async (req, res) => {
+  try {
+    await acceptSupportThread(req.params.id, req.userName || "Suporte");
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 router.patch("/support/:id", async (req, res) => {
