@@ -27,6 +27,7 @@ function mapConversation(row) {
     accountId: row.account_id,
     platform: row.platform,
     externalId: row.external_id,
+    phone: row.phone || (/@s\.whatsapp\.net$/.test(row.external_id || "") ? String(row.external_id).split("@")[0] : null),
     name: row.name,
     mode: row.mode,
     status: row.status,
@@ -511,6 +512,11 @@ function mapChannel(row) {
     departmentId: row.department_id,
     departmentName: row.departments?.name,
     flowId: row.flow_id || null,
+    provider: row.provider || "baileys",
+    externalPageId: row.external_page_id || null,
+    phoneNumberId: row.phone_number_id || null,
+    wabaId: row.waba_id || null,
+    hasToken: !!row.access_token,
     createdAt: row.created_at
   };
 }
@@ -556,10 +562,13 @@ export async function checkChannelLimit(accountId, platform) {
   return { used, max };
 }
 
-export async function createChannel({ accountId, platform, name, departmentId }) {
+const CHANNEL_EXTRA = { externalPageId: "external_page_id", accessToken: "access_token", provider: "provider", phoneNumberId: "phone_number_id", wabaId: "waba_id" };
+export async function createChannel({ accountId, platform, name, departmentId, ...extra }) {
+  const row = { account_id: accountId, platform, name, department_id: departmentId || null };
+  for (const [k, col] of Object.entries(CHANNEL_EXTRA)) if (extra[k]) row[col] = String(extra[k]).trim();
   const { data, error } = await supabase
     .from("channels")
-    .insert({ account_id: accountId, platform, name, department_id: departmentId || null })
+    .insert(row)
     .select("*, departments(name)")
     .single();
   if (error) throw error;
@@ -571,6 +580,7 @@ export async function updateChannel(accountId, id, patch) {
   if (patch.name !== undefined) dbPatch.name = patch.name;
   if (patch.departmentId !== undefined) dbPatch.department_id = patch.departmentId;
   if (patch.flowId !== undefined) dbPatch.flow_id = patch.flowId || null;
+  for (const [k, col] of Object.entries(CHANNEL_EXTRA)) if (patch[k]) dbPatch[col] = String(patch[k]).trim();
   const { data, error } = await supabase
     .from("channels")
     .update(dbPatch)
@@ -669,16 +679,31 @@ export async function getChannelStatus(channelId) {
 
 // ---------- Conversas ----------
 
-export async function findOrCreateConversation({ accountId, platform, externalId, name, channelId }) {
-  const { data: existing, error: findError } = await supabase
+export async function findOrCreateConversation({ accountId, platform, externalId, name, channelId, altExternalIds = [], phone = null }) {
+  const ids = [externalId, ...altExternalIds].filter(Boolean);
+  const { data: found, error: findError } = await supabase
     .from("conversations")
     .select(CONVERSATION_SELECT)
     .eq("account_id", accountId)
     .eq("platform", platform)
-    .eq("external_id", externalId)
-    .maybeSingle();
-
+    .in("external_id", ids)
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(1);
   if (findError) throw findError;
+  let existing = found?.[0];
+  // Ainda não achou: tenta pelo número real guardado (conversas abertas pelo painel)
+  if (!existing && phone) {
+    const { data: byPhone } = await supabase
+      .from("conversations")
+      .select(CONVERSATION_SELECT)
+      .eq("account_id", accountId)
+      .eq("platform", platform)
+      .eq("phone", phone)
+      .eq("is_group", false)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(1);
+    existing = byPhone?.[0];
+  }
   if (existing) return mapConversation(existing);
 
   // Conversa nova entra no setor configurado no canal.
@@ -695,6 +720,7 @@ export async function findOrCreateConversation({ accountId, platform, externalId
       external_id: externalId,
       name: name || externalId,
       channel_id: channelId || null,
+      ...(phone ? { phone } : {}),
       ...(departmentId ? { department_id: departmentId } : {})
     })
     .select(CONVERSATION_SELECT)
@@ -1548,8 +1574,9 @@ function mapContact(r) {
   };
 }
 
-export async function listContacts(accountId, search = "") {
-  let q = supabase.from("contacts").select("*").eq("account_id", accountId).order("name", { nullsFirst: false }).limit(2000);
+export async function listContacts(accountId, search = "", page = null, pageSize = 30) {
+  let q = supabase.from("contacts").select("*", page ? { count: "exact" } : undefined).eq("account_id", accountId).order("name", { nullsFirst: false });
+  q = page ? q.range((page - 1) * pageSize, page * pageSize - 1) : q.limit(2000);
   const term = String(search || "").trim();
   if (term) {
     const digits = onlyDigits(term);
@@ -1558,8 +1585,9 @@ export async function listContacts(accountId, search = "") {
       ? q.or(`name.ilike.%${safe}%,push_name.ilike.%${safe}%,phone.ilike.%${digits}%`)
       : q.or(`name.ilike.%${safe}%,push_name.ilike.%${safe}%`);
   }
-  const { data, error } = await q;
+  const { data, error, count } = await q;
   if (error) throw error;
+  if (page) return { items: data.map(mapContact), total: count || 0, page, pageSize };
   return data.map(mapContact);
 }
 
@@ -2010,7 +2038,8 @@ function mapContactFull(r) {
 
 /** Contato ligado a uma conversa (pelo número). Cria se não existir. */
 export async function getOrCreateContactForConversation(accountId, conversation) {
-  const phone = String(conversation.externalId || "").split("@")[0];
+  // @lid é um ID interno do WhatsApp, não é telefone: usa o número real guardado na conversa.
+  const phone = conversation.phone || (String(conversation.externalId || "").includes("@lid") ? "" : String(conversation.externalId || "").split("@")[0]);
   if (!/^\d{10,15}$/.test(phone) || conversation.isGroup) return null;
   const phones = [phone, BR_TWIN(phone)].filter(Boolean);
   const { data } = await supabase.from("contacts").select("*").eq("account_id", accountId).in("phone", phones).limit(1);
@@ -2026,7 +2055,7 @@ export async function getOrCreateContactForConversation(accountId, conversation)
 
 export async function updateContactLead(accountId, id, body) {
   const map = {
-    name: "name", email: "email", notes: "notes",
+    name: "name", email: "email", notes: "notes", phone: "phone",
     leadOrigin: "lead_origin", leadStatus: "lead_status",
     defaultAgentId: "default_agent_id", defaultDepartmentId: "default_department_id"
   };
@@ -2416,4 +2445,237 @@ export async function listStickerUrls(accountId) {
     .order("timestamp", { ascending: false })
     .limit(400);
   return [...new Set((data || []).map((r) => r.media_url))].slice(0, 120);
+}
+
+/** Atendente/setor padrão do contato desta conversa (null se não houver). */
+export async function getContactRouting(accountId, conversation) {
+  if (conversation.isGroup) return null;
+  const phone = String(conversation.externalId || "").split("@")[0].split(":")[0];
+  if (!/^\d{10,15}$/.test(phone)) return null;
+  const phones = [phone, BR_TWIN(phone)].filter(Boolean);
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("default_agent_id, default_department_id")
+    .eq("account_id", accountId)
+    .in("phone", phones)
+    .limit(1);
+  if (error || !data?.length) return null;
+  const c = data[0];
+  if (!c.default_agent_id && !c.default_department_id) return null;
+  return { agentId: c.default_agent_id, departmentId: c.default_department_id };
+}
+
+// ---------- WhatsApp API oficial (Cloud API) ----------
+const cloudCache = new Map();
+/** Dados do canal se ele usar a API oficial (cache de 60s); null se for QR Code. */
+export async function getCloudChannel(channelId) {
+  const hit = cloudCache.get(channelId);
+  if (hit && Date.now() - hit.at < 60000) return hit.value;
+  const { data } = await supabase.from("channels").select("id, account_id, provider, phone_number_id, access_token").eq("id", channelId).maybeSingle();
+  const value = data?.provider === "cloud" ? { id: data.id, accountId: data.account_id, phoneNumberId: data.phone_number_id, accessToken: data.access_token } : null;
+  cloudCache.set(channelId, { at: Date.now(), value });
+  return value;
+}
+
+export async function findCloudChannelByPhoneId(phoneNumberId) {
+  const { data } = await supabase.from("channels").select("*").eq("provider", "cloud").eq("phone_number_id", phoneNumberId).maybeSingle();
+  return data ? { id: data.id, accountId: data.account_id, accessToken: data.access_token, phoneNumberId: data.phone_number_id } : null;
+}
+
+
+// ============================================================
+// v4: Planos, Financeiro, Termos, Relatórios
+// ============================================================
+const mapPlan = (p) => ({
+  id: p.id, name: p.name, price: Number(p.price), maxWhatsapp: p.max_whatsapp, maxUsers: p.max_users,
+  monthlyCredits: p.monthly_credits, features: (p.features || "").split("|").filter(Boolean),
+  highlight: p.highlight, active: p.active, sort: p.sort
+});
+
+export async function listPlans({ onlyActive = false } = {}) {
+  let q = supabase.from("plans").select("*").order("sort").order("price");
+  if (onlyActive) q = q.eq("active", true);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map(mapPlan);
+}
+
+export async function savePlan(id, b) {
+  const row = {};
+  if (b.name !== undefined) row.name = b.name;
+  if (b.price !== undefined) row.price = Number(String(b.price).replace(",", ".")) || 0;
+  if (b.maxWhatsapp !== undefined) row.max_whatsapp = parseInt(b.maxWhatsapp, 10) || 1;
+  if (b.maxUsers !== undefined) row.max_users = parseInt(b.maxUsers, 10) || 1;
+  if (b.monthlyCredits !== undefined) row.monthly_credits = parseInt(b.monthlyCredits, 10) || 0;
+  if (b.features !== undefined) row.features = Array.isArray(b.features) ? b.features.join("|") : b.features;
+  if (b.highlight !== undefined) row.highlight = !!b.highlight;
+  if (b.active !== undefined) row.active = !!b.active;
+  if (b.sort !== undefined) row.sort = parseInt(b.sort, 10) || 0;
+  const q = id ? supabase.from("plans").update(row).eq("id", id) : supabase.from("plans").insert(row);
+  const { data, error } = await q.select().single();
+  if (error) throw error;
+  return mapPlan(data);
+}
+
+export async function deletePlan(id) {
+  const { error } = await supabase.from("plans").update({ active: false }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Vincula a empresa a um plano e aplica os limites dele. */
+export async function setAccountPlan(accountId, planId) {
+  if (!planId) {
+    const { error } = await supabase.from("accounts").update({ plan_id: null }).eq("id", accountId);
+    if (error) throw error;
+    return;
+  }
+  const { data: p, error: pe } = await supabase.from("plans").select("*").eq("id", planId).single();
+  if (pe) throw pe;
+  const { error } = await supabase
+    .from("accounts")
+    .update({
+      plan_id: p.id, plan_name: p.name, monthly_price: p.price,
+      max_whatsapp_channels: p.max_whatsapp, max_users: p.max_users, credits_monthly: p.monthly_credits
+    })
+    .eq("id", accountId);
+  if (error) throw error;
+}
+
+export async function getBilling(accountId) {
+  const acc = await getAccount(accountId);
+  let plan = null;
+  if (acc?.plan_id) {
+    const { data } = await supabase.from("plans").select("*").eq("id", acc.plan_id).maybeSingle();
+    plan = data ? mapPlan(data) : null;
+  }
+  const { data: invoices } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("account_id", accountId)
+    .order("due_date", { ascending: false })
+    .limit(36);
+  const balance = await getCreditBalance(accountId).catch(() => 0);
+  const ledger = await listCreditLedger(accountId, 30).catch(() => []);
+  const { count: users } = await supabase.from("profiles").select("id", { count: "exact", head: true }).eq("account_id", accountId);
+  const { count: numbers } = await supabase.from("channels").select("id", { count: "exact", head: true }).eq("account_id", accountId).eq("platform", "whatsapp");
+  return {
+    account: {
+      name: acc?.name, status: acc?.status, planName: plan?.name || acc?.plan_name || null,
+      monthlyPrice: Number(acc?.monthly_price || 0), dueDay: acc?.due_day, creditsMonthly: acc?.credits_monthly || 0,
+      maxWhatsapp: acc?.max_whatsapp_channels ?? 1, maxUsers: acc?.max_users ?? null
+    },
+    plan,
+    usage: { users: users || 0, numbers: numbers || 0 },
+    invoices: (invoices || []).map((i) => ({
+      id: i.id, reference: i.reference, amount: Number(i.amount || 0), dueDate: i.due_date, status: i.status,
+      paidAt: i.paid_at, paymentLink: i.payment_link || i.link || null, notes: i.notes || null
+    })),
+    credits: { balance, ledger }
+  };
+}
+
+export async function getLegalStatus(userId, accountId) {
+  const { data: p } = await supabase.from("profiles").select("terms_accepted_at, role, is_super_admin").eq("id", userId).maybeSingle();
+  const acc = await getAccount(accountId);
+  return {
+    termsAccepted: !!p?.terms_accepted_at || !!p?.is_super_admin,
+    contractRequired: p?.role === "owner" && !p?.is_super_admin && !acc?.contract_accepted_at,
+    contractAcceptedAt: acc?.contract_accepted_at || null
+  };
+}
+
+export async function acceptLegal(userId, accountId, { contract }) {
+  await supabase.from("profiles").update({ terms_accepted_at: new Date().toISOString() }).eq("id", userId);
+  if (contract) {
+    await supabase.from("accounts").update({ contract_accepted_at: new Date().toISOString(), contract_accepted_by: userId }).eq("id", accountId);
+  }
+}
+
+/** Relatório de atendimento (por atendente, setor, canal e dia) no período. */
+export async function buildAttendanceReport(accountId, { from, to, departmentId, agentId, channelId }) {
+  const start = from ? new Date(`${from}T00:00:00-03:00`) : new Date(Date.now() - 30 * 86400000);
+  const end = to ? new Date(`${to}T23:59:59-03:00`) : new Date();
+  let cq = supabase
+    .from("conversations")
+    .select("id, name, status, department_id, assigned_agent_id, channel_id, created_at, is_group, departments(name), channels(name), assigned_profile:profiles!conversations_assigned_agent_id_fkey(name)")
+    .eq("account_id", accountId)
+    .gte("last_message_at", start.toISOString())
+    .lte("created_at", end.toISOString())
+    .limit(5000);
+  if (departmentId) cq = cq.eq("department_id", departmentId);
+  if (agentId) cq = cq.eq("assigned_agent_id", agentId);
+  if (channelId) cq = cq.eq("channel_id", channelId);
+  const { data: convs, error } = await cq;
+  if (error) throw error;
+  const list = (convs || []).filter((c) => !c.is_group);
+  const ids = list.map((c) => c.id);
+  const msgs = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await supabase
+      .from("messages")
+      .select("conversation_id, direction, author, sender_name, timestamp")
+      .in("conversation_id", ids.slice(i, i + 200))
+      .gte("timestamp", start.toISOString())
+      .lte("timestamp", end.toISOString())
+      .order("timestamp")
+      .limit(20000);
+    msgs.push(...(data || []));
+  }
+  const { data: csat } = await supabase
+    .from("csat_responses")
+    .select("conversation_id, rating, created_at")
+    .eq("account_id", accountId)
+    .gte("created_at", start.toISOString())
+    .lte("created_at", end.toISOString());
+
+  const byConv = {};
+  for (const m of msgs) (byConv[m.conversation_id] ||= []).push(m);
+  const csatByConv = Object.fromEntries((csat || []).map((r) => [r.conversation_id, r.rating]));
+
+  const blank = () => ({ conversations: 0, resolved: 0, open: 0, inMsgs: 0, outMsgs: 0, frtSum: 0, frtN: 0, ahtSum: 0, ahtN: 0, csatSum: 0, csatN: 0 });
+  const groups = { agent: {}, department: {}, channel: {} };
+  const total = blank();
+  const days = {};
+  for (const c of list) {
+    const ms = byConv[c.id] || [];
+    const firstIn = ms.find((m) => m.direction === "in");
+    const firstHumanOut = firstIn && ms.find((m) => m.direction === "out" && m.author === "operator" && m.timestamp >= firstIn.timestamp);
+    const frt = firstIn && firstHumanOut ? (new Date(firstHumanOut.timestamp) - new Date(firstIn.timestamp)) / 1000 : null;
+    const aht = c.status === "resolved" && ms.length > 1 ? (new Date(ms[ms.length - 1].timestamp) - new Date(ms[0].timestamp)) / 1000 : null;
+    const rating = csatByConv[c.id];
+    const keys = {
+      agent: c.assigned_profile?.name || "Sem atendente",
+      department: c.departments?.name || "Sem setor",
+      channel: c.channels?.name || "Sem canal"
+    };
+    const add = (g) => {
+      g.conversations++;
+      c.status === "resolved" ? g.resolved++ : g.open++;
+      g.inMsgs += ms.filter((m) => m.direction === "in").length;
+      g.outMsgs += ms.filter((m) => m.direction === "out").length;
+      if (frt != null) { g.frtSum += frt; g.frtN++; }
+      if (aht != null) { g.ahtSum += aht; g.ahtN++; }
+      if (rating) { g.csatSum += rating; g.csatN++; }
+    };
+    add(total);
+    for (const k of Object.keys(groups)) add((groups[k][keys[k]] ||= blank()));
+    const day = (firstIn?.timestamp || c.created_at).slice(0, 10);
+    days[day] = (days[day] || 0) + 1;
+  }
+  const fin = (g) => ({
+    conversations: g.conversations, resolved: g.resolved, open: g.open, inMsgs: g.inMsgs, outMsgs: g.outMsgs,
+    frt: g.frtN ? Math.round(g.frtSum / g.frtN) : null,
+    aht: g.ahtN ? Math.round(g.ahtSum / g.ahtN) : null,
+    csat: g.csatN ? Math.round((g.csatSum / g.csatN) * 10) / 10 : null,
+    csatCount: g.csatN
+  });
+  const rows = (o) => Object.entries(o).map(([name, g]) => ({ name, ...fin(g) })).sort((a, b) => b.conversations - a.conversations);
+  return {
+    period: { from: start.toISOString(), to: end.toISOString() },
+    total: fin(total),
+    byAgent: rows(groups.agent),
+    byDepartment: rows(groups.department),
+    byChannel: rows(groups.channel),
+    byDay: Object.entries(days).sort().map(([day, count]) => ({ day, count }))
+  };
 }
