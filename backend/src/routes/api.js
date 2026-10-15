@@ -113,7 +113,8 @@ import {
   getBilling,
   getLegalStatus,
   acceptLegal,
-  buildAttendanceReport
+  buildAttendanceReport,
+  listAttendances
 } from "../config/db.js";
 import { runGraph } from "../bot/flowRunner.js";
 import {
@@ -233,6 +234,15 @@ router.get("/billing/invoices/:id/pix", async (req, res) => {
 });
 
 // Relatórios de atendimento
+router.get("/reports/attendances", async (req, res) => {
+  try {
+    const scope = req.role === "owner" || req.isSuperAdmin ? {} : { agentId: req.userId };
+    res.json(await listAttendances(req.accountId, { ...req.query, ...scope }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get("/reports", async (req, res) => {
   try {
     const scope = req.role === "owner" || req.isSuperAdmin ? {} : { agentId: req.userId };
