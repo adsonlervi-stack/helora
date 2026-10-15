@@ -151,6 +151,11 @@ export async function markInvoicePaid(invoiceId, { method = "pix" } = {}) {
 }
 
 export function startBillingScheduler() {
+  // Desligado por padrão: só cobra/bloqueia sozinho com BILLING_AUTO=1 na Railway.
+  if (process.env.BILLING_AUTO !== "1") {
+    console.log("[Cobrança] automática desligada (BILLING_AUTO != 1)");
+    return;
+  }
   const tick = () => runBillingCycle().catch((e) => console.error("[Cobrança]", e.message));
   setTimeout(tick, 60 * 1000);
   setInterval(tick, 60 * 60 * 1000);
