@@ -24,6 +24,15 @@ const app = express();
 app.set("trust proxy", 1);
 
 // API aberta: aceita chamadas de qualquer site (protegida pela chave X-API-Key)
+// Planos (para o site da Helora) — público, sem chave
+app.get("/public/plans", cors(), async (req, res) => {
+  try {
+    const { listPlans } = await import("./config/db.js");
+    res.json(await listPlans({ onlyActive: true }));
+  } catch {
+    res.json([]);
+  }
+});
 app.use("/public/v1", cors(), express.json({ limit: "2mb" }), publicRoutes);
 app.use(
   cors({
