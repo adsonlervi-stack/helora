@@ -24,6 +24,10 @@ import {
   addSupportMessage,
   markSupportRead,
   acceptSupportThread,
+  listPlans,
+  savePlan,
+  deletePlan,
+  setAccountPlan,
   setSupportThreadStatus,
   listCreditsOverview,
   setMonthlyCredits,
@@ -49,6 +53,41 @@ router.post("/migrate-supabase", async (req, res) => {
   res.status(202).json({ started: true });
 });
 router.get("/migrate-supabase", (req, res) => res.json(migrationState));
+
+// ---------- Planos ----------
+router.get("/plans", async (req, res) => {
+  try {
+    res.json(await listPlans());
+  } catch (err) {
+    res.status(500).json({ error: /plans/.test(err.message) ? "Rode a migration 018 no Supabase." : err.message });
+  }
+});
+router.post("/plans", async (req, res) => {
+  try {
+    res.status(201).json(await savePlan(null, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router.patch("/plans/:id", async (req, res) => {
+  try {
+    res.json(await savePlan(req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router.delete("/plans/:id", async (req, res) => {
+  await deletePlan(req.params.id);
+  res.sendStatus(204);
+});
+router.post("/accounts/:id/plan", async (req, res) => {
+  try {
+    await setAccountPlan(req.params.id, req.body?.planId || null);
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 router.get("/accounts", async (req, res) => {
   res.json(await listAccountsWithStats());

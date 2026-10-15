@@ -84,7 +84,7 @@ async function sendOne(accountId, phone, text, { mediaUrl, mediaType, name, chan
     ? await sendWhatsAppMediaUrl(channelId, jid, { url: mediaUrl, mediaType, caption: text })
     : await sendWhatsAppMessage(channelId, jid, text);
   await addCreditEntry(accountId, -1, "api", { reference: phone });
-  const conversation = await findOrCreateConversation({ accountId, platform: "whatsapp", externalId: jid, name: name || phone, channelId });
+  const conversation = await findOrCreateConversation({ accountId, platform: "whatsapp", externalId: jid, phone: jid.split("@")[0], name: name || phone, channelId });
   await addMessage({ accountId, conversationId: conversation.id, direction: "out", author: "bot", text: text || "", mediaUrl: mediaUrl || null, mediaType: mediaUrl ? mediaType || "image" : null, whatsappMessageId: id });
   return { conversationId: conversation.id, messageId: id };
 }

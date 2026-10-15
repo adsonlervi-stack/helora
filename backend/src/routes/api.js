@@ -109,7 +109,11 @@ import {
   getAccountSettings,
   updateAccountSettings,
   updateMyName,
-  listStickerUrls
+  listStickerUrls,
+  getBilling,
+  getLegalStatus,
+  acceptLegal,
+  buildAttendanceReport
 } from "../config/db.js";
 import { runGraph } from "../bot/flowRunner.js";
 import {
@@ -130,7 +134,9 @@ import {
   getWhatsAppStatus as waStatus,
   sendPresence,
   watchPresence,
-  sendWhatsAppPayload
+  sendWhatsAppPayload,
+  downloadPendingMedia,
+  getOnlineJids
 } from "../whatsapp/baileysClient.js";
 import { toJpeg, toWebp } from "../imageTools.js";
 import { sendMetaMessage } from "../meta/metaClient.js";
@@ -200,6 +206,42 @@ router.post("/profile/password", async (req, res) => {
   if (password.length < 6) return res.status(400).json({ error: "A senha precisa ter pelo menos 6 caracteres." });
   try {
     await setUserPassword(req.userId, password);
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Financeiro da empresa: plano, faturas e créditos
+router.get("/billing", async (req, res) => {
+  try {
+    res.json(await getBilling(req.accountId));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Relatórios de atendimento
+router.get("/reports", async (req, res) => {
+  try {
+    const scope = req.role === "owner" || req.isSuperAdmin ? {} : { agentId: req.userId };
+    res.json(await buildAttendanceReport(req.accountId, { ...req.query, ...scope }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Termos de Uso (todo usuário) e Contrato (gestor da empresa)
+router.get("/legal/status", async (req, res) => {
+  try {
+    res.json(await getLegalStatus(req.userId, req.accountId));
+  } catch {
+    res.json({ termsAccepted: true, contractRequired: false });
+  }
+});
+router.post("/legal/accept", async (req, res) => {
+  try {
+    await acceptLegal(req.userId, req.accountId, { contract: !!req.body?.contract && req.role === "owner" });
     res.sendStatus(204);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -296,6 +338,11 @@ router.post("/team", requireOwner, async (req, res) => {
   if (!isValidEmail(email)) return res.status(400).json({ error: "E-mail inválido." });
   if (password && String(password).length < 6) {
     return res.status(400).json({ error: "A senha precisa ter pelo menos 6 caracteres." });
+  }
+  // Limite de usuários do plano (só quando a empresa tem um plano vinculado)
+  const billing = await getBilling(req.accountId).catch(() => null);
+  if (billing?.plan && billing.account.maxUsers && billing.usage.users >= billing.account.maxUsers) {
+    return res.status(403).json({ error: `Seu plano permite ${billing.account.maxUsers} usuário(s). Fale com a Helora para aumentar.` });
   }
   try {
     const user = await createAuthUser({ email: email.trim().toLowerCase(), password });
@@ -400,14 +447,18 @@ router.get("/channels", async (req, res) => {
   const withStatus = await Promise.all(
     channels.map(async (c) => ({
       ...c,
-      ...(c.platform === "whatsapp" ? getWhatsAppStatus(c.id) : {})
+      ...(c.platform === "whatsapp"
+        ? c.provider === "cloud"
+          ? { status: c.hasToken && c.phoneNumberId ? "connected" : "disconnected" }
+          : getWhatsAppStatus(c.id)
+        : { status: c.hasToken && c.externalPageId ? "connected" : "disconnected" })
     }))
   );
   res.json(withStatus);
 });
 
 router.post("/channels", requireOwner, async (req, res) => {
-  const { platform, name, departmentId, flowId } = req.body;
+  const { platform, name, departmentId, flowId, provider, externalPageId, accessToken, phoneNumberId, wabaId } = req.body;
   if (!platform || !["whatsapp", "messenger", "instagram"].includes(platform)) {
     return res.status(400).json({ error: "platform inválida" });
   }
@@ -416,10 +467,23 @@ router.post("/channels", requireOwner, async (req, res) => {
   } catch (err) {
     return res.status(403).json({ error: err.message });
   }
-  let channel = await createChannel({ accountId: req.accountId, platform, name, departmentId });
+  if (platform !== "whatsapp" && (!externalPageId || !accessToken))
+    return res.status(400).json({ error: "Informe o ID da página/conta e o token de acesso." });
+  if (platform === "whatsapp" && provider === "cloud" && (!phoneNumberId || !accessToken))
+    return res.status(400).json({ error: "Informe o Phone Number ID e o token de acesso da API oficial." });
+  let channel;
+  try {
+    channel = await createChannel({
+      accountId: req.accountId, platform, name, departmentId,
+      provider: platform === "whatsapp" && provider === "cloud" ? "cloud" : null,
+      externalPageId, accessToken, phoneNumberId, wabaId
+    });
+  } catch (err) {
+    return res.status(400).json({ error: /provider|phone_number_id/.test(err.message) ? "Rode a migration 018 (9-rodar-v4.sql) no Supabase." : err.message });
+  }
   if (flowId) channel = (await updateChannel(req.accountId, channel.id, { flowId }).catch(() => null)) || channel;
 
-  if (platform === "whatsapp") {
+  if (platform === "whatsapp" && channel.provider !== "cloud") {
     startWhatsAppForChannel(channel.id, req.accountId).catch((err) => {
       console.error(`[WhatsApp] Erro ao iniciar dispositivo ${channel.id}:`, err);
     });
@@ -429,9 +493,9 @@ router.post("/channels", requireOwner, async (req, res) => {
 });
 
 router.post("/channels/:id", requireOwner, async (req, res) => {
-  const { name, departmentId, flowId } = req.body;
+  const { name, departmentId, flowId, externalPageId, accessToken, phoneNumberId, wabaId } = req.body;
   try {
-    res.json(await updateChannel(req.accountId, req.params.id, { name, departmentId, flowId }));
+    res.json(await updateChannel(req.accountId, req.params.id, { name, departmentId, flowId, externalPageId, accessToken, phoneNumberId, wabaId }));
   } catch (err) {
     res.status(400).json({ error: /flow_id/.test(err.message) ? "Rode a migration 016 no Supabase para escolher o fluxo do canal." : err.message });
   }
@@ -450,7 +514,8 @@ router.delete("/channels/:id", requireOwner, async (req, res) => {
 router.get("/channels/:id/status", async (req, res) => {
   const channel = await getChannel(req.accountId, req.params.id);
   if (!channel) return res.status(404).json({ error: "Canal não encontrado" });
-  if (channel.platform !== "whatsapp") return res.json({ status: "connected", qr: null });
+  if (channel.platform !== "whatsapp" || channel.provider === "cloud")
+    return res.json({ status: channel.hasToken ? "connected" : "disconnected", qr: null });
   res.json(getWhatsAppStatus(req.params.id));
 });
 
@@ -523,6 +588,13 @@ router.post("/channels/:id/permissions", requireOwner, async (req, res) => {
 router.get("/conversations", async (req, res) => {
   const scope = { role: req.isSuperAdmin ? "owner" : req.role, departmentIds: req.departmentIds, userId: req.userId };
   const conversations = await listConversations(req.accountId, scope);
+  // Bolinha verde só para quem está online de verdade (presença do WhatsApp)
+  const onlineByChannel = new Map();
+  for (const c of conversations) {
+    if (c.platform !== "whatsapp" || c.isGroup || !c.channelId) continue;
+    if (!onlineByChannel.has(c.channelId)) onlineByChannel.set(c.channelId, getOnlineJids(c.channelId));
+    c.online = onlineByChannel.get(c.channelId).has(c.externalId);
+  }
   res.json(conversations);
 });
 
@@ -530,7 +602,8 @@ router.get("/conversations", async (req, res) => {
 
 router.get("/contacts", async (req, res) => {
   try {
-    res.json(await listContacts(req.accountId, req.query.search));
+    const page = parseInt(req.query.page, 10) || null;
+    res.json(await listContacts(req.accountId, req.query.search, page, 30));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -593,6 +666,7 @@ router.post("/conversations/start", async (req, res) => {
       accountId: req.accountId,
       platform: "whatsapp",
       externalId: jid,
+      phone: jid.split("@")[0],
       name,
       channelId
     });
@@ -694,7 +768,33 @@ router.get("/conversations/:id/contact", async (req, res) => {
 
 router.patch("/contacts/:id/lead", async (req, res) => {
   try {
-    res.json(await updateContactLead(req.accountId, req.params.id, req.body || {}));
+    const body = req.body || {};
+    const contact = await updateContactLead(req.accountId, req.params.id, body);
+    // Status do lead = etapa no Pipeline (cria ou move o card do contato)
+    const STAGE_BY_STATUS = { Novo: "novo_lead", Qualificado: "contato", "Em negociação": "negociacao", Cliente: "fechado", Perdido: "perdido" };
+    const stage = STAGE_BY_STATUS[body.leadStatus];
+    if (stage && body.conversationId) {
+      const conversation = await getConversation(req.accountId, body.conversationId);
+      if (conversation) {
+        const [deal] = await listDealsForConversation(req.accountId, conversation.id, contact.phone);
+        if (deal) {
+          if (deal.stage !== stage) await updateDeal(req.accountId, deal.id, { stage }).catch(() => {});
+        } else {
+          await createDeal({
+            accountId: req.accountId,
+            conversationId: conversation.id,
+            title: contact.name || contact.pushName || conversation.name,
+            stage,
+            ownerId: conversation.assignedAgentId || req.userId,
+            contactName: contact.name || contact.pushName || conversation.name,
+            contactPhone: contact.phone,
+            contactEmail: contact.email,
+            source: contact.leadOrigin || "whatsapp"
+          }).catch(() => {});
+        }
+      }
+    }
+    res.json(contact);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -865,7 +965,10 @@ router.post("/conversations/:id/status", async (req, res) => {
         author: "bot",
         text: CSAT_PROMPT_TEXT
       });
-      await updateConversation(req.accountId, conversation.id, { awaitingCsat: true });
+      await updateConversation(req.accountId, conversation.id, {
+        awaitingCsat: true,
+        flowVars: { ...(conversation.flowVars || {}), __csatAt: new Date().toISOString() }
+      });
     } catch (err) {
       console.error("[CSAT] Falha ao enviar pesquisa de satisfação:", err.message);
     }
@@ -945,6 +1048,11 @@ router.post("/conversations/:id/send", async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 
+  // Respondeu = assumiu o atendimento (menos em grupos)
+  if (!conversation.isGroup && conversation.assignedAgentId !== req.userId) {
+    updateConversation(req.accountId, conversation.id, { assignedAgentId: req.userId, mode: "human", status: "open" }).catch(() => {});
+  }
+
   res.json(message);
 });
 
@@ -1010,7 +1118,38 @@ router.get("/conversations/:id/channel-status", async (req, res) => {
   if (conversation.platform !== "whatsapp") return res.json({ status: "connected" });
   const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
   if (!channelId) return res.json({ status: "disconnected", channelId: null });
+  const ch = await getChannel(req.accountId, channelId);
+  if (ch?.provider === "cloud") return res.json({ status: ch.hasToken ? "connected" : "disconnected", channelId });
   res.json({ status: waStatus(channelId).status, channelId });
+});
+
+// Baixar sob demanda uma foto/vídeo/documento recebido
+router.post("/messages/:id/download", async (req, res) => {
+  const message = await getMessageById(req.accountId, req.params.id);
+  if (!message) return res.status(404).json({ error: "Mensagem não encontrada." });
+  if (message.mediaUrl) return res.json(message);
+  const pending = message.extra?.pendingMedia;
+  if (!pending) return res.status(400).json({ error: "Esta mensagem não tem arquivo para baixar." });
+  const conversation = await getConversation(req.accountId, message.conversationId);
+  if (!(await assertConversationAccess(req, res, conversation))) return;
+  try {
+    const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
+    let buffer = await downloadPendingMedia(channelId, pending);
+    let ext = (pending.fileName || "").split(".").pop() || { image: "jpg", video: "mp4", document: "pdf" }[message.mediaType] || "bin";
+    let contentType = pending.mimetype || "application/octet-stream";
+    if (message.mediaType === "image") {
+      const webp = await toWebp(buffer);
+      if (webp) { buffer = webp; ext = "webp"; contentType = "image/webp"; }
+    }
+    const mediaUrl = await uploadMedia({ accountId: req.accountId, buffer, extension: ext.toLowerCase().slice(0, 8), contentType });
+    const { pendingMedia, ...rest } = message.extra || {};
+    res.json(await updateMessageFields(req.accountId, message.id, {
+      media_url: mediaUrl,
+      extra: Object.keys(rest).length ? { ...rest, file: { name: pending.fileName, size: pending.size } } : { file: { name: pending.fileName, size: pending.size } }
+    }));
+  } catch (err) {
+    res.status(400).json({ error: "Não foi possível baixar (o arquivo pode ter expirado no WhatsApp). " + err.message });
+  }
 });
 
 // Apagar mensagem enviada (para todos no WhatsApp)
