@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Helora · Atendimento por WhatsApp para a sua empresa</title>
+<meta name="description" content="Bot 24h, equipe organizada por setores, pipeline de vendas e campanhas — tudo conectado ao seu WhatsApp, Instagram e Facebook.">
+<link rel="icon" href="/favicon.png">
+<style>
+:root{--ink:#1d1d1f;--muted:#6e6e73;--blue:#0071e3;--g:linear-gradient(90deg,#0071e3,#5ac8fa,#34c759)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;font:17px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;color:var(--ink);background:#fff}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+nav{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.8);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid rgba(0,0,0,.06)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+nav img{height:28px}nav .links{display:flex;gap:22px;align-items:center;font-size:14px;color:#333}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:980px;background:var(--blue);color:#fff;font-weight:600;font-size:15px;border:0;cursor:pointer}
+.btn.ghost{background:rgba(0,113,227,.08);color:var(--blue)}
+.btn.sm{padding:8px 16px;font-size:14px}
+.hero{padding:90px 0 60px;text-align:center;position:relative;overflow:hidden}
+.hero:before{content:"";position:absolute;inset:-40% -10% auto;height:520px;background:radial-gradient(closest-side,rgba(90,200,250,.28),transparent),radial-gradient(closest-side at 70% 60%,rgba(52,199,89,.2),transparent);z-index:-1}
+.pill{display:inline-block;padding:6px 14px;border-radius:980px;background:#f2f7ff;color:var(--blue);font-size:13px;font-weight:600;margin-bottom:18px}
+h1{font-size:clamp(36px,6vw,64px);line-height:1.05;letter-spacing:-1.5px;margin:0 auto 18px;max-width:900px}
+h1 span{background:var(--g);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:clamp(18px,2.2vw,21px);color:var(--muted);max-width:680px;margin:0 auto 30px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.mock{margin:56px auto 0;max-width:880px;border-radius:26px;padding:18px;background:linear-gradient(135deg,#0062c4,#0071e3 40%,#3aa8f2 80%,#34c759 140%);box-shadow:0 40px 80px -40px rgba(0,60,140,.6)}
+.mock-in{background:rgba(255,255,255,.95);border-radius:18px;display:grid;grid-template-columns:240px 1fr;min-height:320px;overflow:hidden;text-align:left}
+.mock-list{border-right:1px solid #eee;padding:14px}.mock-item{display:flex;gap:10px;align-items:center;padding:9px;border-radius:12px;font-size:14px}
+.mock-item.on{background:#eef5ff}.av{width:34px;height:34px;border-radius:50%;background:#d6e6ff;display:grid;place-items:center;font-weight:700;color:var(--blue);font-size:13px;flex-shrink:0}
+.mock-item small{display:block;color:var(--muted);font-size:12px}
+.mock-chat{padding:18px;display:flex;flex-direction:column;gap:9px}
+.b{max-width:70%;padding:9px 13px;border-radius:17px;font-size:14px}.b.in{background:#e9e9eb;align-self:flex-start}.b.out{background:var(--blue);color:#fff;align-self:flex-end}
+.b.bot{background:#eafaf0;color:#1d1d1f;align-self:flex-end}
+section{padding:80px 0}h2{font-size:clamp(30px,4vw,44px);letter-spacing:-.8px;margin:0 0 12px;text-align:center}
+.sub{color:var(--muted);text-align:center;max-width:640px;margin:0 auto 44px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}
+.feat{background:#f5f5f7;border-radius:22px;padding:26px}.feat .ic{font-size:28px}.feat h3{margin:10px 0 6px;font-size:19px}.feat p{margin:0;color:var(--muted);font-size:15px}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;align-items:stretch}
+.plan{border:1px solid #e5e5ea;border-radius:24px;padding:28px;display:flex;flex-direction:column;gap:10px;position:relative;background:#fff}
+.plan.hl{border:2px solid var(--blue);box-shadow:0 30px 60px -30px rgba(0,113,227,.45)}
+.plan .tag{position:absolute;top:-12px;left:24px;background:var(--blue);color:#fff;font-size:12px;font-weight:700;padding:4px 12px;border-radius:12px}
+.plan h3{margin:0;font-size:22px}.price{font-size:40px;font-weight:700;letter-spacing:-1px}.price small{font-size:15px;color:var(--muted);font-weight:500}
+.plan ul{list-style:none;padding:0;margin:6px 0 16px;display:flex;flex-direction:column;gap:7px;font-size:15px;flex:1}
+.plan li:before{content:"✓  ";color:#34c759;font-weight:700}
+.faq{max-width:760px;margin:0 auto}.faq details{border-bottom:1px solid #e5e5ea;padding:18px 0}.faq summary{font-weight:600;cursor:pointer;font-size:17px}.faq p{color:var(--muted);margin:10px 0 0}
+.final{text-align:center;background:linear-gradient(135deg,#0062c4,#0071e3 50%,#34c759 140%);color:#fff;border-radius:32px;padding:64px 24px;margin:0 20px}
+.final h2{color:#fff}.final p{opacity:.9;margin:0 0 26px}.final .btn{background:#fff;color:var(--blue)}
+footer{padding:40px 0;color:var(--muted);font-size:13px;text-align:center}footer a{margin:0 10px}
+@media(max-width:720px){nav .links a.hide{display:none}.mock-in{grid-template-columns:1fr}.mock-list{display:none}}
+</style>
+</head>
+<body>
+<nav><div class="wrap"><a href="/site.html"><img src="/brand/helora-wordmark.png" alt="Helora"></a>
+<div class="links"><a class="hide" href="#recursos">Recursos</a><a class="hide" href="#planos">Planos</a><a class="hide" href="#duvidas">Dúvidas</a><a class="btn sm ghost" href="/">Entrar</a></div></div></nav>
+
+<header class="hero"><div class="wrap">
+<span class="pill">WhatsApp · Instagram · Facebook</span>
+<h1>Todo o atendimento da sua empresa, <span>num só lugar.</span></h1>
+<p class="lead">Bot que responde 24h, vários atendentes no mesmo número, pipeline de vendas e campanhas — sem perder nenhum cliente.</p>
+<div class="cta"><a class="btn" id="cta-top" href="#contato">Quero uma demonstração</a><a class="btn ghost" href="#planos">Ver planos</a></div>
+<div class="mock"><div class="mock-in">
+<div class="mock-list"><div class="mock-item on"><span class="av">M</span><div><strong>Maria Souza</strong><small>Quero uma cotação…</small></div></div><div class="mock-item"><span class="av">J</span><div><strong>João Pedro</strong><small>Obrigado! 🙏</small></div></div><div class="mock-item"><span class="av">A</span><div><strong>Ana Lima</strong><small>📍 Localização</small></div></div></div>
+<div class="mock-chat"><div class="b in">Oi! Queria uma cotação do seguro do meu carro 🚗</div><div class="b bot"><strong style="color:#1d7a3a;font-size:12px">Bot</strong><br>Olá, Maria! Já te passo para um especialista 😊</div><div class="b out"><strong>Ana:</strong><br>Oi Maria! Me envia a placa que eu faço agora mesmo.</div><div class="b in">ABC-1D23</div></div>
+</div></div>
+</div></header>
+
+<section id="recursos"><div class="wrap">
+<h2>Feito para vender e atender melhor</h2><p class="sub">Tudo que a sua equipe precisa para responder rápido e não deixar nenhum cliente sem resposta.</p>
+<div class="grid">
+<div class="feat"><div class="ic">🤖</div><h3>Bot sem código</h3><p>Monte fluxos com menus, perguntas e transferência para o setor certo, com horário de atendimento.</p></div>
+<div class="feat"><div class="ic">👥</div><h3>Equipe no mesmo número</h3><p>Vários atendentes, setores, fila de espera, transferência e assinatura com o nome de quem responde.</p></div>
+<div class="feat"><div class="ic">📈</div><h3>Pipeline de vendas</h3><p>Cada contato vira oportunidade. Acompanhe do primeiro contato ao fechamento.</p></div>
+<div class="feat"><div class="ic">📣</div><h3>Campanhas</h3><p>Disparo para listas e etiquetas com versões de mensagem e intervalo seguro entre envios.</p></div>
+<div class="feat"><div class="ic">📊</div><h3>Relatórios</h3><p>Tempo de resposta, atendimentos por atendente e setor, satisfação dos clientes.</p></div>
+<div class="feat"><div class="ic">📱</div><h3>App no celular</h3><p>Instale no celular e atenda de qualquer lugar, com notificações e sons.</p></div>
+<div class="feat"><div class="ic">🔌</div><h3>API e integrações</h3><p>Leads do site e da landing page caem direto no pipeline e recebem mensagem na hora.</p></div>
+<div class="feat"><div class="ic">✅</div><h3>API oficial da Meta</h3><p>Conecte pelo QR Code ou pela API oficial do WhatsApp, além de Instagram e Messenger.</p></div>
+</div></div></section>
+
+<section id="planos" style="background:#f5f5f7"><div class="wrap">
+<h2>Planos</h2><p class="sub">Sem fidelidade. Comece pequeno e cresça quando precisar.</p>
+<div class="plans" id="plans"><p class="sub">Carregando planos…</p></div>
+</div></section>
+
+<section id="duvidas"><div class="wrap"><h2>Dúvidas frequentes</h2>
+<div class="faq">
+<details><summary>Preciso trocar meu número de WhatsApp?</summary><p>Não. Você conecta o número que já usa, lendo um QR Code, ou pela API oficial da Meta.</p></details>
+<details><summary>Quantas pessoas podem atender ao mesmo tempo?</summary><p>Depende do plano. Todos atendem no mesmo número, cada um com seu login.</p></details>
+<details><summary>Funciona no celular?</summary><p>Sim. O Helora funciona no navegador do celular e pode ser instalado como app na tela inicial.</p></details>
+<details><summary>Meus dados ficam seguros?</summary><p>Cada empresa tem os dados isolados, com acesso por login e senha, seguindo a LGPD.</p></details>
+<details><summary>Posso cancelar quando quiser?</summary><p>Sim, com 30 dias de aviso, sem multa.</p></details>
+</div></div></section>
+
+<section id="contato"><div class="final">
+<h2>Pronto para atender melhor?</h2><p>Fale com a gente e veja o Helora funcionando com o seu WhatsApp.</p>
+<a class="btn" id="cta-final" href="#">Falar no WhatsApp</a>
+</div></section>
+
+<footer><div class="wrap">© <span id="y"></span> Helora · <a href="/termos.html">Termos e Privacidade</a><a href="/contrato.html">Contrato</a><a href="/">Entrar no painel</a></div></footer>
+
+<script>
+// Número de WhatsApp comercial da Helora (troque aqui)
+const WHATSAPP_VENDAS = "5584999999999";
+const API = "https://backend-production-b42a.up.railway.app";
+document.getElementById("y").textContent = new Date().getFullYear();
+const wa = (msg) => `https://wa.me/${WHATSAPP_VENDAS}?text=${encodeURIComponent(msg)}`;
+document.getElementById("cta-final").href = wa("Olá! Quero conhecer o Helora.");
+document.getElementById("cta-top").href = wa("Olá! Quero uma demonstração do Helora.");
+const brl = (v) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+fetch(API + "/public/plans").then((r) => r.json()).then((plans) => {
+  const el = document.getElementById("plans");
+  if (!plans.length) { el.innerHTML = '<p class="sub">Fale com a gente para montar o plano ideal.</p>'; return; }
+  el.innerHTML = plans.map((p) => `
+    <div class="plan ${p.highlight ? "hl" : ""}">
+      ${p.highlight ? '<span class="tag">Mais escolhido</span>' : ""}
+      <h3>${p.name}</h3>
+      <div class="price">${brl(p.price)}<small>/mês</small></div>
+      <ul>
+        <li>${p.maxWhatsapp} número${p.maxWhatsapp > 1 ? "s" : ""} de WhatsApp</li>
+        <li>${p.maxUsers} usuário${p.maxUsers > 1 ? "s" : ""}</li>
+        ${p.monthlyCredits ? `<li>${p.monthlyCredits.toLocaleString("pt-BR")} mensagens de campanha/mês</li>` : ""}
+        ${p.features.map((f) => `<li>${f}</li>`).join("")}
+      </ul>
+      <a class="btn ${p.highlight ? "" : "ghost"}" href="${wa("Olá! Tenho interesse no plano " + p.name + " do Helora.")}">Contratar ${p.name}</a>
+    </div>`).join("");
+}).catch(() => { document.getElementById("plans").innerHTML = '<p class="sub">Fale com a gente para conhecer os planos.</p>'; });
+</script>
+</body>
+</html>
