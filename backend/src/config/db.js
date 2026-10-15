@@ -733,6 +733,21 @@ export async function findOrCreateConversation({ accountId, platform, externalId
 // scope: { role, departmentIds, userId } — quando role === 'agent', só
 // retorna conversas do(s) setor(es) do atendente OU atribuídas a ele
 // ("visão de túnel"). Gestor/owner e super admin veem tudo.
+/** Nome salvo na agenda (Contatos) vence o nome de perfil do WhatsApp (ex.: "........."). */
+async function applySavedNames(accountId, list) {
+  const phones = [...new Set(list.filter((c) => !c.isGroup && c.phone).map((c) => c.phone))];
+  if (!phones.length) return list;
+  const names = new Map();
+  for (let i = 0; i < phones.length; i += 300) {
+    const { data } = await supabase
+      .from("contacts").select("phone, name").eq("account_id", accountId)
+      .in("phone", phones.slice(i, i + 300)).not("name", "is", null);
+    for (const r of data || []) if (r.name && r.name.trim()) names.set(r.phone, r.name.trim());
+  }
+  for (const c of list) if (!c.isGroup && names.has(c.phone)) c.name = names.get(c.phone);
+  return list;
+}
+
 export async function listConversations(accountId, scope) {
   const { data, error } = await supabase
     .from("conversations")
@@ -740,7 +755,7 @@ export async function listConversations(accountId, scope) {
     .eq("account_id", accountId)
     .order("last_message_at", { ascending: false });
   if (error) throw error;
-  const all = data.map(mapConversation);
+  const all = await applySavedNames(accountId, data.map(mapConversation));
   if (!scope || scope.role !== "agent") return all;
   const access = await getAgentAccess(accountId, scope.userId, scope.departmentIds);
   return all.filter((c) => canAgentSee(c, access));
@@ -2679,4 +2694,32 @@ export async function buildAttendanceReport(accountId, { from, to, departmentId,
     byChannel: rows(groups.channel),
     byDay: Object.entries(days).sort().map(([day, count]) => ({ day, count }))
   };
+}
+
+
+/** Relatório "Consultar atendimentos" (estilo ClickMassa): lista com filtros. */
+export async function listAttendances(accountId, f = {}) {
+  const dateCol = f.by === "closed" ? "resolved_at" : "created_at";
+  let q = supabase.from("conversations").select(CONVERSATION_SELECT).eq("account_id", accountId).eq("is_group", false);
+  if (f.from) q = q.gte(dateCol, `${f.from}T00:00:00-03:00`);
+  if (f.to) q = q.lte(dateCol, `${f.to}T23:59:59-03:00`);
+  if (f.status) q = q.eq("status", f.status);
+  if (f.channelId) q = q.eq("channel_id", f.channelId);
+  if (f.agentId) q = q.eq("assigned_agent_id", f.agentId);
+  if (f.departmentId) q = q.eq("department_id", f.departmentId);
+  if (f.name) q = q.ilike("name", `%${String(f.name).replace(/[%,()]/g, "")}%`);
+  if (f.contact) q = q.ilike("phone", `%${String(f.contact).replace(/\D/g, "")}%`);
+  const { data, error } = await q.order(dateCol, { ascending: false }).limit(2000);
+  if (error) throw error;
+  let list = await applySavedNames(accountId, data.map(mapConversation));
+  if (f.labelId) list = list.filter((c) => (c.labels || []).some((l) => l.id === f.labelId));
+  if (f.name) {
+    const n = String(f.name).toLowerCase();
+    list = list.filter((c) => (c.name || "").toLowerCase().includes(n));
+  }
+  return list.map((c) => ({
+    id: c.id, ticket: c.id.slice(0, 8).toUpperCase(), status: c.status, name: c.name, phone: c.phone,
+    channel: c.channelName || c.platform, agent: c.assignedAgentName || null, department: c.departmentName || null,
+    labels: (c.labels || []).map((l) => l.name), mode: c.mode, createdAt: c.createdAt, resolvedAt: c.resolvedAt
+  }));
 }
