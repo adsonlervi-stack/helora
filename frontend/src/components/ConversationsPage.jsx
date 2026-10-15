@@ -17,13 +17,15 @@ import {
   markUnreadApi,
   sendSpecialApi,
   deleteMessageApi,
-  forwardMessageApi
+  forwardMessageApi,
+  downloadMediaApi
 } from "../api.js";
 import { supabase } from "../supabaseClient.js";
 
 export default function ConversationsPage({
   conversations,
   refreshConversations,
+  patchConversation = () => {},
   whatsappStatus,
   onOpenConnect,
   openConversationId,
@@ -117,6 +119,10 @@ export default function ConversationsPage({
   const handleSend = async (text, sign = true, quoted = null) => {
     if (!selectedId) return;
     const convId = selectedId;
+    const conv = conversations.find((c) => c.id === convId);
+    // Respondeu = assumiu (o servidor também faz isso)
+    if (conv && !conv.isGroup && conv.assignedAgentId !== currentUserId)
+      patchConversation(convId, { assignedAgentId: currentUserId, assignedAgentName: currentUserName, mode: "human", status: "open" });
     const tempId = addPending({ text: sign && currentUserName ? `*${currentUserName}:*\n${text}` : text, senderName: currentUserName, quotedId: quoted?.id, quotedText: quoted?.text, quotedAuthor: quoted?.author });
     try {
       const real = await sendMessage(convId, text, sign, quoted?.id || null);
@@ -183,17 +189,23 @@ export default function ConversationsPage({
     loadMessages(selectedId);
   };
 
-  const handleSetMode = async (mode) => {
+  const optimistic = async (patch, call) => {
     if (!selectedId) return;
-    await setConversationMode(selectedId, mode);
+    const id = selectedId;
+    const before = conversations.find((c) => c.id === id);
+    patchConversation(id, patch);
+    try {
+      await call(id);
+    } catch (err) {
+      if (before) patchConversation(id, before);
+      alertMsg(err.response?.data?.error || err.message);
+    }
     refreshConversations();
   };
 
-  const handleSetStatus = async (status) => {
-    if (!selectedId) return;
-    await setConversationStatus(selectedId, status);
-    refreshConversations();
-  };
+  const handleSetMode = (mode) => optimistic({ mode }, (id) => setConversationMode(id, mode));
+
+  const handleSetStatus = (status) => optimistic({ status }, (id) => setConversationStatus(id, status));
 
   const handleSetPriority = async (priority) => {
     if (!selectedId) return;
@@ -207,18 +219,12 @@ export default function ConversationsPage({
     refreshConversations();
   };
 
-  const handleTakeOver = async () => {
-    if (!selectedId) return;
-    await assignConversation(selectedId, currentUserId);
-    await setConversationMode(selectedId, "human");
-    refreshConversations();
-  };
+  const handleTakeOver = () =>
+    optimistic({ assignedAgentId: currentUserId, assignedAgentName: currentUserName, mode: "human" }, (id) =>
+      Promise.all([assignConversation(id, currentUserId), setConversationMode(id, "human")])
+    );
 
-  const handleReturnToQueue = async () => {
-    if (!selectedId) return;
-    await assignConversation(selectedId, null);
-    refreshConversations();
-  };
+  const handleReturnToQueue = () => optimistic({ assignedAgentId: null, assignedAgentName: null }, (id) => assignConversation(id, null));
 
   const handleMarkUnread = async () => {
     if (!selectedId) return;
@@ -227,11 +233,7 @@ export default function ConversationsPage({
     refreshConversations();
   };
 
-  const handleAssign = async (agentId) => {
-    if (!selectedId) return;
-    await assignConversation(selectedId, agentId);
-    refreshConversations();
-  };
+  const handleAssign = (agentId) => optimistic({ assignedAgentId: agentId || null }, (id) => assignConversation(id, agentId));
 
   const handleToggleLabel = async (label, shouldAdd) => {
     if (!selectedId) return;
@@ -269,6 +271,10 @@ export default function ConversationsPage({
         onForwardMessage={handleForward}
         onRetry={handleRetry}
         onStickerSent={() => selectedId && loadMessages(selectedId)}
+        onDownloadMedia={async (id) => {
+          const updated = await downloadMediaApi(id);
+          setMessages((list) => list.map((m) => (m.id === id ? updated : m)));
+        }}
         onStartChat={(c) => {
           setStartContact(c);
           setShowNew(true);

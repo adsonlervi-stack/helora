@@ -14,6 +14,10 @@ import {
   replySupportAdmin,
   setSupportStatusAdmin,
   acceptSupportApi,
+  getPlansAdmin,
+  savePlanAdmin,
+  deletePlanAdmin,
+  setAccountPlanAdmin,
   getAdminCredits,
   getAdminCreditLedger,
   setAdminMonthlyCredits,
@@ -83,12 +87,23 @@ export function CommercialEditor({ account, onClose, onSaved }) {
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [planId, setPlanId] = useState(account.plan_id || "");
+  useEffect(() => {
+    getPlansAdmin().then((l) => setPlans(l.filter((p) => p.active))).catch(() => {});
+  }, []);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const pickPlan = (id) => {
+    setPlanId(id);
+    const p = plans.find((x) => x.id === id);
+    if (p) setF((cur) => ({ ...cur, planName: p.name, monthlyPrice: p.price, maxWhatsappChannels: p.maxWhatsapp }));
+  };
 
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
+      if ((account.plan_id || "") !== planId) await setAccountPlanAdmin(account.id, planId || null);
       await updateAdminAccountApi(account.id, f);
       onSaved();
       onClose();
@@ -103,7 +118,14 @@ export function CommercialEditor({ account, onClose, onSaved }) {
       <div className="modal-card deal-modal team-editor gestao-editor" onClick={(e) => e.stopPropagation()}>
         <h3>{account.name}</h3>
         <div className="gestao-form-grid">
-          <label className="login-field"><span>Plano</span><input value={f.planName} onChange={set("planName")} placeholder="Ex: Básico, Pro" /></label>
+          <label className="login-field">
+            <span>Plano</span>
+            <select className="deal-stage-select" value={planId} onChange={(e) => pickPlan(e.target.value)}>
+              <option value="">Personalizado (sem plano)</option>
+              {plans.map((p) => <option key={p.id} value={p.id}>{p.name} · {brl(p.price)}</option>)}
+            </select>
+          </label>
+          {!planId && <label className="login-field"><span>Nome do plano</span><input value={f.planName} onChange={set("planName")} placeholder="Ex: Personalizado" /></label>}
           <label className="login-field"><span>Mensalidade (R$)</span><input value={f.monthlyPrice} onChange={set("monthlyPrice")} inputMode="decimal" /></label>
           <label className="login-field"><span>Dia de vencimento</span><input type="number" min="1" max="28" value={f.dueDay} onChange={set("dueDay")} /></label>
           <label className="login-field"><span>Números de WhatsApp liberados</span><input type="number" min="0" max="50" value={f.maxWhatsappChannels} onChange={set("maxWhatsappChannels")} /><small className="cv-muted">Messenger e Instagram: 1 de cada.</small></label>
@@ -495,6 +517,81 @@ export function CreditsTab() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+
+// ------------------------------------------------- Planos da Helora
+export function PlansTab() {
+  const [plans, setPlans] = useState([]);
+  const [edit, setEdit] = useState(null);
+  const [error, setError] = useState(null);
+  const load = () => getPlansAdmin().then(setPlans).catch((e) => setError(errText(e)));
+  useEffect(() => {
+    load();
+  }, []);
+  const blank = { name: "", price: 0, maxWhatsapp: 1, maxUsers: 3, monthlyCredits: 0, features: "", highlight: false, active: true, sort: plans.length + 1 };
+  const save = async (e) => {
+    e.preventDefault();
+    try {
+      const data = { ...edit, features: String(edit.features || "").split("\n").map((x) => x.trim()).filter(Boolean) };
+      await savePlanAdmin(edit.id, data);
+      setEdit(null);
+      load();
+    } catch (err) {
+      setError(errText(err));
+    }
+  };
+  const set = (k) => (e) => setEdit((p) => ({ ...p, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+  return (
+    <div>
+      <div className="gestao-row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+        <p className="gestao-muted" style={{ margin: 0 }}>Os planos ativos aparecem no site da Helora e ficam disponíveis para vincular às empresas (aplica os limites automaticamente).</p>
+        <button className="pill-btn primary" onClick={() => setEdit(blank)}><Plus size={14} /> Novo plano</button>
+      </div>
+      {error && <div className="admin-feedback error">{error}</div>}
+      <div className="plans-grid">
+        {plans.map((p) => (
+          <div key={p.id} className={`plan-card ${p.highlight ? "hl" : ""} ${p.active ? "" : "off"}`}>
+            {p.highlight && <span className="plan-badge">Mais vendido</span>}
+            <h4>{p.name}</h4>
+            <div className="plan-price">{brl(p.price)}<small>/mês</small></div>
+            <ul>
+              <li>{p.maxWhatsapp} número(s) de WhatsApp</li>
+              <li>{p.maxUsers} usuário(s)</li>
+              <li>{p.monthlyCredits} créditos de campanha/mês</li>
+              {p.features.map((f) => <li key={f}>{f}</li>)}
+            </ul>
+            <div className="gestao-row">
+              <button className="pill-btn" onClick={() => setEdit({ ...p, features: p.features.join("\n") })}>Editar</button>
+              {p.active ? (
+                <button className="resolve-btn" onClick={async () => { await deletePlanAdmin(p.id); load(); }}>Desativar</button>
+              ) : (
+                <button className="resolve-btn" onClick={async () => { await savePlanAdmin(p.id, { active: true }); load(); }}>Reativar</button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {edit && (
+        <div className="modal-overlay" onClick={() => setEdit(null)}>
+          <form className="modal-card deal-modal gestao-editor" onClick={(e) => e.stopPropagation()} onSubmit={save}>
+            <h3>{edit.id ? "Editar plano" : "Novo plano"}</h3>
+            <div className="gestao-form-grid">
+              <label className="login-field"><span>Nome</span><input value={edit.name} onChange={set("name")} required /></label>
+              <label className="login-field"><span>Preço mensal (R$)</span><input value={edit.price} onChange={set("price")} inputMode="decimal" /></label>
+              <label className="login-field"><span>Números de WhatsApp</span><input type="number" min="1" value={edit.maxWhatsapp} onChange={set("maxWhatsapp")} /></label>
+              <label className="login-field"><span>Usuários</span><input type="number" min="1" value={edit.maxUsers} onChange={set("maxUsers")} /></label>
+              <label className="login-field"><span>Créditos por mês</span><input type="number" min="0" value={edit.monthlyCredits} onChange={set("monthlyCredits")} /></label>
+              <label className="login-field"><span>Ordem no site</span><input type="number" value={edit.sort} onChange={set("sort")} /></label>
+            </div>
+            <label className="login-field"><span>Itens do plano (um por linha)</span><textarea rows={4} value={edit.features} onChange={set("features")} /></label>
+            <label className="bh-switch"><input type="checkbox" checked={!!edit.highlight} onChange={set("highlight")} /><span>Destacar como "Mais vendido"</span></label>
+            <button className="connect-btn">Salvar plano</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

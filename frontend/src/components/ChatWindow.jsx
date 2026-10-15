@@ -57,7 +57,38 @@ function Ticks({ status }) {
   return <Check size={14} className="tick" />;
 }
 
-function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat, isGroup }) {
+function fmtSize(b) {
+  if (!b) return "";
+  return b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+}
+
+function PendingMedia({ message, onDownload }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const p = message.extra.pendingMedia;
+  const label = { image: "Foto", video: "Vídeo", document: p.fileName || "Documento" }[message.mediaType];
+  const go = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await onDownload(message.id);
+    } catch (e) {
+      setErr(e.response?.data?.error || e.message);
+    }
+    setBusy(false);
+  };
+  return (
+    <div className={`pending-media ${message.mediaType}`}>
+      {p.thumb && <img src={p.thumb} alt="" className="pending-thumb" />}
+      <button type="button" className="pending-btn" onClick={go} disabled={busy}>
+        {busy ? "Baixando…" : <>⬇ Baixar {label}{p.size ? ` · ${fmtSize(p.size)}` : ""}</>}
+      </button>
+      {err && <small className="pending-err">{err}</small>}
+    </div>
+  );
+}
+
+function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat, isGroup, onDownload }) {
   const deleted = !!message.deletedAt;
   // Grupo: quem mandou (novo formato em extra.sender; antigo vinha "*Nome:* texto")
   let groupSender = null;
@@ -118,6 +149,7 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
             {message.mediaUrl && message.mediaType === "image" && (
               <a href={message.mediaUrl} target="_blank" rel="noreferrer"><img src={message.mediaUrl} alt="Anexo" className="bubble-media-image" loading="lazy" /></a>
             )}
+            {!message.mediaUrl && message.extra?.pendingMedia && <PendingMedia message={message} onDownload={onDownload} />}
             {message.mediaUrl && isSticker && <img src={message.mediaUrl} alt="Figurinha" className="bubble-sticker" loading="lazy" />}
             {message.mediaUrl && message.mediaType === "video" && <video src={message.mediaUrl} controls className="bubble-media-video" />}
             {message.mediaUrl && message.mediaType === "audio" && <audio src={message.mediaUrl} controls className="bubble-media-audio" />}
@@ -397,6 +429,7 @@ export default function ChatWindow({
   onRetry,
   onStartChat,
   onStickerSent,
+  onDownloadMedia,
   conversations = [],
   onSetMode,
   onSetStatus,
@@ -413,9 +446,8 @@ export default function ChatWindow({
   className = ""
 }) {
   const [text, setText] = useState("");
-  const [panelOpen, setPanelOpen] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth > 860 : true
-  );
+  // Dados do cliente só abrem quando o atendente clicar
+  const [panelOpen, setPanelOpen] = useState(false);
   const [cannedResponses, setCannedResponses] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [team, setTeam] = useState([]);
@@ -635,8 +667,8 @@ export default function ChatWindow({
             <div className="chat-header-platform">
               {clientTyping && <span className="header-typing">{clientTyping === "recording" ? "gravando áudio…" : "digitando…"} · </span>}
               {conversation.isGroup && <><Users size={12} style={{ verticalAlign: -2 }} /> Grupo · </>}
-              {conversation.platform === "whatsapp" && /@s\.whatsapp\.net$/.test(conversation.externalId || "")
-                ? `+${conversation.externalId.split("@")[0]}`
+              {conversation.platform === "whatsapp" && conversation.phone
+                ? fmtPhone(conversation.phone)
                 : PLATFORM_LABELS[conversation.platform]}
               {conversation.departmentName ? ` · ${conversation.departmentName}` : ""}
               {conversation.assignedAgentName ? ` · com ${conversation.assignedAgentName}` : " · pendente"}
@@ -718,6 +750,7 @@ export default function ChatWindow({
                 message={m}
                 menuOpen={menuId === m.id}
                 isGroup={conversation.isGroup}
+                onDownload={onDownloadMedia}
                 onToggleMenu={(id) => setMenuId((cur) => (cur === id ? null : id))}
                 onAction={handleAction}
                 onRetry={onRetry}

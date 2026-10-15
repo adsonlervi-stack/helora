@@ -51,7 +51,7 @@ export default function ClientPanel({ conversation, departments = [], team = [],
     setContact({ ...contact, ...patch });
     setSaving(true);
     try {
-      setContact(await updateContactLeadApi(contact.id, patch));
+      setContact(await updateContactLeadApi(contact.id, patch.leadStatus !== undefined ? { ...patch, conversationId: conversation.id } : patch));
     } catch {}
     setSaving(false);
   };
@@ -74,13 +74,12 @@ export default function ClientPanel({ conversation, departments = [], team = [],
         <Avatar name={conversation.name} url={conversation.avatarUrl} size={56} />
         <div>
           <strong>{contact?.name || conversation.name}</strong>
-          <span>{conversation.isGroup ? "Grupo de WhatsApp" : fmtPhone(contact?.phone || String(conversation.externalId || "").split("@")[0])}</span>
+          <span>{conversation.isGroup ? "Grupo de WhatsApp" : fmtPhone(contact?.phone || conversation.phone || "") || "Número não informado"}</span>
         </div>
       </div>
 
       <div className="cv-segment client-tabs">
         <button className={tab === "perfil" ? "active" : ""} onClick={() => setTab("perfil")}><User size={13} /> Perfil</button>
-        <button className={tab === "deals" ? "active" : ""} onClick={() => setTab("deals")}><Briefcase size={13} /> Oportunidades{deals.length ? ` (${deals.length})` : ""}</button>
         <button className={tab === "notes" ? "active" : ""} onClick={() => setTab("notes")}><StickyNote size={13} /> Notas</button>
       </div>
 
@@ -92,6 +91,9 @@ export default function ClientPanel({ conversation, departments = [], team = [],
                 <label className="login-field"><span>Nome</span>
                   <input defaultValue={contact.name || contact.pushName || ""} onBlur={(e) => e.target.value !== (contact.name || "") && saveField({ name: e.target.value })} />
                 </label>
+                <label className="login-field"><span>Telefone (WhatsApp)</span>
+                  <input defaultValue={contact.phone || ""} inputMode="tel" placeholder="5584999998888" onBlur={(e) => { const v = e.target.value.replace(/\D/g, ""); if (v && v !== contact.phone) saveField({ phone: v }); }} />
+                </label>
                 <label className="login-field"><span>E-mail</span>
                   <input defaultValue={contact.email || ""} onBlur={(e) => e.target.value !== (contact.email || "") && saveField({ email: e.target.value })} />
                 </label>
@@ -102,7 +104,7 @@ export default function ClientPanel({ conversation, departments = [], team = [],
                       {ORIGINS.map((o) => <option key={o}>{o}</option>)}
                     </select>
                   </label>
-                  <label className="login-field"><span>Status do lead</span>
+                  <label className="login-field" title="Ao escolher, o contato entra/move no Pipeline"><span>Status do lead (Pipeline)</span>
                     <select className="deal-stage-select" value={contact.leadStatus || ""} onChange={(e) => saveField({ leadStatus: e.target.value })}>
                       <option value="">—</option>
                       {STATUSES.map((o) => <option key={o}>{o}</option>)}

@@ -9,7 +9,8 @@ import {
   getChannelPermissionsApi,
   setChannelPermissionsApi,
   getFlows,
-  updateChannelApi
+  updateChannelApi,
+  API_BASE
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
 
@@ -77,13 +78,31 @@ function NewChannelModal({ departments, flows, initial, onClose, onCreate }) {
   const [name, setName] = useState(initial?.name || "");
   const [departmentId, setDepartmentId] = useState(initial?.departmentId || "");
   const [flowId, setFlowId] = useState(initial?.flowId || "");
+  const [provider, setProvider] = useState(initial?.provider || "baileys");
+  const [externalPageId, setExternalPageId] = useState(initial?.externalPageId || "");
+  const [phoneNumberId, setPhoneNumberId] = useState(initial?.phoneNumberId || "");
+  const [wabaId, setWabaId] = useState(initial?.wabaId || "");
+  const [accessToken, setAccessToken] = useState("");
+  const isMeta = platform !== "whatsapp";
+  const isCloud = platform === "whatsapp" && provider === "cloud";
+  const webhookUrl = `${API_BASE.replace(/\/$/, "")}/webhook/meta`;
   const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return setError("Dê um apelido para o canal.");
     try {
-      await onCreate({ platform, name: name.trim(), departmentId: departmentId || null, flowId: flowId || null });
+      await onCreate({
+        platform,
+        name: name.trim(),
+        departmentId: departmentId || null,
+        flowId: flowId || null,
+        provider: isCloud ? "cloud" : undefined,
+        externalPageId: isMeta ? externalPageId.trim() : undefined,
+        phoneNumberId: isCloud ? phoneNumberId.trim() : undefined,
+        wabaId: isCloud ? wabaId.trim() : undefined,
+        accessToken: accessToken.trim() || undefined
+      });
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
@@ -98,10 +117,45 @@ function NewChannelModal({ departments, flows, initial, onClose, onCreate }) {
             <span>Plataforma</span>
             <select value={platform} disabled={editing} onChange={(e) => setPlatform(e.target.value)} className="deal-stage-select">
               <option value="whatsapp">WhatsApp (QR Code ou código)</option>
-              <option value="messenger">Messenger</option>
-              <option value="instagram">Instagram</option>
+              <option value="messenger">Facebook (Messenger)</option>
+              <option value="instagram">Instagram Direct</option>
             </select>
           </label>
+          {platform === "whatsapp" && (
+            <label className="login-field">
+              <span>Tipo de conexão</span>
+              <select value={provider} disabled={editing} onChange={(e) => setProvider(e.target.value)} className="deal-stage-select">
+                <option value="baileys">QR Code (WhatsApp normal ou Business no celular)</option>
+                <option value="cloud">API oficial da Meta (WhatsApp Cloud API)</option>
+              </select>
+            </label>
+          )}
+          {isCloud && (
+            <>
+              <label className="login-field"><span>Phone Number ID</span><input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="Ex: 123456789012345" /></label>
+              <label className="login-field"><span>WhatsApp Business Account ID (opcional)</span><input value={wabaId} onChange={(e) => setWabaId(e.target.value)} /></label>
+            </>
+          )}
+          {isMeta && (
+            <label className="login-field">
+              <span>{platform === "instagram" ? "ID da conta do Instagram" : "ID da Página do Facebook"}</span>
+              <input value={externalPageId} onChange={(e) => setExternalPageId(e.target.value)} placeholder="Ex: 1029384756" />
+            </label>
+          )}
+          {(isMeta || isCloud) && (
+            <>
+              <label className="login-field">
+                <span>Token de acesso {editing && initial?.hasToken ? "(deixe vazio para manter o atual)" : ""}</span>
+                <input type="password" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder="Token permanente do app na Meta" autoComplete="off" />
+              </label>
+              <div className="channel-meta-help">
+                <strong>Na Meta for Developers, configure o Webhook:</strong>
+                <span>URL: <code>{webhookUrl}</code></span>
+                <span>Token de verificação: o valor de <code>META_VERIFY_TOKEN</code> no servidor</span>
+                <span>Assinar: {isCloud ? "messages" : platform === "instagram" ? "messages (Instagram)" : "messages, messaging_postbacks"}</span>
+              </div>
+            </>
+          )}
           <label className="login-field">
             <span>Apelido do dispositivo</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Comercial 2" autoFocus />
@@ -173,15 +227,16 @@ export default function ChannelsPage() {
   }, []);
 
   const handleCreate = async (data) => {
-    const created = await createChannelApi(data.platform, data.name, data.departmentId, data.flowId);
+    const { platform, name, departmentId, flowId, ...extra } = data;
+    const created = await createChannelApi(platform, name, departmentId, flowId, extra);
     setShowNew(false);
     load();
     // WhatsApp novo: já abre o QR Code, sem precisar procurar o botão.
-    if (created?.platform === "whatsapp") setQrChannel(created);
+    if (created?.platform === "whatsapp" && created.provider !== "cloud") setQrChannel(created);
   };
 
   const handleEdit = async (data) => {
-    await updateChannelApi(editChannel.id, { name: data.name, departmentId: data.departmentId, flowId: data.flowId });
+    await updateChannelApi(editChannel.id, data);
     setEditChannel(null);
     load();
   };

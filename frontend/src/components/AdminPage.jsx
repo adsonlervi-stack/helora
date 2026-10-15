@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Building2, Megaphone, Trash2, LogIn, Briefcase } from "lucide-react";
-import { DashboardTab, InvoicesTab, CommercialEditor, SupportTab, CreditsTab, brl } from "./GestaoTabs.jsx";
+import { DashboardTab, InvoicesTab, CommercialEditor, SupportTab, CreditsTab, PlansTab, brl } from "./GestaoTabs.jsx";
 import {
   getAdminAccounts,
   createAdminAccount,
@@ -460,6 +460,7 @@ export default function AdminPage({ tab = "dashboard" }) {
       {tab === "invoices" && <InvoicesTab />}
       {tab === "support" && <SupportTab />}
       {tab === "credits" && <CreditsTab />}
+      {tab === "plans" && <PlansTab />}
       {tab === "users" && <UsersTab />}
       {tab === "announcements" && <AnnouncementsTab />}
     </div>

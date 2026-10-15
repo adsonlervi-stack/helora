@@ -12,7 +12,7 @@ import {
   Pencil,
   KeyRound,
   Copy
-} from "lucide-react";
+, Bell } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
 import {
   getAutoReplies,
@@ -44,6 +44,7 @@ import {
   updateAccountSettingsApi
 } from "../api.js";
 import BusinessHoursEditor from "./BusinessHoursEditor.jsx";
+import { SOUNDS, NOTIFY_EVENTS, getNotifyPrefs, setNotifyPrefs, playSound, enableNotify, notifyEnabled } from "../notifications.js";
 
 const CARDS = [
   {
@@ -52,6 +53,12 @@ const CARDS = [
     desc: "Horário de atendimento e pesquisa de satisfação",
     icon: Clock3,
     ownerOnly: true
+  },
+  {
+    key: "notify",
+    label: "Notificações e sons",
+    desc: "O que avisa e qual som toca para cada tipo",
+    icon: Bell
   },
   {
     key: "auto",
@@ -129,6 +136,7 @@ export default function SettingsPage({ onGoToChannels, canManage = false }) {
       {tab === "auto" && <AutoRepliesTab />}
       {tab === "canned" && <CannedResponsesTab canManage={canManage} />}
       {tab === "attendance" && canManage && <AttendanceTab />}
+      {tab === "notify" && <NotifyTab />}
       {tab === "labels" && <LabelsTab />}
       {tab === "departments" && <DepartmentsTab />}
       {tab === "team" && <TeamTab canManage={canManage} />}
@@ -201,6 +209,43 @@ function AutoRepliesTab() {
             Nenhuma resposta automática cadastrada ainda.
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function NotifyTab() {
+  const [prefs, setPrefs] = useState(getNotifyPrefs);
+  const [desk, setDesk] = useState(notifyEnabled());
+  const update = (k, patch) => {
+    const next = { ...prefs, [k]: { ...prefs[k], ...patch } };
+    setPrefs(next);
+    setNotifyPrefs(next);
+  };
+  return (
+    <div className="card">
+      <div className="card-title">Notificações e sons</div>
+      <div className="card-subtitle">Escolha o que deve te avisar e o som de cada aviso. Vale para este navegador/celular.</div>
+      {!desk && (
+        <button className="pill-btn primary" style={{ marginBottom: 12 }} onClick={async () => setDesk(await enableNotify())}>
+          <Bell size={14} /> Ativar avisos na tela (mesmo com o painel minimizado)
+        </button>
+      )}
+      <div className="notify-list">
+        {Object.entries(NOTIFY_EVENTS).map(([k, ev]) => (
+          <div key={k} className="notify-row">
+            <label className="bh-switch">
+              <input type="checkbox" checked={prefs[k].on} onChange={(e) => update(k, { on: e.target.checked })} />
+              <span>{ev.label}</span>
+            </label>
+            <div className="notify-sound">
+              <select className="deal-stage-select" value={prefs[k].sound} disabled={!prefs[k].on} onChange={(e) => { update(k, { sound: e.target.value }); playSound(e.target.value); }}>
+                {Object.entries(SOUNDS).map(([sk, sv]) => <option key={sk} value={sk}>{sv.label}</option>)}
+              </select>
+              <button className="pill-btn" disabled={!prefs[k].on} onClick={() => playSound(prefs[k].sound)} title="Ouvir">▶</button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

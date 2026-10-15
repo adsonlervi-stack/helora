@@ -207,7 +207,7 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
             >
               <div className="cv-avatar">
                 <Avatar name={c.name} url={c.avatarUrl} size={46} />
-                <span className="cv-platform" style={{ background: PLATFORM_COLORS[c.platform] }} />
+                {c.online && <span className="cv-online" title="Online agora" />}
               </div>
               <div className="cv-body">
                 <div className="cv-row">

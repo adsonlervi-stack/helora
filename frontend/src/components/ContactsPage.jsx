@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Search, Download, UserPlus, MessageCircle, Pencil, Trash2, X } from "lucide-react";
-import { getContacts, createContactApi, updateContactApi, removeContactApi, importContactsApi } from "../api.js";
+import { getContactsPage, createContactApi, updateContactApi, removeContactApi, importContactsApi } from "../api.js";
 import Avatar from "./Avatar.jsx";
 
 const fmtPhone = (d) => {
@@ -80,13 +80,27 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
   const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState(null);
 
-  const load = () => getContacts(search).then(setList).catch((e) => setMsg({ type: "error", text: e.response?.data?.error || e.message }));
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pages = Math.max(1, Math.ceil(total / 30));
+  const load = (p = page) =>
+    getContactsPage(search, p)
+      .then((r) => {
+        setList(r.items || []);
+        setTotal(r.total || 0);
+      })
+      .catch((e) => setMsg({ type: "error", text: e.response?.data?.error || e.message }));
 
   useEffect(() => {
-    const t = setTimeout(load, 250);
+    setPage(1);
+    const t = setTimeout(() => load(1), 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+  const goPage = (p) => {
+    setPage(p);
+    load(p);
+  };
 
   const runImport = async () => {
     setImporting(true);
@@ -124,7 +138,9 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
       {msg && <div className={`admin-feedback ${msg.type}`} style={{ marginBottom: 14 }}>{msg.text}</div>}
 
       <div className="lg-card contacts-list">
-        <div className="contacts-count">{list.length} contato(s)</div>
+        <div className="contacts-count">
+          {total} contato(s) · página {page} de {pages}
+        </div>
         {list.map((c) => (
           <div className="contact-row" key={c.id}>
             <Avatar name={c.name || c.pushName || c.phone} size={40} />
@@ -149,10 +165,17 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
             Nenhum contato ainda. Clique em <strong>Importar do WhatsApp</strong> ou cadastre um novo.
           </div>
         )}
+        {pages > 1 && (
+          <div className="pager">
+            <button className="pill-btn" disabled={page <= 1} onClick={() => goPage(page - 1)}>‹ Anterior</button>
+            <span>{page} / {pages}</span>
+            <button className="pill-btn" disabled={page >= pages} onClick={() => goPage(page + 1)}>Próxima ›</button>
+          </div>
+        )}
       </div>
 
       {editing && (
-        <ContactEditor contact={editing === "new" ? null : editing} canDelete={canDelete} onClose={() => setEditing(null)} onSaved={load} />
+        <ContactEditor contact={editing === "new" ? null : editing} canDelete={canDelete} onClose={() => setEditing(null)} onSaved={() => load()} />
       )}
     </div>
   );
