@@ -20,8 +20,30 @@ import {
   addReaction,
   upsertContacts,
   setConversationAvatar,
-  markConversationAsGroup
+  markConversationAsGroup,
+  updateMessageStatusByWaId,
+  markDeletedByWaId
 } from "../config/db.js";
+import { toWebp } from "../imageTools.js";
+
+// Status do WhatsApp (proto WebMessageInfo.Status) -> tiques do painel
+const WA_STATUS = { 1: "pending", 2: "sent", 3: "delivered", 4: "read", 5: "read" };
+
+/** Texto de qualquer tipo de mensagem (pra mostrar o trecho citado). */
+function textOf(m) {
+  if (!m) return "";
+  return (
+    m.conversation ||
+    m.extendedTextMessage?.text ||
+    m.imageMessage?.caption || (m.imageMessage ? "📷 Foto" : "") ||
+    m.videoMessage?.caption || (m.videoMessage ? "🎥 Vídeo" : "") ||
+    (m.audioMessage ? "🎤 Áudio" : "") ||
+    m.documentMessage?.fileName || (m.documentMessage ? "📄 Documento" : "") ||
+    (m.contactMessage ? `👤 ${m.contactMessage.displayName || "Contato"}` : "") ||
+    (m.locationMessage ? "📍 Localização" : "") ||
+    (m.stickerMessage ? "Figurinha" : "")
+  );
+}
 
 // Nome dos grupos (cache por 1h para não consultar o WhatsApp a cada mensagem)
 const groupNames = new Map();
@@ -71,16 +93,32 @@ export function getWhatsAppStatus(channelId) {
   };
 }
 
-export async function sendWhatsAppMessage(channelId, jid, text) {
+function liveSock(channelId) {
   const conn = connections.get(channelId);
-  if (!conn?.sock) throw new Error("Este dispositivo de WhatsApp não está conectado.");
-  const sent = await conn.sock.sendMessage(jid, { text });
+  if (!conn?.sock || conn.status !== "connected") throw new Error("O WhatsApp deste canal está desconectado. Reconecte em Canais.");
+  return conn.sock;
+}
+
+export async function sendWhatsAppMessage(channelId, jid, text, { quoted = null, forwarded = false } = {}) {
+  const sock = liveSock(channelId);
+  const content = forwarded ? { text, contextInfo: { isForwarded: true, forwardingScore: 1 } } : { text };
+  const sent = await sock.sendMessage(jid, content, quoted ? { quoted } : undefined);
   return sent?.key?.id || null;
 }
 
-export async function sendWhatsAppMedia(channelId, jid, { buffer, mediaType, mimetype, caption, fileName }) {
-  const conn = connections.get(channelId);
-  if (!conn?.sock) throw new Error("Este dispositivo de WhatsApp não está conectado.");
+/** Envia qualquer conteúdo já montado (contato, localização...). */
+export async function sendWhatsAppPayload(channelId, jid, payload) {
+  const sent = await liveSock(channelId).sendMessage(jid, payload);
+  return sent?.key?.id || null;
+}
+
+/** "Apagar para todos". */
+export async function deleteWhatsAppMessage(channelId, jid, { id, fromMe = true }) {
+  await liveSock(channelId).sendMessage(jid, { delete: { remoteJid: jid, id, fromMe } });
+}
+
+export async function sendWhatsAppMedia(channelId, jid, { buffer, mediaType, mimetype, caption, fileName, quoted = null }) {
+  const conn = { sock: liveSock(channelId) };
 
   const payload =
     mediaType === "image"
@@ -91,7 +129,7 @@ export async function sendWhatsAppMedia(channelId, jid, { buffer, mediaType, mim
           ? { audio: buffer, mimetype: "audio/ogg; codecs=opus", ptt: true }
           : { document: buffer, mimetype, fileName: fileName || "arquivo", caption };
 
-  const sent = await conn.sock.sendMessage(jid, payload);
+  const sent = await conn.sock.sendMessage(jid, payload, quoted ? { quoted } : undefined);
   return sent?.key?.id || null;
 }
 
@@ -315,15 +353,61 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
     }
   });
 
+  // Tiques: enviado / entregue / lido
+  sock.ev.on("messages.update", async (updates) => {
+    for (const u of updates || []) {
+      const st = WA_STATUS[u.update?.status];
+      if (st && u.key?.fromMe) updateMessageStatusByWaId(u.key.id, st).catch(() => {});
+    }
+  });
+  sock.ev.on("message-receipt.update", async (updates) => {
+    for (const u of updates || []) {
+      const r = u.receipt || {};
+      const st = r.readTimestamp || r.playedTimestamp ? "read" : r.receiptTimestamp ? "delivered" : null;
+      if (st && u.key?.fromMe) updateMessageStatusByWaId(u.key.id, st).catch(() => {});
+    }
+  });
+
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
     if (type !== "notify") return;
 
     for (const msg of messages) {
-      if (!msg.message || msg.key.fromMe) continue;
+      if (!msg.message) continue;
+
+      // Mensagem apagada ("apagar para todos") — pelo cliente ou pelo celular da empresa
+      const proto = msg.message.protocolMessage;
+      if (proto && proto.type === 0 && proto.key?.id) {
+        markDeletedByWaId(accountId, proto.key.id, msg.key.fromMe ? "celular" : "cliente").catch(() => {});
+        continue;
+      }
+      if (msg.key.fromMe) continue;
 
       const jid = msg.key.remoteJid;
       if (jid === "status@broadcast") continue;
       const isGroup = !!jid?.endsWith("@g.us");
+
+      // Resposta citada, contato e localização
+      const inner = msg.message;
+      const ctx =
+        inner.extendedTextMessage?.contextInfo || inner.imageMessage?.contextInfo || inner.videoMessage?.contextInfo ||
+        inner.documentMessage?.contextInfo || inner.audioMessage?.contextInfo || null;
+      let quoted = null;
+      if (ctx?.stanzaId) {
+        const original = await getMessageByWhatsAppId(accountId, ctx.stanzaId).catch(() => null);
+        quoted = {
+          quotedId: original?.id || null,
+          quotedText: original?.text || textOf(ctx.quotedMessage) || "Mensagem",
+          quotedAuthor: original ? (original.direction === "out" ? "Você" : null) : null
+        };
+      }
+      let extra = null;
+      const cm = inner.contactMessage || inner.contactsArrayMessage?.contacts?.[0];
+      if (cm) {
+        const tel = /waid=(\d+)/.exec(cm.vcard || "")?.[1] || /TEL[^:]*:\+?([\d ()-]+)/.exec(cm.vcard || "")?.[1]?.replace(/\D/g, "");
+        extra = { type: "contact", name: cm.displayName || "Contato", phone: tel || null };
+      }
+      const loc = inner.locationMessage || inner.liveLocationMessage;
+      if (loc) extra = { type: "location", lat: loc.degreesLatitude, lng: loc.degreesLongitude, name: loc.name || null, address: loc.address || null };
 
       const mediaKey = Object.keys(msg.message).find((k) => MEDIA_TYPE_MAP[k]);
       let text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
@@ -334,20 +418,20 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         mediaType = MEDIA_TYPE_MAP[mediaKey];
         text = msg.message[mediaKey]?.caption || "";
         try {
-          const buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }) });
-          const ext = { image: "jpg", video: "mp4", document: "pdf", audio: "ogg" }[mediaType];
-          mediaUrl = await uploadMedia({
-            accountId,
-            buffer,
-            extension: ext,
-            contentType: msg.message[mediaKey]?.mimetype || "application/octet-stream"
-          });
+          let buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }) });
+          let ext = { image: "jpg", video: "mp4", document: "pdf", audio: "ogg" }[mediaType];
+          let contentType = msg.message[mediaKey]?.mimetype || "application/octet-stream";
+          if (mediaType === "image") {
+            const webp = await toWebp(buffer);
+            if (webp) { buffer = webp; ext = "webp"; contentType = "image/webp"; }
+          }
+          mediaUrl = await uploadMedia({ accountId, buffer, extension: ext, contentType });
         } catch (err) {
           console.error("[WhatsApp] Falha ao baixar mídia recebida:", err.message);
         }
       }
 
-      if (!text && !mediaUrl) continue; // ignora tipos não suportados sem conteúdo
+      if (!text && !mediaUrl && !extra) continue; // ignora tipos não suportados sem conteúdo
 
       const name = isGroup ? await groupSubject(sock, jid) : msg.pushName || jid;
       // Em grupo, o texto vai com o nome de quem mandou ("Maria: oi")
@@ -372,7 +456,10 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         text,
         mediaUrl,
         mediaType,
-        whatsappMessageId: msg.key.id
+        whatsappMessageId: msg.key.id,
+        extra,
+        ...(quoted || {}),
+        ...(quoted && !quoted.quotedAuthor ? { quotedAuthor: name } : {})
       });
 
       // Grupo: marca a conversa como grupo e nunca aciona o bot.
@@ -390,7 +477,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         // O fluxo novo manda as mensagens uma a uma (com esperas) por aqui.
         const sendBot = async (t) => {
           const id = await sendWhatsAppMessage(channelId, jid, t);
-          await addMessage({ accountId, conversationId: conversation.id, direction: "out", author: "bot", text: t, whatsappMessageId: id });
+          await addMessage({ accountId, conversationId: conversation.id, direction: "out", author: "bot", text: t, whatsappMessageId: id, status: "sent" });
         };
         let reply = null;
         try {
