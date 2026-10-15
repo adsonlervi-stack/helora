@@ -7,6 +7,10 @@ import adminRoutes from "./routes/admin.js";
 import metaWebhookRoutes from "./meta/webhookRoutes.js";
 import { startAllChannels } from "./whatsapp/baileysClient.js";
 import { startScheduledMessagesDispatcher } from "./scheduler.js";
+import { startCampaignDispatcher } from "./campaignRunner.js";
+import publicRoutes from "./routes/public.js";
+import { supabase } from "./config/db.js";
+import { sendEmail, emailConfigured } from "./email.js";
 
 const PORT = process.env.PORT || 4000;
 // Aceita uma ou várias URLs separadas por vírgula (ex: domínio do Railway + domínio próprio).
@@ -17,6 +21,9 @@ const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGIN || "http://localhost:5173"
 
 const app = express();
 app.set("trust proxy", 1);
+
+// API aberta: aceita chamadas de qualquer site (protegida pela chave X-API-Key)
+app.use("/public/v1", cors(), express.json({ limit: "2mb" }), publicRoutes);
 app.use(
   cors({
     origin: (origin, cb) => cb(null, !origin || FRONTEND_ORIGINS.includes(origin))
@@ -31,6 +38,33 @@ app.use("/", metaWebhookRoutes); // expõe GET/POST /webhook/meta
 
 app.get("/", (req, res) => {
   res.json({ ok: true, service: "helora-backend" });
+});
+
+// Esqueci minha senha (público). Usa EmailJS se configurado; senão, o e-mail padrão do Supabase.
+const forgotHits = new Map();
+app.post("/auth/forgot", async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const ip = req.ip;
+  const now = Date.now();
+  const recent = (forgotHits.get(ip) || []).filter((t) => now - t < 10 * 60000);
+  if (recent.length >= 5) return res.status(429).json({ error: "Muitas tentativas. Tente de novo em alguns minutos." });
+  forgotHits.set(ip, [...recent, now]);
+  const ok = { ok: true, message: "Se esse e-mail estiver cadastrado, enviamos um link para criar uma nova senha." };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.json(ok);
+  const redirectTo = `${FRONTEND_ORIGINS[0]}/?reset=1`;
+  try {
+    if (emailConfigured() && process.env.EMAILJS_TEMPLATE_RESET) {
+      const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo } });
+      if (!error && data?.properties?.action_link) {
+        await sendEmail("EMAILJS_TEMPLATE_RESET", { to_email: email, to_name: "", reset_link: data.properties.action_link });
+      }
+    } else {
+      await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    }
+  } catch (err) {
+    console.error("[Senha] Falha ao enviar recuperação:", err.response?.data || err.message);
+  }
+  res.json(ok);
 });
 
 // Usado pelo healthcheck do Railway.
@@ -53,3 +87,6 @@ startAllChannels().catch((err) => {
 
 // Fica de olho nas mensagens agendadas (Etapa 8) e dispara quando vencem.
 startScheduledMessagesDispatcher();
+
+// Campanhas (disparo em massa): verifica a cada 30s o que precisa rodar.
+startCampaignDispatcher();
