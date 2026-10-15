@@ -72,8 +72,16 @@ import {
   getOpenSupportThread,
   listSupportMessages,
   addSupportMessage,
-  markSupportRead
+  markSupportRead,
+  listFlows,
+  getFlow,
+  createFlow,
+  updateFlow,
+  setFlowActive,
+  deleteFlow,
+  getFlowStats
 } from "../config/db.js";
+import { runGraph } from "../bot/flowRunner.js";
 import {
   getWhatsAppStatus,
   sendWhatsAppMessage,
@@ -497,9 +505,10 @@ router.post("/conversations/start", async (req, res) => {
       assignedAgentId: req.userId,
       isNew: false
     });
-    await upsertContacts(req.accountId, channelId, [{ phone, name: req.body?.name?.trim() || null }], "manual");
+    // Grava com o número oficial do WhatsApp (no Brasil às vezes sem o 9 extra).
+    await upsertContacts(req.accountId, channelId, [{ phone: jid.split("@")[0], name: req.body?.name?.trim() || null }], "manual");
     fetchWhatsAppAvatar(channelId, jid).then((url) => url && setConversationAvatar(conversation.id, url));
-    await sendTextToConversation(req.accountId, conversation, text, { senderName: req.userName });
+    await sendTextToConversation(req.accountId, conversation, text, { senderName: req.userName, sign: req.body?.sign !== false });
     res.status(201).json(conversation);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -660,7 +669,8 @@ router.post("/conversations/:id/send", async (req, res) => {
   let message;
   try {
     message = await sendTextToConversation(req.accountId, conversation, text, {
-      senderName: req.userName
+      senderName: req.userName,
+      sign: req.body?.sign !== false
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -857,6 +867,119 @@ router.delete("/scheduled-messages/:id", async (req, res) => {
 });
 
 // ---------- Fluxo do bot (construtor de árvore de decisão, em JSON) ----------
+
+// ---------- Fluxos (construtor em canvas) ----------
+
+const STARTER_GRAPH = () => ({
+  nodes: [
+    { id: "start", type: "trigger", x: 80, y: 220, data: {} },
+    {
+      id: "boas-vindas",
+      type: "options",
+      x: 380,
+      y: 160,
+      data: {
+        text: "Olá! 👋 Seja bem-vindo(a). Como podemos ajudar?",
+        options: [
+          { id: "op1", label: "Comercial" },
+          { id: "op2", label: "Financeiro" },
+          { id: "op3", label: "Falar com atendente" }
+        ],
+        invalidText: "Não entendi. Responda com o número da opção:",
+        maxRetries: 2
+      }
+    },
+    { id: "transferir", type: "action", x: 760, y: 220, data: { action: "transfer", text: "Só um momento, já vou te passar para nossa equipe! 😊" } }
+  ],
+  edges: [
+    { id: "e1", from: "start", port: "out", to: "boas-vindas" },
+    { id: "e2", from: "boas-vindas", port: "op1", to: "transferir" },
+    { id: "e3", from: "boas-vindas", port: "op2", to: "transferir" },
+    { id: "e4", from: "boas-vindas", port: "op3", to: "transferir" }
+  ]
+});
+
+function validateGraph(graph) {
+  if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return "Fluxo inválido.";
+  if (graph.nodes.filter((n) => n.type === "trigger").length !== 1) return "O fluxo precisa ter exatamente 1 bloco de início.";
+  if (graph.nodes.length > 300) return "Fluxo grande demais (máx. 300 blocos).";
+  return null;
+}
+
+router.get("/flows", async (req, res) => {
+  try {
+    res.json(await listFlows(req.accountId));
+  } catch (err) {
+    res.status(500).json({ error: /flows/.test(err.message) ? "Rode o arquivo migration_014_fluxos.sql no Supabase." : err.message });
+  }
+});
+
+router.post("/flows", requireOwner, async (req, res) => {
+  const name = String(req.body?.name || "").trim() || "Novo fluxo";
+  try {
+    const source = req.body?.duplicateFrom ? await getFlow(req.accountId, req.body.duplicateFrom) : null;
+    res.status(201).json(
+      await createFlow(req.accountId, { name, description: req.body?.description, graph: source ? source.graph : STARTER_GRAPH() })
+    );
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get("/flows/:id", async (req, res) => {
+  const flow = await getFlow(req.accountId, req.params.id);
+  if (!flow) return res.status(404).json({ error: "Fluxo não encontrado." });
+  const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 7));
+  const stats = await getFlowStats(req.accountId, flow.id, days).catch(() => ({}));
+  res.json({ ...flow, stats });
+});
+
+router.put("/flows/:id", requireOwner, async (req, res) => {
+  const { name, description, graph } = req.body || {};
+  if (graph) {
+    const problem = validateGraph(graph);
+    if (problem) return res.status(400).json({ error: problem });
+  }
+  const flow = await updateFlow(req.accountId, req.params.id, { name, description, graph });
+  if (!flow) return res.status(404).json({ error: "Fluxo não encontrado." });
+  res.json(flow);
+});
+
+router.post("/flows/:id/active", requireOwner, async (req, res) => {
+  try {
+    res.json(await setFlowActive(req.accountId, req.params.id, !!req.body?.active));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/flows/:id", requireOwner, async (req, res) => {
+  await deleteFlow(req.accountId, req.params.id);
+  res.sendStatus(204);
+});
+
+// Testar o fluxo: simula uma conversa sem enviar nada para ninguém.
+router.post("/flows/:id/simulate", async (req, res) => {
+  const saved = await getFlow(req.accountId, req.params.id);
+  if (!saved) return res.status(404).json({ error: "Fluxo não encontrado." });
+  const graph = req.body?.graph || saved.graph;
+  const problem = validateGraph(graph);
+  if (problem) return res.status(400).json({ error: problem });
+  const state = req.body?.state || {};
+  const fake = {
+    id: "simulacao",
+    name: "Cliente teste",
+    externalId: "5584999990000@s.whatsapp.net",
+    botNodeId: state.botNodeId || null,
+    flowVars: state.flowVars || {}
+  };
+  try {
+    const r = await runGraph({ accountId: req.accountId, conversation: fake, flow: { ...saved, graph }, text: req.body?.text || "", dryRun: true });
+    res.json({ messages: r.log, state: { botNodeId: r.state.botNodeId || null, flowVars: r.state.flowVars || {} }, ended: !r.state.botNodeId });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 
 router.get("/bot-flow", async (req, res) => {
   const flow = await getBotFlow(req.accountId);
