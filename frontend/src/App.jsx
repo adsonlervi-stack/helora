@@ -92,7 +92,7 @@ export default function App() {
 
     supabase
       .from("profiles")
-      .select("account_id, role, is_super_admin, name, avatar_url, accounts(name)")
+      .select("account_id, role, is_super_admin, name, avatar_url, accounts!profiles_account_id_fkey(name)")
       .eq("id", session.user.id)
       .maybeSingle()
       .then(({ data, error }) => {
