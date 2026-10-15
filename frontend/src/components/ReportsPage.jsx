@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Download, MessageCircle, CheckCircle2, Timer, Star } from "lucide-react";
-import { getReportsApi, getDepartments, getTeam, getChannels } from "../api.js";
+import { Download, MessageCircle, CheckCircle2, Timer, Star, Search, Printer } from "lucide-react";
+import { getReportsApi, getAttendancesApi, getDepartments, getTeam, getChannels, getLabels } from "../api.js";
 
 const iso = (d) => d.toISOString().slice(0, 10);
 const daysAgo = (n) => iso(new Date(Date.now() - n * 86400000));
@@ -25,6 +25,110 @@ function toCsv(rows, label) {
 
 /** Relatórios de atendimento (estilo ClickMassa): por atendente, setor, canal e dia. */
 export default function ReportsPage() {
+  const [view, setView] = useState("query");
+  return (
+    <div className="page reports-page">
+      <div className="dash-presets" style={{ marginBottom: 14 }}>
+        <button className={view === "query" ? "active" : ""} onClick={() => setView("query")}>Consultar atendimentos</button>
+        <button className={view === "summary" ? "active" : ""} onClick={() => setView("summary")}>Resumo e indicadores</button>
+      </div>
+      {view === "query" ? <AttendanceQuery /> : <ReportsSummary />}
+    </div>
+  );
+}
+
+const STATUS_LABEL = { open: "Aberto", pending: "Pendente", resolved: "Fechado", closed: "Fechado" };
+const dt = (v) => (v ? new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—");
+
+function AttendanceQuery() {
+  const [f, setF] = useState({ from: daysAgo(1), to: iso(new Date()), name: "", contact: "", status: "", channelId: "", agentId: "", departmentId: "", labelId: "", by: "created" });
+  const [opts, setOpts] = useState({ departments: [], team: [], channels: [], labels: [] });
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    Promise.all([getDepartments().catch(() => []), getTeam().catch(() => []), getChannels().catch(() => []), getLabels().catch(() => [])]).then(
+      ([departments, team, channels, labels]) => setOpts({ departments, team, channels, labels })
+    );
+  }, []);
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const gerar = () => {
+    setLoading(true);
+    setError(null);
+    getAttendancesApi(Object.fromEntries(Object.entries(f).filter(([, v]) => v)))
+      .then(setRows)
+      .catch((e) => setError(e.response?.data?.error || e.message))
+      .finally(() => setLoading(false));
+  };
+  useEffect(gerar, []);
+  const head = ["Bilhete", "Status", "Nome", "Contato", "Canal", "Agente", "Setor", "Etiquetas", "Aberto em", "Fechado em"];
+  const line = (r) => [r.ticket, STATUS_LABEL[r.status] || r.status, r.name, r.phone ? "+" + r.phone : "", r.channel, r.agent || "", r.department || "", r.labels.join(", "), dt(r.createdAt), r.resolvedAt ? dt(r.resolvedAt) : ""];
+  const excel = () => {
+    const csv = [head, ...(rows || []).map(line)].map((l) => l.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `atendimentos-${f.from}-a-${f.to}.csv`;
+    a.click();
+  };
+  const imprimir = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const esc = (v) => String(v ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    w.document.write(`<html><head><title>Atendimentos</title><style>body{font-family:-apple-system,Arial;font-size:11px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:4px 6px;text-align:left}th{background:#f2f6fb}</style></head><body><h2>Atendimentos · ${f.from.split("-").reverse().join("/")} a ${f.to.split("-").reverse().join("/")}</h2><table><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr>${(rows || []).map((r) => `<tr>${line(r).map((v) => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</table></body></html>`);
+    w.document.close();
+    w.print();
+  };
+  const sel = (k, label, list, fmt = (x) => x.name) => (
+    <label className="rq-field"><span>{label}</span>
+      <select value={f[k]} onChange={set(k)}><option value="">Todos</option>{list.map((x) => <option key={x.id} value={x.id}>{fmt(x)}</option>)}</select>
+    </label>
+  );
+  return (
+    <div className="card">
+      <div className="card-title">Consultar atendimentos</div>
+      <div className="rq-grid">
+        <label className="rq-field"><span>De</span><input type="date" value={f.from} max={f.to} onChange={set("from")} /></label>
+        <label className="rq-field"><span>Até</span><input type="date" value={f.to} min={f.from} onChange={set("to")} /></label>
+        <label className="rq-field"><span>Nome</span><input value={f.name} onChange={set("name")} placeholder="Nome do cliente" /></label>
+        <label className="rq-field"><span>Contato</span><input value={f.contact} onChange={set("contact")} placeholder="Número" /></label>
+        <label className="rq-field"><span>Status</span>
+          <select value={f.status} onChange={set("status")}><option value="">Todos</option><option value="open">Aberto</option><option value="pending">Pendente</option><option value="resolved">Fechado</option></select>
+        </label>
+        {sel("channelId", "Canal", opts.channels, (c) => c.name || c.platform)}
+        {sel("agentId", "Agente", opts.team)}
+        {sel("departmentId", "Setor", opts.departments)}
+        {sel("labelId", "Etiqueta", opts.labels)}
+      </div>
+      <div className="gestao-row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+        <div className="rq-radio">
+          Filtrar por:
+          <label><input type="radio" checked={f.by === "created"} onChange={() => setF((p) => ({ ...p, by: "created" }))} /> Data de abertura</label>
+          <label><input type="radio" checked={f.by === "closed"} onChange={() => setF((p) => ({ ...p, by: "closed" }))} /> Data de fechamento</label>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="pill-btn primary" onClick={gerar} disabled={loading}><Search size={14} /> {loading ? "Gerando…" : "Gerar"}</button>
+          <button className="pill-btn" onClick={imprimir} disabled={!rows?.length}><Printer size={14} /> Imprimir</button>
+          <button className="pill-btn" onClick={excel} disabled={!rows?.length}><Download size={14} /> Excel</button>
+        </div>
+      </div>
+      {error && <div className="admin-feedback error">{error}</div>}
+      <div className="cv-muted" style={{ margin: "10px 0 6px" }}>{rows ? `${rows.length} atendimento(s)` : ""}</div>
+      <div className="rep-table-wrap">
+        <table className="rep-table">
+          <thead><tr>{head.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+          <tbody>
+            {(rows || []).map((r) => (
+              <tr key={r.id}>{line(r).map((v, i) => <td key={i}>{i === 2 ? <strong>{v}</strong> : v}</td>)}</tr>
+            ))}
+            {rows && !rows.length && <tr><td colSpan={head.length} className="cv-muted">Nenhum atendimento com esses filtros.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ReportsSummary() {
   const [f, setF] = useState({ from: daysAgo(30), to: iso(new Date()), departmentId: "", agentId: "", channelId: "" });
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("byAgent");
@@ -62,7 +166,7 @@ export default function ReportsPage() {
 
   const t = data?.total;
   return (
-    <div className="page reports-page">
+    <div>
       <div className="dash-filters">
         <div className="dash-presets">
           {[["7", 7], ["30", 30], ["90", 90]].map(([k, n]) => (

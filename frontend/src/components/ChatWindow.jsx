@@ -9,7 +9,7 @@ import ClientPanel from "./ClientPanel.jsx";
 import TransferModal from "./TransferModal.jsx";
 import {
   getCannedResponses, getDepartments, getTeam, getConversationChannelStatus, sendTypingApi, getPresenceApi,
-  getStickersApi, sendStickerApi, createScheduledMessageApi, getScheduledMessages, cancelScheduledMessageApi
+  getStickersApi, sendStickerApi, createScheduledMessageApi, getScheduledMessages, cancelScheduledMessageApi, getContactsPage
 } from "../api.js";
 
 // Cor fixa por pessoa no grupo (igual WhatsApp)
@@ -379,12 +379,21 @@ function SpecialModal({ kind, onClose, onSend }) {
     const m = /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(link) || /[?&]q=(-?\d+\.\d+),\s*(-?\d+\.\d+)/.exec(link) || /^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/.exec(link);
     setF((v) => ({ ...v, link, ...(m ? { lat: m[1], lng: m[2] } : {}) }));
   };
+  // Enviar contato: só da agenda (Contatos)
+  const [q, setQ] = useState("");
+  const [found, setFound] = useState([]);
+  const [picked, setPicked] = useState(null);
+  useEffect(() => {
+    if (kind !== "contact") return;
+    const t = setTimeout(() => getContactsPage(q, 1).then((r) => setFound((r.items || []).slice(0, 30))).catch(() => setFound([])), 250);
+    return () => clearTimeout(t);
+  }, [q, kind]);
   const submit = (e) => {
     e.preventDefault();
     if (kind === "contact") {
-      const phone = f.phone.replace(/\D/g, "");
-      if (!f.name.trim() || phone.length < 10) return setErr("Preencha o nome e o telefone com DDD (ex: 5584999998888).");
-      onSend({ type: "contact", name: f.name.trim(), phone: phone.length <= 11 ? "55" + phone : phone });
+      if (!picked) return setErr("Escolha um contato da sua agenda.");
+      const phone = String(picked.phone || "").replace(/\D/g, "");
+      onSend({ type: "contact", name: picked.name || picked.pushName || phone, phone: phone.length <= 11 ? "55" + phone : phone });
     } else {
       if (!f.lat || !f.lng) return setErr("Use sua localização ou cole um link do Google Maps.");
       onSend({ type: "location", lat: Number(f.lat), lng: Number(f.lng), name: f.name || undefined, address: f.address || undefined });
@@ -397,8 +406,17 @@ function SpecialModal({ kind, onClose, onSend }) {
         <div className="modal-header"><h3>{kind === "contact" ? "Enviar contato" : "Enviar localização"}</h3><button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button></div>
         {kind === "contact" ? (
           <>
-            <label className="login-field"><span>Nome</span><input value={f.name} onChange={set("name")} autoFocus /></label>
-            <label className="login-field"><span>WhatsApp com DDD</span><input value={f.phone} onChange={set("phone")} placeholder="84 99999-8888" /></label>
+            <label className="login-field"><span>Buscar na agenda</span><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome ou número" autoFocus /></label>
+            <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+              {found.map((c) => (
+                <button type="button" key={c.id} className={`sched-item${picked?.id === c.id ? " active" : ""}`}
+                  style={{ border: picked?.id === c.id ? "2px solid #0071e3" : "2px solid transparent", cursor: "pointer", textAlign: "left" }}
+                  onClick={() => setPicked(c)}>
+                  <strong>{c.name || c.pushName || "Sem nome"}</strong><span className="cv-muted">+{c.phone}</span>
+                </button>
+              ))}
+              {!found.length && <span className="cv-muted">Nenhum contato encontrado. Cadastre em Contatos primeiro.</span>}
+            </div>
           </>
         ) : (
           <>
