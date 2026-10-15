@@ -106,14 +106,6 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
 
         <div className="avatar-upload-wrap">
           <Avatar name={profile?.name} url={profile?.avatarUrl} size={32} className="nav-sidebar-avatar" />
-          <button
-            className="avatar-upload-badge"
-            title="Trocar foto de perfil"
-            onClick={handlePickPhoto}
-            disabled={uploading}
-          >
-            <Camera />
-          </button>
         </div>
 
         <div className="nav-sidebar-who">
@@ -125,6 +117,10 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
           <div className="nav-sidebar-footer-menu" onClick={(e) => e.stopPropagation()}>
             <div className="nav-sidebar-footer-menu-name">{profile?.name || "Usuário"}</div>
             <div className="nav-sidebar-footer-menu-account">{profile?.accountName}</div>
+            <button className="nav-sidebar-footer-menu-photo" onClick={handlePickPhoto} disabled={uploading}>
+              <Camera size={14} />
+              {uploading ? "Enviando foto…" : "Trocar foto de perfil"}
+            </button>
             <button className="nav-sidebar-footer-menu-logout" onClick={() => supabase.auth.signOut()}>
               <LogOut size={14} style={{ marginRight: 6 }} />
               Sair
