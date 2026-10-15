@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Smartphone, QrCode } from "lucide-react";
+import { Plus, Trash2, Smartphone, QrCode, Pencil, Workflow } from "lucide-react";
 import {
   getChannels,
   createChannelApi,
@@ -7,7 +7,9 @@ import {
   getDepartments,
   getTeam,
   getChannelPermissionsApi,
-  setChannelPermissionsApi
+  setChannelPermissionsApi,
+  getFlows,
+  updateChannelApi
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
 
@@ -69,25 +71,32 @@ function PermissionsPanel({ channel, team, onClose }) {
   );
 }
 
-function NewChannelModal({ departments, onClose, onCreate }) {
-  const [platform, setPlatform] = useState("whatsapp");
-  const [name, setName] = useState("");
-  const [departmentId, setDepartmentId] = useState("");
+function NewChannelModal({ departments, flows, initial, onClose, onCreate }) {
+  const editing = !!initial;
+  const [platform, setPlatform] = useState(initial?.platform || "whatsapp");
+  const [name, setName] = useState(initial?.name || "");
+  const [departmentId, setDepartmentId] = useState(initial?.departmentId || "");
+  const [flowId, setFlowId] = useState(initial?.flowId || "");
+  const [error, setError] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    onCreate({ platform, name: name.trim(), departmentId: departmentId || null });
+    if (!name.trim()) return setError("Dê um apelido para o canal.");
+    try {
+      await onCreate({ platform, name: name.trim(), departmentId: departmentId || null, flowId: flowId || null });
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card deal-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Novo canal</h3>
+        <h3>{editing ? "Editar canal" : "Novo canal"}</h3>
         <form onSubmit={handleSubmit}>
           <label className="login-field">
             <span>Plataforma</span>
-            <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="deal-stage-select">
+            <select value={platform} disabled={editing} onChange={(e) => setPlatform(e.target.value)} className="deal-stage-select">
               <option value="whatsapp">WhatsApp (QR Code ou código)</option>
               <option value="messenger">Messenger</option>
               <option value="instagram">Instagram</option>
@@ -98,22 +107,36 @@ function NewChannelModal({ departments, onClose, onCreate }) {
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Comercial 2" autoFocus />
           </label>
           <label className="login-field">
-            <span>Setor (opcional)</span>
+            <span>Setor de atendimento</span>
             <select
               value={departmentId}
               onChange={(e) => setDepartmentId(e.target.value)}
               className="deal-stage-select"
             >
-              <option value="">Sem setor</option>
+              <option value="">Sem setor (fica em Pendentes para todos)</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
                 </option>
               ))}
             </select>
+            <small className="cv-muted">Toda conversa nova deste número entra neste setor.</small>
           </label>
+          <label className="login-field">
+            <span>Fluxo de atendimento (bot)</span>
+            <select value={flowId} onChange={(e) => setFlowId(e.target.value)} className="deal-stage-select">
+              <option value="">Usar o fluxo ativo da empresa</option>
+              {flows.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}{f.active ? " (ativo)" : ""}
+                </option>
+              ))}
+            </select>
+            <small className="cv-muted">O bot deste número segue este fluxo. Crie fluxos na aba Fluxos.</small>
+          </label>
+          {error && <div className="admin-feedback error">{error}</div>}
           <button type="submit" className="connect-btn" style={{ marginTop: 6 }}>
-            Criar canal
+            {editing ? "Salvar" : "Criar canal"}
           </button>
         </form>
         <button className="modal-close" onClick={onClose}>
@@ -131,8 +154,11 @@ export default function ChannelsPage() {
   const [showNew, setShowNew] = useState(false);
   const [qrChannel, setQrChannel] = useState(null);
   const [permChannel, setPermChannel] = useState(null);
+  const [editChannel, setEditChannel] = useState(null);
+  const [flows, setFlows] = useState([]);
 
   const load = () => {
+    getFlows().then((f) => setFlows(Array.isArray(f) ? f : f?.flows || [])).catch(() => {});
     getChannels().then(setChannels).catch(console.error);
     getDepartments().then(setDepartments).catch(console.error);
     getTeam().then(setTeam).catch(console.error);
@@ -147,11 +173,17 @@ export default function ChannelsPage() {
   }, []);
 
   const handleCreate = async (data) => {
-    const created = await createChannelApi(data.platform, data.name, data.departmentId);
+    const created = await createChannelApi(data.platform, data.name, data.departmentId, data.flowId);
     setShowNew(false);
     load();
     // WhatsApp novo: já abre o QR Code, sem precisar procurar o botão.
     if (created?.platform === "whatsapp") setQrChannel(created);
+  };
+
+  const handleEdit = async (data) => {
+    await updateChannelApi(editChannel.id, { name: data.name, departmentId: data.departmentId, flowId: data.flowId });
+    setEditChannel(null);
+    load();
   };
 
   const handleDelete = async (id) => {
@@ -180,7 +212,10 @@ export default function ChannelsPage() {
             <div className="agent-name">{c.name || PLATFORM_LABELS[c.platform]}</div>
             <div className="agent-meta">
               {PLATFORM_LABELS[c.platform]}
-              {c.departmentName ? ` · ${c.departmentName}` : ""}
+              {c.departmentName ? ` · ${c.departmentName}` : " · sem setor"}
+            </div>
+            <div className="agent-meta channel-flow">
+              <Workflow size={12} /> {flows.find((f) => f.id === c.flowId)?.name || "Fluxo ativo da empresa"}
             </div>
 
             {c.platform === "whatsapp" && (
@@ -214,6 +249,10 @@ export default function ChannelsPage() {
                   {c.status === "connected" ? "Ver status" : "Conectar"}
                 </button>
               )}
+              <button className="resolve-btn" onClick={() => setEditChannel(c)} title="Setor e fluxo">
+                <Pencil size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
+                Editar
+              </button>
               <button
                 className="resolve-btn"
                 onClick={() => setPermChannel(c)}
@@ -235,7 +274,10 @@ export default function ChannelsPage() {
       </div>
 
       {showNew && (
-        <NewChannelModal departments={departments} onClose={() => setShowNew(false)} onCreate={handleCreate} />
+        <NewChannelModal departments={departments} flows={flows} onClose={() => setShowNew(false)} onCreate={handleCreate} />
+      )}
+      {editChannel && (
+        <NewChannelModal departments={departments} flows={flows} initial={editChannel} onClose={() => setEditChannel(null)} onCreate={handleEdit} />
       )}
 
       {qrChannel && (

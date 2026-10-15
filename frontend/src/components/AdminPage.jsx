@@ -233,7 +233,7 @@ function AnnouncementsTab() {
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
   const [sent, setSent] = useState([]);
-  const [form, setForm] = useState({ scope: "all", accountId: "", userId: "", title: "", message: "", link: "" });
+  const [form, setForm] = useState({ scope: "all", accountId: "", userId: "", title: "", message: "", link: "", buttonText: "" });
   const [feedback, setFeedback] = useState(null);
   const [sending, setSending] = useState(false);
 
@@ -258,10 +258,11 @@ function AnnouncementsTab() {
         title: form.title.trim(),
         message: form.message.trim(),
         link: form.link.trim() || undefined,
+        buttonText: form.buttonText.trim() || undefined,
         sendEmail: !!form.sendEmail
       });
       setFeedback({ type: "success", text: "Comunicado enviado com sucesso." });
-      setForm({ scope: "all", accountId: "", userId: "", title: "", message: "", link: "" });
+      setForm({ scope: "all", accountId: "", userId: "", title: "", message: "", link: "", buttonText: "" });
       loadSent();
     } catch (err) {
       setFeedback({ type: "error", text: err.response?.data?.error || err.message });
@@ -366,15 +367,26 @@ function AnnouncementsTab() {
               />
             </label>
 
-            <label className="login-field">
-              <span>Link (opcional)</span>
-              <input
-                type="url"
-                value={form.link}
-                onChange={(e) => setForm((f) => ({ ...f, link: e.target.value }))}
-                placeholder="https://..."
-              />
-            </label>
+            <div className="client-two">
+              <label className="login-field">
+                <span>Link do botão (opcional)</span>
+                <input
+                  type="url"
+                  value={form.link}
+                  onChange={(e) => setForm((f) => ({ ...f, link: e.target.value }))}
+                  placeholder="https://... (vazio = abre o painel)"
+                />
+              </label>
+              <label className="login-field">
+                <span>Texto do botão</span>
+                <input
+                  value={form.buttonText}
+                  maxLength={40}
+                  onChange={(e) => setForm((f) => ({ ...f, buttonText: e.target.value }))}
+                  placeholder="Abrir o Helora"
+                />
+              </label>
+            </div>
 
             <label className="col-toggle-row" style={{ gap: 8 }}>
               <input type="checkbox" checked={!!form.sendEmail} onChange={(e) => setForm((f) => ({ ...f, sendEmail: e.target.checked }))} />
@@ -408,7 +420,7 @@ function AnnouncementsTab() {
                   <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginTop: 3 }}>{a.message}</div>
                   {a.link && (
                     <a href={a.link} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 700 }}>
-                      🔗 Abrir link
+                      🔗 {a.buttonText || "Abrir link"}
                     </a>
                   )}
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>

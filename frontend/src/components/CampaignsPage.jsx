@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Megaphone, Plus, Play, Pause, XCircle, Trash2, Coins, X, Search, ArrowLeft, AlertTriangle } from "lucide-react";
-import { getCampaigns, getCampaignApi, createCampaignApi, campaignActionApi, deleteCampaignApi, getCredits, getContacts } from "../api.js";
+import { getCampaigns, getCampaignApi, createCampaignApi, campaignActionApi, deleteCampaignApi, getCredits, getContacts, getLabels } from "../api.js";
 
 const STATUS = {
   draft: ["Rascunho", "#8e8e93"], scheduled: ["Agendada", "#0a84ff"], running: ["Enviando", "#30d158"],
@@ -31,13 +31,17 @@ function NewCampaign({ balance, onClose, onCreated }) {
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState(new Set());
   const [pasted, setPasted] = useState("");
-  const [showAdv, setShowAdv] = useState(false);
+  const [showAdv, setShowAdv] = useState(true);
+  const [variants, setVariants] = useState(["", ""]);
+  const [labels, setLabels] = useState([]);
+  const [pickedLabels, setPickedLabels] = useState(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   useEffect(() => {
     getContacts("").then(setContacts).catch(() => {});
+    getLabels().then(setLabels).catch(() => {});
   }, []);
 
   const visible = useMemo(
@@ -45,7 +49,7 @@ function NewCampaign({ balance, onClose, onCreated }) {
     [contacts, search]
   );
   const pastedList = useMemo(() => parsePasted(pasted), [pasted]);
-  const count = source === "all" ? contacts.length : source === "contacts" ? picked.size : pastedList.length;
+  const count = source === "all" ? contacts.length : source === "contacts" ? picked.size : source === "labels" ? null : pastedList.length;
 
   const toggle = (id) =>
     setPicked((p) => {
@@ -64,7 +68,9 @@ function NewCampaign({ balance, onClose, onCreated }) {
         scheduledAt: f.scheduledAt ? new Date(f.scheduledAt).toISOString() : null,
         allContacts: source === "all",
         contactIds: source === "contacts" ? [...picked] : [],
-        recipients: source === "paste" ? pastedList : []
+        recipients: source === "paste" ? pastedList : [],
+        labelIds: source === "labels" ? [...pickedLabels] : [],
+        variants: variants.map((v) => v.trim()).filter(Boolean)
       };
       const c = await createCampaignApi(body);
       if (start && !f.scheduledAt) await campaignActionApi(c.id, "start");
@@ -90,6 +96,13 @@ function NewCampaign({ balance, onClose, onCreated }) {
           <textarea rows={5} value={f.message} onChange={set("message")} placeholder="Olá {nome}! ..." />
           <small className="fe-hint">Use {"{nome}"} para o primeiro nome do contato. *negrito* e _itálico_ funcionam no WhatsApp.</small>
         </label>
+        {variants.map((v, i) => (
+          <label className="login-field" key={i}>
+            <span>Versão {i + 2} da mensagem (recomendado)</span>
+            <textarea rows={3} value={v} onChange={(e) => setVariants((arr) => arr.map((x, j) => (j === i ? e.target.value : x)))} placeholder="Mesmo assunto, com outras palavras" />
+          </label>
+        ))}
+        <small className="fe-hint">Cada contato recebe uma das versões, sorteada. Textos diferentes reduzem o risco de bloqueio do número.</small>
         <div className="client-two">
           <label className="login-field"><span>Imagem/vídeo/PDF (link, opcional)</span><input value={f.mediaUrl} onChange={set("mediaUrl")} placeholder="https://..." /></label>
           <label className="login-field"><span>Tipo do anexo</span>
@@ -102,6 +115,7 @@ function NewCampaign({ balance, onClose, onCreated }) {
         <div className="fe-field-label">Para quem</div>
         <div className="cv-segment" style={{ width: "100%" }}>
           <button className={source === "contacts" ? "active" : ""} onClick={() => setSource("contacts")}>Escolher contatos</button>
+          <button className={source === "labels" ? "active" : ""} onClick={() => setSource("labels")}>Por etiqueta</button>
           <button className={source === "all" ? "active" : ""} onClick={() => setSource("all")}>Todos os contatos</button>
           <button className={source === "paste" ? "active" : ""} onClick={() => setSource("paste")}>Colar lista</button>
         </div>
@@ -125,6 +139,23 @@ function NewCampaign({ balance, onClose, onCreated }) {
             </div>
           </div>
         )}
+        {source === "labels" && (
+          <div className="camp-labels">
+            {labels.map((l) => (
+              <button
+                type="button"
+                key={l.id}
+                className={`label-chip pick ${pickedLabels.has(l.id) ? "on" : ""}`}
+                style={{ "--chip-color": l.color }}
+                onClick={() => setPickedLabels((p) => { const n = new Set(p); n.has(l.id) ? n.delete(l.id) : n.add(l.id); return n; })}
+              >
+                {pickedLabels.has(l.id) ? "✓ " : ""}{l.title}
+              </button>
+            ))}
+            {!labels.length && <div className="cv-muted">Nenhuma etiqueta criada ainda (Configurações → Etiquetas).</div>}
+            <p className="cv-muted" style={{ width: "100%" }}>Vão receber os contatos das conversas marcadas com {pickedLabels.size > 1 ? "qualquer uma dessas etiquetas" : "essa etiqueta"} (números repetidos são enviados uma vez só).</p>
+          </div>
+        )}
         {source === "all" && <p className="cv-muted">{contacts.length} contato(s) cadastrados vão receber.</p>}
         {source === "paste" && (
           <label className="login-field">
@@ -136,7 +167,7 @@ function NewCampaign({ balance, onClose, onCreated }) {
 
         <label className="login-field"><span>Agendar para (opcional)</span><input type="datetime-local" value={f.scheduledAt} onChange={set("scheduledAt")} /></label>
 
-        <button className="cv-viewall" onClick={() => setShowAdv((v) => !v)}>{showAdv ? "▾" : "▸"} Segurança do envio</button>
+        <button className="cv-viewall" onClick={() => setShowAdv((v) => !v)}>{showAdv ? "▾" : "▸"} Intervalo entre mensagens</button>
         {showAdv && (
           <div className="client-two">
             <label className="login-field"><span>Intervalo mínimo (s)</span><input type="number" min="5" value={f.minDelay} onChange={set("minDelay")} /></label>
@@ -146,15 +177,15 @@ function NewCampaign({ balance, onClose, onCreated }) {
         )}
 
         <div className={`camp-cost ${count > balance ? "warn" : ""}`}>
-          <Coins size={16} /> Custo: <strong>{count}</strong> crédito(s) · Saldo: <strong>{balance}</strong>
+          <Coins size={16} /> Custo: <strong>{count ?? "1 por contato"}</strong>{count != null ? " crédito(s)" : ""} · Saldo: <strong>{balance}</strong>
           {count > balance && <span> — a campanha pausa quando o saldo acabar</span>}
         </div>
-        <div className="camp-risk"><AlertTriangle size={14} /> Disparo em massa por WhatsApp pode levar ao bloqueio do número. Envie só para quem conhece sua empresa e mantenha intervalos longos.</div>
+        <div className="camp-risk"><AlertTriangle size={14} /> Disparo em massa por WhatsApp pode levar ao bloqueio do número. Envie só para clientes ou contatos que autorizaram receber mensagens, use as 3 versões e mantenha intervalos longos.</div>
 
         {error && <div className="admin-feedback error">{error}</div>}
         <div className="gestao-row" style={{ justifyContent: "flex-end" }}>
-          <button className="pill-btn" disabled={busy || !f.message.trim() || !count} onClick={() => submit(false)}>Salvar rascunho</button>
-          <button className="pill-btn primary" disabled={busy || !f.message.trim() || !count} onClick={() => submit(true)}>
+          <button className="pill-btn" disabled={busy || !f.message.trim() || !(count ?? pickedLabels.size)} onClick={() => submit(false)}>Salvar rascunho</button>
+          <button className="pill-btn primary" disabled={busy || !f.message.trim() || !(count ?? pickedLabels.size)} onClick={() => submit(true)}>
             {f.scheduledAt ? "Agendar" : "Salvar e enviar"}
           </button>
         </div>

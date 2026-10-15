@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Search, SquarePen, SlidersHorizontal, X } from "lucide-react";
+import { Search, SquarePen, SlidersHorizontal, X, MessageCircle, Hourglass, Users, CheckCircle2 } from "lucide-react";
 import { getLabels, getDepartments } from "../api.js";
 import { priorityMeta } from "./PrioritySelector.jsx";
 import Avatar from "./Avatar.jsx";
@@ -33,10 +33,10 @@ function waitingFor(iso) {
  *  - Fechados:  encerradas (minhas, ou de todos com "Ver todos")
  */
 const QUEUES = [
-  { key: "active", label: "Ativos" },
-  { key: "pending", label: "Pendentes" },
-  { key: "groups", label: "Grupos" },
-  { key: "closed", label: "Fechados" }
+  { key: "active", label: "Ativos", icon: MessageCircle },
+  { key: "pending", label: "Pendentes", icon: Hourglass },
+  { key: "groups", label: "Grupos", icon: Users },
+  { key: "closed", label: "Fechados", icon: CheckCircle2 }
 ];
 
 function inQueue(c, q, userId, viewAll) {
@@ -138,11 +138,14 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
 
         <div className="cv-segment" role="tablist">
           {QUEUES.map((q) => (
-            <button key={q.key} className={queue === q.key ? "active" : ""} onClick={() => setQueue(q.key)}>
-              {q.label}
-              {q.key === "groups"
-                ? counts.groupsUnread > 0 && <span className="cv-seg-count dot">{counts.groupsUnread}</span>
-                : counts[q.key] > 0 && q.key !== "closed" && <span className="cv-seg-count">{counts[q.key]}</span>}
+            <button key={q.key} className={`qtab ${queue === q.key ? "active" : ""}`} onClick={() => setQueue(q.key)} title={q.label}>
+              <span className="qtab-top">
+                <q.icon size={15} />
+                {q.key === "groups"
+                  ? counts.groupsUnread > 0 && <span className="qtab-count dot">{counts.groupsUnread}</span>
+                  : counts[q.key] > 0 && q.key !== "closed" && <span className="qtab-count">{counts[q.key]}</span>}
+              </span>
+              <span className="qtab-label">{q.label}</span>
             </button>
           ))}
         </div>

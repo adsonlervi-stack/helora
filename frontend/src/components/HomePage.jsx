@@ -112,8 +112,8 @@ export default function HomePage({ profile, conversations, onNavigate }) {
                 <div className="ann-title">{a.title}</div>
                 <div className="ann-msg">{a.message}</div>
                 {a.link && (
-                  <a href={a.link} target="_blank" rel="noreferrer" className="ann-link">
-                    🔗 Abrir link
+                  <a href={a.link} target="_blank" rel="noreferrer" className="ann-link ann-btn">
+                    {a.buttonText || "Abrir link"}
                   </a>
                 )}
                 <div className="ann-meta">

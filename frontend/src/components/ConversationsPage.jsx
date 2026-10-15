@@ -14,7 +14,10 @@ import {
   sendMediaMessage,
   sendAudioMessage,
   reactToMessage,
-  markUnreadApi
+  markUnreadApi,
+  sendSpecialApi,
+  deleteMessageApi,
+  forwardMessageApi
 } from "../api.js";
 import { supabase } from "../supabaseClient.js";
 
@@ -26,21 +29,33 @@ export default function ConversationsPage({
   openConversationId,
   onOpenConversationHandled,
   currentUserId,
+  currentUserName = "",
   canSeeAll = false,
   newConversationContact,
   onNewConversationHandled
 }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [startContact, setStartContact] = useState(null);
 
   // Vindo da aba Contatos ("Conversar"): abre a janela já com o contato.
   useEffect(() => {
     if (newConversationContact) setShowNew(true);
   }, [newConversationContact]);
   const [messages, setMessages] = useState([]);
+  const [toast, setToast] = useState(null);
+  const alertMsg = (t) => {
+    setToast(t);
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const loadMessages = useCallback((id) => {
-    getConversationMessages(id).then((data) => setMessages(data.messages));
+    getConversationMessages(id).then((data) =>
+      setMessages((prev) => {
+        const pending = prev.filter((m) => String(m.id).startsWith("tmp-") && m.conversationId !== "x");
+        return pending.length && prev[0]?.conversationId === id ? [...data.messages, ...pending] : data.messages;
+      })
+    );
   }, []);
 
   // Quando outra tela pede pra abrir uma conversa específica (ex: painel
@@ -79,18 +94,81 @@ export default function ConversationsPage({
     loadMessages(id);
   };
 
-  const handleSend = async (text, sign = true) => {
-    if (!selectedId) return;
-    await sendMessage(selectedId, text, sign);
-    loadMessages(selectedId);
-    refreshConversations();
+  // Envio otimista: o balão aparece na hora (com relógio) e é trocado pela
+  // mensagem real quando o servidor confirma.
+  const addPending = (partial) => {
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setMessages((list) => [
+      ...list,
+      { id: tempId, direction: "out", author: "operator", text: "", status: "pending", timestamp: new Date().toISOString(), reactions: [], ...partial }
+    ]);
+    return tempId;
+  };
+  const resolvePending = (tempId, real, error) => {
+    setMessages((list) =>
+      error
+        ? list.map((m) => (m.id === tempId ? { ...m, status: "failed", error } : m))
+        : list.some((m) => m.id === real?.id)
+          ? list.filter((m) => m.id !== tempId)
+          : list.map((m) => (m.id === tempId ? real : m))
+    );
   };
 
-  const handleSendMedia = async (file, caption) => {
+  const handleSend = async (text, sign = true, quoted = null) => {
     if (!selectedId) return;
-    await sendMediaMessage(selectedId, file, caption);
-    loadMessages(selectedId);
+    const convId = selectedId;
+    const tempId = addPending({ text: sign && currentUserName ? `*${currentUserName}:*\n${text}` : text, senderName: currentUserName, quotedId: quoted?.id, quotedText: quoted?.text, quotedAuthor: quoted?.author });
+    try {
+      const real = await sendMessage(convId, text, sign, quoted?.id || null);
+      resolvePending(tempId, real);
+      refreshConversations();
+    } catch (err) {
+      resolvePending(tempId, null, err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleSendMedia = async (file, caption, quoted = null) => {
+    if (!selectedId) return;
+    const kind = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "document";
+    const tempId = addPending({ text: caption || "", mediaType: kind, mediaUrl: kind !== "document" ? URL.createObjectURL(file) : null });
+    try {
+      const real = await sendMediaMessage(selectedId, file, caption, quoted?.id);
+      resolvePending(tempId, real);
+      refreshConversations();
+    } catch (err) {
+      resolvePending(tempId, null, err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleSendSpecial = async (payload) => {
+    if (!selectedId) return;
+    const tempId = addPending({ extra: payload });
+    try {
+      resolvePending(tempId, await sendSpecialApi(selectedId, payload));
+      refreshConversations();
+    } catch (err) {
+      resolvePending(tempId, null, err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleDelete = async (messageId) => {
+    try {
+      await deleteMessageApi(messageId);
+      loadMessages(selectedId);
+    } catch (err) {
+      alertMsg(err.response?.data?.error || err.message);
+    }
+  };
+
+  const handleForward = async (messageId, conversationIds) => {
+    const { results } = await forwardMessageApi(messageId, conversationIds);
     refreshConversations();
+    return results;
+  };
+
+  const handleRetry = (m) => {
+    setMessages((list) => list.filter((x) => x.id !== m.id));
+    if (m.text) handleSend(m.text, false);
   };
 
   const handleSendAudio = async (blob) => {
@@ -186,6 +264,15 @@ export default function ConversationsPage({
         onSendMedia={handleSendMedia}
         onSendAudio={handleSendAudio}
         onReact={handleReact}
+        onSendSpecial={handleSendSpecial}
+        onDeleteMessage={handleDelete}
+        onForwardMessage={handleForward}
+        onRetry={handleRetry}
+        onStartChat={(c) => {
+          setStartContact(c);
+          setShowNew(true);
+        }}
+        conversations={conversations}
         onSetMode={handleSetMode}
         onSetStatus={handleSetStatus}
         onSetPriority={handleSetPriority}
@@ -200,15 +287,18 @@ export default function ConversationsPage({
         onBack={() => setSelectedId(null)}
         className={selectedId ? "visible-mobile" : ""}
       />
+      {toast && <div className="app-toast">{toast}</div>}
       {showNew && (
         <NewConversationModal
-          initialContact={newConversationContact}
+          initialContact={startContact || newConversationContact}
           onClose={() => {
             setShowNew(false);
+            setStartContact(null);
             onNewConversationHandled?.();
           }}
           onStarted={(conv) => {
             setShowNew(false);
+            setStartContact(null);
             onNewConversationHandled?.();
             refreshConversations();
             setSelectedId(conv.id);

@@ -70,7 +70,16 @@ function rankRows(list) {
   );
 }
 
+const PRESETS = [
+  { key: "0", label: "Hoje", days: 0 },
+  { key: "7", label: "7 dias", days: 7 },
+  { key: "30", label: "30 dias", days: 30 },
+  { key: "90", label: "90 dias", days: 90 },
+  { key: "custom", label: "Personalizado", days: null }
+];
+
 export default function OverviewPage({ refreshKey }) {
+  const [customOpen, setCustomOpen] = useState(false);
   const [stats, setStats] = useState(null);
   const [period, setPeriod] = useState(defaultRange());
   const [departmentId, setDepartmentId] = useState("");
@@ -123,64 +132,63 @@ export default function OverviewPage({ refreshKey }) {
   const resolvedCount = resolvedStage?.value ?? 0;
   const openCount = total - resolvedCount;
 
+  const activePreset = customOpen
+    ? "custom"
+    : period.to === todayISO()
+      ? (PRESETS.find((p) => p.days !== null && period.from === isoDaysAgo(p.days))?.key ?? "custom")
+      : "custom";
+
   return (
     <div className="page">
-      <div className="dash-period-bar">
-        <span className="dpb-label">
-          {isDefaultRange ? "Últimos 30 dias" : "Período personalizado"}
-        </span>
-        <span className="dpb-sep">·</span>
-        <label>De</label>
-        <input
-          type="date"
-          value={period.from}
-          max={period.to}
-          onChange={(e) => setPeriod((p) => ({ ...p, from: e.target.value }))}
-        />
-        <label>até</label>
-        <input
-          type="date"
-          value={period.to}
-          min={period.from}
-          max={todayISO()}
-          onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))}
-        />
-
-        <label>Setor</label>
-        <select className="flow-select" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-          <option value="">Todos</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
+      <div className="dash-filters">
+        <div className="dash-presets">
+          {PRESETS.map((p) => (
+            <button
+              key={p.key}
+              className={activePreset === p.key ? "active" : ""}
+              onClick={() => (p.days === null ? setCustomOpen(true) : (setCustomOpen(false), setPeriod({ from: isoDaysAgo(p.days), to: todayISO() })))}
+            >
+              {p.label}
+            </button>
           ))}
-        </select>
+        </div>
 
-        <label>Atendente</label>
-        <select className="flow-select" value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-          <option value="">Todos</option>
-          {team.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name || "Sem nome"}
-            </option>
-          ))}
-        </select>
-
-        <label>Canal</label>
-        <select className="flow-select" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
-          <option value="">Todos</option>
-          {channels.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name || PLATFORM_LABELS[c.platform] || c.platform}
-            </option>
-          ))}
-        </select>
-
-        {(!isDefaultRange || hasFilters) && (
-          <button className="dpb-reset" onClick={resetFilters}>
-            Limpar filtros
-          </button>
+        {(customOpen || activePreset === "custom") && (
+          <div className="dash-dates">
+            <input type="date" value={period.from} max={period.to} onChange={(e) => setPeriod((p) => ({ ...p, from: e.target.value }))} />
+            <span>até</span>
+            <input type="date" value={period.to} min={period.from} max={todayISO()} onChange={(e) => setPeriod((p) => ({ ...p, to: e.target.value }))} />
+          </div>
         )}
+
+        <div className="dash-selects">
+          <label className={`dash-pill ${departmentId ? "on" : ""}`}>
+            <span>Setor</span>
+            <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+              <option value="">Todos</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </label>
+          <label className={`dash-pill ${agentId ? "on" : ""}`}>
+            <span>Atendente</span>
+            <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+              <option value="">Todos</option>
+              {team.map((t) => <option key={t.id} value={t.id}>{t.name || "Sem nome"}</option>)}
+            </select>
+          </label>
+          <label className={`dash-pill ${channelId ? "on" : ""}`}>
+            <span>Canal</span>
+            <select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+              <option value="">Todos</option>
+              {channels.map((c) => <option key={c.id} value={c.id}>{c.name || PLATFORM_LABELS[c.platform] || c.platform}</option>)}
+            </select>
+          </label>
+          {(!isDefaultRange || hasFilters) && (
+            <button className="dash-clear" onClick={() => { setCustomOpen(false); resetFilters(); }}>
+              Limpar filtros
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="kpi-grid">
