@@ -39,7 +39,7 @@ async function runCampaign(c) {
       await updateCampaign(c.accountId, c.id, { status: "running", started_at: new Date().toISOString(), pause_reason: null });
       c.status = "running";
     }
-    const channelId = await getPrimaryWhatsAppChannel(c.accountId);
+    const channelId = c.channelId || (await getPrimaryWhatsAppChannel(c.accountId));
     if (!channelId) return pause(c, "Nenhum WhatsApp cadastrado na empresa.");
 
     for (;;) {
