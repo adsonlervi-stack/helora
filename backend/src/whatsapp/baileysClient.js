@@ -19,8 +19,23 @@ import {
   getMessageByWhatsAppId,
   addReaction,
   upsertContacts,
-  setConversationAvatar
+  setConversationAvatar,
+  markConversationAsGroup
 } from "../config/db.js";
+
+// Nome dos grupos (cache por 1h para não consultar o WhatsApp a cada mensagem)
+const groupNames = new Map();
+async function groupSubject(sock, jid) {
+  const hit = groupNames.get(jid);
+  if (hit && Date.now() - hit.at < 3600000) return hit.name;
+  try {
+    const meta = await sock.groupMetadata(jid);
+    groupNames.set(jid, { name: meta.subject, at: Date.now() });
+    return meta.subject;
+  } catch {
+    return hit?.name || "Grupo";
+  }
+}
 import { handleIncoming } from "../bot/engine.js";
 import { uploadMedia } from "../storage.js";
 
@@ -308,7 +323,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 
       const jid = msg.key.remoteJid;
       if (jid === "status@broadcast") continue;
-      if (jid?.endsWith("@g.us")) continue; // ignora mensagens de grupo
+      const isGroup = !!jid?.endsWith("@g.us");
 
       const mediaKey = Object.keys(msg.message).find((k) => MEDIA_TYPE_MAP[k]);
       let text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
@@ -334,7 +349,9 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 
       if (!text && !mediaUrl) continue; // ignora tipos não suportados sem conteúdo
 
-      const name = msg.pushName || jid;
+      const name = isGroup ? await groupSubject(sock, jid) : msg.pushName || jid;
+      // Em grupo, o texto vai com o nome de quem mandou ("Maria: oi")
+      if (isGroup && text) text = `*${msg.pushName || (msg.key.participant || "").split("@")[0]}:* ${text}`;
       const phoneFromJid = (msg.key.senderPn || msg.key.remoteJidAlt || jid || "").split("@")[0].split(":")[0];
       if (/^\d{10,15}$/.test(phoneFromJid)) {
         upsertContacts(accountId, channelId, [{ phone: phoneFromJid, pushName: msg.pushName }], "conversa").catch(() => {});
@@ -357,6 +374,15 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         mediaType,
         whatsappMessageId: msg.key.id
       });
+
+      // Grupo: marca a conversa como grupo e nunca aciona o bot.
+      if (isGroup) {
+        if (!conversation.isGroup || conversation.isNew) {
+          await markConversationAsGroup(conversation.id, name).catch(() => {});
+          if (conversation.isNew) await updateConversation(accountId, conversation.id, { isNew: false }).catch(() => {});
+        }
+        continue;
+      }
 
       // O bot só reage a mensagens de texto (com ou sem legenda) — mídia
       // pura sem legenda não aciona o menu, só fica salva na conversa.
@@ -467,4 +493,17 @@ export async function fetchWhatsAppAvatar(channelId, jid) {
   } catch {
     return null;
   }
+}
+
+
+/** Envia mídia a partir de uma URL pública (campanhas e API). */
+export async function sendWhatsAppMediaUrl(channelId, jid, { url, mediaType, caption }) {
+  const conn = connections.get(channelId);
+  if (!conn?.sock) throw new Error("Este dispositivo de WhatsApp não está conectado.");
+  const payload =
+    mediaType === "video" ? { video: { url }, caption } :
+    mediaType === "document" ? { document: { url }, caption, fileName: url.split("/").pop() || "arquivo" } :
+    { image: { url }, caption };
+  const sent = await conn.sock.sendMessage(jid, payload);
+  return sent?.key?.id || null;
 }
