@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send } from "lucide-react";
+import { ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import ContactPanel from "./ContactPanel.jsx";
 import TicketActions from "./TicketActions.jsx";
@@ -102,6 +102,21 @@ export default function ChatWindow({
   const [departments, setDepartments] = useState([]);
   const [team, setTeam] = useState([]);
   const [recording, setRecording] = useState(false);
+  // Assinatura (*Nome:* no começo da mensagem) — cada atendente escolhe; fica salvo no navegador.
+  const [signOn, setSignOn] = useState(() => {
+    try {
+      return localStorage.getItem("helora_sign") !== "off";
+    } catch {
+      return true;
+    }
+  });
+  const toggleSign = () =>
+    setSignOn((v) => {
+      try {
+        localStorage.setItem("helora_sign", v ? "off" : "on");
+      } catch {}
+      return !v;
+    });
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -137,7 +152,7 @@ export default function ChatWindow({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!text.trim()) return;
-    onSend(text.trim());
+    onSend(text.trim(), signOn);
     setText("");
   };
 
@@ -285,6 +300,15 @@ export default function ChatWindow({
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip size={18} />
+              </button>
+
+              <button
+                type="button"
+                className={`composer-icon-btn sign-btn ${signOn ? "on" : ""}`}
+                title={signOn ? "Assinatura ligada: o cliente vê seu nome. Clique para desligar" : "Assinatura desligada. Clique para ligar"}
+                onClick={toggleSign}
+              >
+                <PenLine size={17} />
               </button>
 
               <input

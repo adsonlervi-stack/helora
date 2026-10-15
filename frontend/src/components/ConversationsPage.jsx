@@ -77,9 +77,9 @@ export default function ConversationsPage({
     loadMessages(id);
   };
 
-  const handleSend = async (text) => {
+  const handleSend = async (text, sign = true) => {
     if (!selectedId) return;
-    await sendMessage(selectedId, text);
+    await sendMessage(selectedId, text, sign);
     loadMessages(selectedId);
     refreshConversations();
   };
