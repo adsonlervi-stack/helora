@@ -34,42 +34,81 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-shell">
-      <form className="login-card" onSubmit={handleSubmit}>
-        <img src="/brand/helora-wordmark.png" alt="Helora" className="login-logo-img" />
-        <p className="login-subtitle">{mode === "login" ? "Entre com sua conta para continuar" : "Enviaremos um link para criar uma nova senha"}</p>
+    <div className="login2">
+      <section className="login2-left">
+        <form className="login2-form" onSubmit={handleSubmit}>
+          <img src="/brand/helora-wordmark.png" alt="Helora" className="login2-logo" />
+          <h1>{mode === "login" ? "Bem-vindo de volta" : "Recuperar senha"}</h1>
+          <p className="login2-sub">
+            {mode === "login" ? "Entre com seu e-mail e senha para acessar o painel." : "Enviaremos um link para você criar uma nova senha."}
+          </p>
 
-        {error && <div className="login-error">{error}</div>}
-        {info && <div className="login-info">{info}</div>}
+          {error && <div className="login-error">{error}</div>}
+          {info && <div className="login-info">{info}</div>}
 
-        <label className="login-field">
-          <span>E-mail</span>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@empresa.com" autoFocus />
-        </label>
-
-        {mode === "login" && (
           <label className="login-field">
-            <span>Senha</span>
-            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+            <span>E-mail</span>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@empresa.com" autoFocus autoComplete="email" />
           </label>
-        )}
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Aguarde..." : mode === "login" ? "Entrar" : "Enviar link"}
-        </button>
+          {mode === "login" && (
+            <label className="login-field">
+              <span>Senha</span>
+              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+            </label>
+          )}
 
-        <button
-          type="button"
-          className="login-link"
-          onClick={() => {
-            setMode(mode === "login" ? "forgot" : "login");
-            setError(null);
-            setInfo(null);
-          }}
-        >
-          {mode === "login" ? "Esqueci minha senha" : "Voltar para o login"}
-        </button>
-      </form>
+          <button type="submit" className="login2-submit" disabled={loading}>
+            {loading ? "Aguarde..." : mode === "login" ? "Entrar" : "Enviar link"}
+          </button>
+
+          <button
+            type="button"
+            className="login-link"
+            onClick={() => {
+              setMode(mode === "login" ? "forgot" : "login");
+              setError(null);
+              setInfo(null);
+            }}
+          >
+            {mode === "login" ? "Esqueci minha senha" : "Voltar para o login"}
+          </button>
+
+          <p className="login2-foot">© {new Date().getFullYear()} Helora · Atendimento inteligente</p>
+        </form>
+      </section>
+
+      <section className="login2-right" aria-hidden="true">
+        <div className="login2-glow g1" />
+        <div className="login2-glow g2" />
+        <div className="login2-hero">
+          <span className="login2-pill">WhatsApp · Instagram · Messenger</span>
+          <h2>Todo o atendimento da sua empresa, num só lugar.</h2>
+          <p>Bot que responde 24h, equipe organizada por setores, pipeline de vendas e campanhas — tudo conectado ao seu WhatsApp.</p>
+
+          <div className="login2-chat">
+            <div className="lc-head">
+              <span className="lc-avatar">M</span>
+              <div>
+                <strong>Maria Souza</strong>
+                <small>digitando…</small>
+              </div>
+              <span className="lc-tag">Comercial</span>
+            </div>
+            <div className="lc-msg in">Oi! Queria uma cotação do seguro do meu carro 🚗</div>
+            <div className="lc-msg out bot"><b>Bot Helora</b>Olá, Maria! Já te passo para um especialista. 😊</div>
+            <div className="lc-msg out"><b>Ana:</b> Oi Maria, me envia a placa que eu faço agora mesmo!</div>
+            <div className="lc-ticks">✓✓ lido</div>
+          </div>
+
+          <ul className="login2-feats">
+            <li><span>🤖</span> Fluxos de bot sem código</li>
+            <li><span>👥</span> Vários atendentes no mesmo número</li>
+            <li><span>📈</span> Pipeline e campanhas</li>
+            <li><span>📱</span> Funciona no celular como app</li>
+          </ul>
+        </div>
+      </section>
     </div>
   );
 }
