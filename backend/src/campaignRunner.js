@@ -63,7 +63,8 @@ async function runCampaign(c) {
 
       try {
         const jid = await resolveWhatsAppNumber(channelId, r.phone);
-        const text = personalize(fresh.message, r);
+        const versions = [fresh.message, ...(fresh.variants || [])].filter(Boolean);
+        const text = personalize(versions[Math.floor(Math.random() * versions.length)], r);
         if (fresh.mediaUrl) await sendWhatsAppMediaUrl(channelId, jid, { url: fresh.mediaUrl, mediaType: fresh.mediaType, caption: text });
         else await sendWhatsAppMessage(channelId, jid, text);
         await markRecipient(r.id, "sent");
