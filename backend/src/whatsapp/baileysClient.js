@@ -2,7 +2,8 @@ import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-  downloadMediaMessage
+  downloadMediaMessage,
+  BufferJSON
 } from "baileys";
 import QRCode from "qrcode";
 import path from "path";
@@ -22,8 +23,10 @@ import {
   setConversationAvatar,
   markConversationAsGroup,
   updateMessageStatusByWaId,
-  markDeletedByWaId
+  markDeletedByWaId,
+  getCloudChannel
 } from "../config/db.js";
+import { cloudSendText, cloudSendMediaLink, cloudSendLocation, cloudSendContact, cloudReact } from "../meta/cloudClient.js";
 import { toWebp } from "../imageTools.js";
 
 // Status do WhatsApp (proto WebMessageInfo.Status) -> tiques do painel
@@ -101,6 +104,8 @@ function liveSock(channelId) {
 }
 
 export async function sendWhatsAppMessage(channelId, jid, text, { quoted = null, forwarded = false } = {}) {
+  const cloud = await getCloudChannel(channelId);
+  if (cloud) return cloudSendText(cloud, jid, text, { quotedWaId: quoted?.key?.id });
   const sock = liveSock(channelId);
   const content = forwarded ? { text, contextInfo: { isForwarded: true, forwardingScore: 1 } } : { text };
   const sent = await sock.sendMessage(jid, content, quoted ? { quoted } : undefined);
@@ -109,12 +114,37 @@ export async function sendWhatsAppMessage(channelId, jid, text, { quoted = null,
 
 /** Envia qualquer conteúdo já montado (contato, localização...). */
 export async function sendWhatsAppPayload(channelId, jid, payload) {
+  const cloud = await getCloudChannel(channelId);
+  if (cloud) {
+    if (payload.location)
+      return cloudSendLocation(cloud, jid, { lat: payload.location.degreesLatitude, lng: payload.location.degreesLongitude, name: payload.location.name, address: payload.location.address });
+    if (payload.contacts) {
+      const vcard = payload.contacts.contacts?.[0]?.vcard || "";
+      return cloudSendContact(cloud, jid, { name: payload.contacts.displayName, phone: /waid=(\d+)/.exec(vcard)?.[1] || "" });
+    }
+    if (payload.sticker) {
+      const url = await uploadMedia({ accountId: cloud.accountId, buffer: payload.sticker, extension: "webp", contentType: "image/webp" });
+      return cloudSendMediaLink(cloud, jid, { url, mediaType: "sticker" });
+    }
+    throw new Error("Este tipo de envio ainda não é suportado pela API oficial.");
+  }
   const sent = await liveSock(channelId).sendMessage(jid, payload);
   return sent?.key?.id || null;
 }
 
+/** Quem está online agora (presença recebida nos últimos 2 min) — só de quem o painel acompanha. */
+export function getOnlineJids(channelId) {
+  const conn = connections.get(channelId);
+  const out = new Set();
+  for (const [jid, p] of conn?.presence || []) {
+    if (Date.now() - p.at < 120000 && ["available", "composing", "recording"].includes(p.state)) out.add(jid);
+  }
+  return out;
+}
+
 /** Avisa o cliente que o atendente está digitando ("composing") ou parou ("paused"). */
 export async function sendPresence(channelId, jid, state) {
+  if (await getCloudChannel(channelId)) return; // a API oficial não tem "digitando"
   const conn = connections.get(channelId);
   if (!conn?.sock || conn.status !== "connected") return;
   await conn.sock.sendPresenceUpdate(state, jid);
@@ -138,10 +168,17 @@ export async function watchPresence(channelId, jid) {
 
 /** "Apagar para todos". */
 export async function deleteWhatsAppMessage(channelId, jid, { id, fromMe = true }) {
+  if (await getCloudChannel(channelId)) throw new Error("A API oficial do WhatsApp não permite apagar mensagens enviadas.");
   await liveSock(channelId).sendMessage(jid, { delete: { remoteJid: jid, id, fromMe } });
 }
 
 export async function sendWhatsAppMedia(channelId, jid, { buffer, mediaType, mimetype, caption, fileName, quoted = null }) {
+  const cloud = await getCloudChannel(channelId);
+  if (cloud) {
+    const ext = (fileName || "").split(".").pop() || (mediaType === "audio" ? "ogg" : "bin");
+    const url = await uploadMedia({ accountId: cloud.accountId, buffer, extension: ext, contentType: mimetype || (mediaType === "audio" ? "audio/ogg" : "application/octet-stream") });
+    return cloudSendMediaLink(cloud, jid, { url, mediaType, caption, fileName });
+  }
   const conn = { sock: liveSock(channelId) };
 
   const payload =
@@ -158,6 +195,8 @@ export async function sendWhatsAppMedia(channelId, jid, { buffer, mediaType, mim
 }
 
 export async function sendWhatsAppReaction(channelId, jid, { id, fromMe }, emoji) {
+  const cloud = await getCloudChannel(channelId);
+  if (cloud) return cloudReact(cloud, jid, id, emoji);
   const conn = connections.get(channelId);
   if (!conn?.sock) throw new Error("Este dispositivo de WhatsApp não está conectado.");
   await conn.sock.sendMessage(jid, {
@@ -415,7 +454,8 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       if (msg.key.fromMe) continue;
 
       const jid = msg.key.remoteJid;
-      if (jid === "status@broadcast") continue;
+      // Status, Canais do WhatsApp (newsletter) e listas de transmissão não entram no atendimento
+      if (!jid || jid === "status@broadcast" || jid.endsWith("@newsletter") || jid.endsWith("@broadcast")) continue;
       const isGroup = !!jid?.endsWith("@g.us");
 
       // Resposta citada, contato e localização
@@ -446,7 +486,22 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       let mediaUrl = null;
       let mediaType = null;
 
-      if (mediaKey) {
+      let pendingMedia = null;
+      if (mediaKey && ["image", "video", "document"].includes(MEDIA_TYPE_MAP[mediaKey])) {
+        // Foto, vídeo e documento: NÃO baixa agora (deixa o sistema leve).
+        // Guarda o necessário para baixar quando o atendente clicar em "Baixar".
+        mediaType = MEDIA_TYPE_MAP[mediaKey];
+        const m = msg.message[mediaKey] || {};
+        text = m.caption || "";
+        pendingMedia = {
+          raw: JSON.parse(JSON.stringify({ key: msg.key, message: { [mediaKey]: m } }, BufferJSON.replacer)),
+          mimetype: m.mimetype || null,
+          fileName: m.fileName || null,
+          size: Number(m.fileLength || 0) || null,
+          seconds: m.seconds || null,
+          thumb: m.jpegThumbnail ? `data:image/jpeg;base64,${Buffer.from(m.jpegThumbnail).toString("base64")}` : null
+        };
+      } else if (mediaKey) {
         mediaType = MEDIA_TYPE_MAP[mediaKey];
         text = msg.message[mediaKey]?.caption || "";
         try {
@@ -463,6 +518,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         }
       }
 
+      if (pendingMedia) extra = { ...(extra || {}), pendingMedia };
       if (!text && !mediaUrl && !extra) continue; // ignora tipos não suportados sem conteúdo
 
       const name = isGroup ? await groupSubject(sock, jid) : msg.pushName || jid;
@@ -473,17 +529,35 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         const phone = pjid.split("@")[0].split(":")[0];
         groupSender = { name: msg.pushName || null, phone: /^\d{8,15}$/.test(phone) ? phone : null, id: msg.key.participant || pjid };
       }
-      const phoneFromJid = (msg.key.senderPn || msg.key.remoteJidAlt || jid || "").split("@")[0].split(":")[0];
+      const pnJid = [msg.key.senderPn, msg.key.remoteJidAlt, jid].find((j) => j && /@s\.whatsapp\.net$/.test(j)) || "";
+      const phoneFromJid = pnJid.split("@")[0].split(":")[0];
       if (/^\d{10,15}$/.test(phoneFromJid)) {
         upsertContacts(accountId, channelId, [{ phone: phoneFromJid, pushName: msg.pushName }], "conversa").catch(() => {});
       }
+      // Mesma pessoa pode chegar como número (@s.whatsapp.net) ou como ID interno (@lid):
+      // procura pelas duas formas para não abrir uma conversa nova quando o cliente responde.
       const conversation = await findOrCreateConversation({
         accountId,
         platform: "whatsapp",
         externalId: jid,
+        altExternalIds: isGroup ? [] : [pnJid, phoneFromJid ? `${phoneFromJid}@s.whatsapp.net` : null].filter((j) => j && j !== jid),
+        phone: isGroup ? null : phoneFromJid || null,
         name,
         channelId
       });
+      // Acompanha a presença (online / digitando) de quem acabou de falar
+      if (!isGroup) {
+        conn.presenceSubs = conn.presenceSubs || new Map();
+        if (Date.now() - (conn.presenceSubs.get(jid) || 0) > 5 * 60 * 1000) {
+          conn.presenceSubs.set(jid, Date.now());
+          sock.presenceSubscribe(jid).catch(() => {});
+        }
+      }
+      // Número real (o WhatsApp às vezes manda só um ID interno "@lid")
+      if (!isGroup && /^\d{10,15}$/.test(phoneFromJid) && conversation.phone !== phoneFromJid && !String(jid).startsWith(phoneFromJid + "@s.")) {
+        updateConversation(accountId, conversation.id, { phone: phoneFromJid }).catch(() => {});
+        conversation.phone = phoneFromJid;
+      }
       // Contato sem nome (só número): usa o nome do perfil do WhatsApp da pessoa.
       const pushName = msg.pushName || msg.verifiedBizName;
       if (!isGroup && pushName && (!conversation.name || /^\+?[\d\s@.()-]+$/.test(conversation.name) || conversation.name.includes("@"))) {
@@ -608,6 +682,7 @@ export async function importWhatsAppContacts(channelId) {
 
 /** Confere se o número tem WhatsApp e devolve o JID oficial dele. */
 export async function resolveWhatsAppNumber(channelId, phone) {
+  if (await getCloudChannel(channelId)) return `${String(phone || "").replace(/\D/g, "")}@s.whatsapp.net`;
   const conn = connections.get(channelId);
   if (!conn?.sock || conn.status !== "connected") throw new Error("O WhatsApp desta empresa não está conectado.");
   const digits = String(phone || "").replace(/\D/g, "");
@@ -629,6 +704,8 @@ export async function fetchWhatsAppAvatar(channelId, jid) {
 
 /** Envia mídia a partir de uma URL pública (campanhas e API). */
 export async function sendWhatsAppMediaUrl(channelId, jid, { url, mediaType, caption }) {
+  const cloud = await getCloudChannel(channelId);
+  if (cloud) return cloudSendMediaLink(cloud, jid, { url, mediaType, caption });
   const conn = connections.get(channelId);
   if (!conn?.sock) throw new Error("Este dispositivo de WhatsApp não está conectado.");
   const payload =
@@ -637,4 +714,17 @@ export async function sendWhatsAppMediaUrl(channelId, jid, { url, mediaType, cap
     { image: { url }, caption };
   const sent = await conn.sock.sendMessage(jid, payload);
   return sent?.key?.id || null;
+}
+
+
+/** Baixa sob demanda uma mídia que ficou pendente (foto/vídeo/documento). */
+export async function downloadPendingMedia(channelId, pending) {
+  const conn = connections.get(channelId);
+  const msg = JSON.parse(JSON.stringify(pending.raw), BufferJSON.reviver);
+  return downloadMediaMessage(
+    msg,
+    "buffer",
+    {},
+    { logger: pino({ level: "silent" }), reuploadRequest: conn?.sock ? conn.sock.updateMediaMessage : undefined }
+  );
 }
