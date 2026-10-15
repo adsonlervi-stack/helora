@@ -1241,7 +1241,9 @@ export async function getAuthEmails(userIds) {
 }
 
 export async function setUserPassword(userId, password) {
-  const { error } = await supabase.auth.admin.updateUserById(userId, { password });
+  // Confirma o e-mail junto: quem foi convidado e nunca clicou no link
+  // passa a conseguir entrar com a senha definida pelo gestor.
+  const { error } = await supabase.auth.admin.updateUserById(userId, { password, email_confirm: true });
   if (error) throw error;
 }
 
