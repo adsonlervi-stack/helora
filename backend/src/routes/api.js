@@ -137,7 +137,8 @@ import {
   watchPresence,
   sendWhatsAppPayload,
   downloadPendingMedia,
-  getOnlineJids
+  getOnlineJids,
+  markWhatsAppRead
 } from "../whatsapp/baileysClient.js";
 import { toJpeg, toWebp } from "../imageTools.js";
 import { getInvoicePix } from "../billing.js";
@@ -941,6 +942,10 @@ router.get("/conversations/:id/messages", async (req, res) => {
 
   await markConversationSeen(req.accountId, req.params.id);
   const messages = await listMessages(req.accountId, req.params.id);
+  if (conversation.unread > 0 && conversation.platform === "whatsapp") {
+    const ids = messages.filter((m) => m.direction === "in" && m.whatsappMessageId).slice(-Math.min(conversation.unread + 2, 50)).map((m) => m.whatsappMessageId);
+    markWhatsAppRead(conversation.channelId, conversation.externalId, ids).catch(() => {});
+  }
   res.json({ conversation, messages });
 });
 
