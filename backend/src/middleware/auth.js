@@ -53,9 +53,16 @@ export async function requireAuth(req, res, next) {
 
   // Empresa suspensa: ninguém dela entra (o super admin continua entrando).
   if (!profile.is_super_admin) {
-    const { data: acc } = await supabase.from("accounts").select("status").eq("id", profile.account_id).maybeSingle();
+    const { data: acc } = await supabase.from("accounts").select("status, blocked_reason").eq("id", profile.account_id).maybeSingle();
     if (acc?.status === "suspended") {
-      return res.status(403).json({ error: "Esta empresa está suspensa. Fale com o administrador." });
+      // Bloqueio por falta de pagamento: deixa abrir só o Financeiro (para pagar o PIX) e o perfil.
+      const path = req.path || "";
+      const allowed = /^\/(billing|profile|legal|support)/.test(path);
+      if (acc.blocked_reason === "billing") {
+        if (!allowed) return res.status(402).json({ error: "Acesso bloqueado por falta de pagamento. Pague o PIX em Financeiro para liberar.", billingBlocked: true });
+      } else {
+        return res.status(403).json({ error: "Esta empresa está suspensa. Fale com o administrador." });
+      }
     }
   }
   // "Visão de túnel": um atendente (role 'agent') só enxerga os tickets do
