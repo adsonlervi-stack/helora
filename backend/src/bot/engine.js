@@ -1,4 +1,4 @@
-import { listAutoReplies, updateConversation, addCsatResponse, getBotFlow, getActiveFlow, getAccountSettings } from "../config/db.js";
+import { listAutoReplies, updateConversation, addCsatResponse, getBotFlow, getActiveFlow, getAccountSettings, getContactRouting } from "../config/db.js";
 import { isOpenNow, DEFAULT_OOH_MESSAGE } from "./businessHours.js";
 import { runFlow } from "./flowEngine.js";
 import { runActiveFlow } from "./flowRunner.js";
@@ -44,13 +44,17 @@ export async function handleIncoming(accountId, conversation, rawText, send) {
   // conversa esteja em modo "Atendente", ainda queremos capturar a nota
   // que o cliente está respondendo.
   if (conversation.awaitingCsat) {
+    const askedAt = conversation.flowVars?.__csatAt ? new Date(conversation.flowVars.__csatAt).getTime() : 0;
+    const expired = askedAt && Date.now() - askedAt > 5 * 60 * 1000;
     const rating = parseInt(rawText.trim(), 10);
-    if (Number.isInteger(rating) && rating >= 1 && rating <= 5) {
+    if (!expired && Number.isInteger(rating) && rating >= 1 && rating <= 5 && rawText.trim().length <= 2) {
       await addCsatResponse({ accountId, conversationId: conversation.id, rating });
       await updateConversation(accountId, conversation.id, { awaitingCsat: false });
       return CSAT_THANKS_TEXT;
     }
-    return CSAT_INVALID_TEXT;
+    // Não respondeu a nota (ou passaram 5 min): não insiste — segue o atendimento normal.
+    await updateConversation(accountId, conversation.id, { awaitingCsat: false }).catch(() => {});
+    conversation.awaitingCsat = false;
   }
 
   // Conversa resolvida que recebeu mensagem nova = novo atendimento:
@@ -59,6 +63,19 @@ export async function handleIncoming(accountId, conversation, rawText, send) {
     const reset = { status: "open", mode: "bot", assignedAgentId: null, botNodeId: null, flowVars: {} };
     await updateConversation(accountId, conversation.id, reset).catch(() => {});
     Object.assign(conversation, reset, { isNew: true });
+  }
+
+  // Contato com atendente/setor padrão: não passa pelo bot, vai direto.
+  if (conversation.mode === "bot" && !conversation.assignedAgentId) {
+    const route = await getContactRouting(accountId, conversation).catch(() => null);
+    if (route) {
+      const patch = { mode: "human", isNew: false };
+      if (route.agentId) patch.assignedAgentId = route.agentId;
+      if (route.departmentId) patch.departmentId = route.departmentId;
+      await updateConversation(accountId, conversation.id, patch).catch(() => {});
+      Object.assign(conversation, patch);
+      return null;
+    }
   }
 
   // Fora do horário de atendimento (do fluxo do canal ou da empresa): avisa
