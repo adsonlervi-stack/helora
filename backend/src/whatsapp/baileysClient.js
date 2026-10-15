@@ -17,7 +17,9 @@ import {
   setChannelStatus,
   listWhatsAppChannels,
   getMessageByWhatsAppId,
-  addReaction
+  addReaction,
+  upsertContacts,
+  setConversationAvatar
 } from "../config/db.js";
 import { handleIncoming } from "../bot/engine.js";
 import { uploadMedia } from "../storage.js";
@@ -205,6 +207,26 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 
   sock.ev.on("creds.update", saveCreds);
 
+  // ---------- Contatos: o WhatsApp manda a agenda ao vincular / sincronizar ----------
+  const toContact = (c) => {
+    const jid = c.phoneNumber || (c.id?.endsWith("@s.whatsapp.net") ? c.id : null);
+    if (!jid) return null;
+    return { phone: jid.split("@")[0].split(":")[0], name: c.name || null, pushName: c.notify || c.verifiedName || null };
+  };
+  const saveContacts = async (list) => {
+    const items = (list || []).map(toContact).filter(Boolean);
+    if (!items.length) return;
+    conn.contactsSeen = (conn.contactsSeen || 0) + items.length;
+    try {
+      await upsertContacts(accountId, channelId, items, "whatsapp");
+    } catch (err) {
+      console.error(`[WhatsApp] Falha ao salvar contatos (${channelId}):`, err.message);
+    }
+  };
+  sock.ev.on("contacts.upsert", saveContacts);
+  sock.ev.on("contacts.update", (list) => saveContacts(list.filter((c) => c.name || c.notify)));
+  sock.ev.on("messaging-history.set", ({ contacts }) => saveContacts(contacts));
+
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
     // Ignora eventos de uma conexão antiga que já foi substituída/desligada.
@@ -313,6 +335,10 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       if (!text && !mediaUrl) continue; // ignora tipos não suportados sem conteúdo
 
       const name = msg.pushName || jid;
+      const phoneFromJid = (msg.key.senderPn || msg.key.remoteJidAlt || jid || "").split("@")[0].split(":")[0];
+      if (/^\d{10,15}$/.test(phoneFromJid)) {
+        upsertContacts(accountId, channelId, [{ phone: phoneFromJid, pushName: msg.pushName }], "conversa").catch(() => {});
+      }
       const conversation = await findOrCreateConversation({
         accountId,
         platform: "whatsapp",
@@ -336,6 +362,13 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       // pura sem legenda não aciona o menu, só fica salva na conversa.
       if (text) {
         const reply = await handleIncoming(accountId, conversation, text);
+
+        if (conversation.isNew && !conversation.avatarUrl) {
+          sock
+            .profilePictureUrl(jid, "image")
+            .then((url) => url && setConversationAvatar(conversation.id, url))
+            .catch(() => {});
+        }
 
         if (conversation.isNew) {
           await updateConversation(accountId, conversation.id, { isNew: false });
@@ -385,5 +418,43 @@ export async function startAllChannels() {
     startWhatsAppForChannel(channelId, accountId).catch((err) => {
       console.error(`[WhatsApp] Erro ao iniciar dispositivo ${channelId}:`, err);
     });
+  }
+}
+
+
+/**
+ * Força o WhatsApp a reenviar a agenda (nomes salvos no celular) e grava
+ * tudo na tabela de contatos. Retorna quantos contatos chegaram.
+ */
+export async function importWhatsAppContacts(channelId) {
+  const conn = connections.get(channelId);
+  if (!conn?.sock || conn.status !== "connected") throw new Error("Este WhatsApp não está conectado.");
+  const before = conn.contactsSeen || 0;
+  try {
+    await conn.sock.resyncAppState(["critical_block", "critical_unblock_low", "regular_high", "regular_low", "regular"], true);
+  } catch (err) {
+    console.error(`[WhatsApp] Falha ao sincronizar agenda (${channelId}):`, err.message);
+  }
+  await sleep(4000);
+  return { received: (conn.contactsSeen || 0) - before };
+}
+
+/** Confere se o número tem WhatsApp e devolve o JID oficial dele. */
+export async function resolveWhatsAppNumber(channelId, phone) {
+  const conn = connections.get(channelId);
+  if (!conn?.sock || conn.status !== "connected") throw new Error("O WhatsApp desta empresa não está conectado.");
+  const digits = String(phone || "").replace(/\D/g, "");
+  const [result] = (await conn.sock.onWhatsApp(digits)) || [];
+  if (!result?.exists) throw new Error("Esse número não tem WhatsApp.");
+  return result.jid;
+}
+
+export async function fetchWhatsAppAvatar(channelId, jid) {
+  const conn = connections.get(channelId);
+  if (!conn?.sock) return null;
+  try {
+    return (await conn.sock.profilePictureUrl(jid, "image")) || null;
+  } catch {
+    return null;
   }
 }
