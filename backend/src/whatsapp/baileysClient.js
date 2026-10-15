@@ -79,7 +79,8 @@ const MEDIA_TYPE_MAP = {
   imageMessage: "image",
   videoMessage: "video",
   documentMessage: "document",
-  audioMessage: "audio"
+  audioMessage: "audio",
+  stickerMessage: "sticker"
 };
 
 export function getWhatsAppStatus(channelId) {
@@ -110,6 +111,29 @@ export async function sendWhatsAppMessage(channelId, jid, text, { quoted = null,
 export async function sendWhatsAppPayload(channelId, jid, payload) {
   const sent = await liveSock(channelId).sendMessage(jid, payload);
   return sent?.key?.id || null;
+}
+
+/** Avisa o cliente que o atendente está digitando ("composing") ou parou ("paused"). */
+export async function sendPresence(channelId, jid, state) {
+  const conn = connections.get(channelId);
+  if (!conn?.sock || conn.status !== "connected") return;
+  await conn.sock.sendPresenceUpdate(state, jid);
+}
+
+/** Painel pergunta se o cliente está digitando (inscreve na presença dele na 1ª vez). */
+export async function watchPresence(channelId, jid) {
+  const conn = connections.get(channelId);
+  if (!conn?.sock || conn.status !== "connected") return { typing: false };
+  conn.presence = conn.presence || new Map();
+  conn.presenceSubs = conn.presenceSubs || new Map();
+  const subAt = conn.presenceSubs.get(jid) || 0;
+  if (Date.now() - subAt > 5 * 60 * 1000) {
+    conn.presenceSubs.set(jid, Date.now());
+    conn.sock.presenceSubscribe(jid).catch(() => {});
+  }
+  const p = conn.presence.get(jid);
+  const fresh = p && Date.now() - p.at < 12000;
+  return { typing: !!(fresh && p.state === "composing"), recording: !!(fresh && p.state === "recording") };
 }
 
 /** "Apagar para todos". */
@@ -353,6 +377,14 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
     }
   });
 
+  // Presença: cliente digitando / gravando áudio
+  sock.ev.on("presence.update", ({ id, presences }) => {
+    conn.presence = conn.presence || new Map();
+    for (const [, p] of Object.entries(presences || {})) {
+      if (p?.lastKnownPresence) conn.presence.set(id, { state: p.lastKnownPresence, at: Date.now() });
+    }
+  });
+
   // Tiques: enviado / entregue / lido
   sock.ev.on("messages.update", async (updates) => {
     for (const u of updates || []) {
@@ -419,7 +451,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         text = msg.message[mediaKey]?.caption || "";
         try {
           let buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }) });
-          let ext = { image: "jpg", video: "mp4", document: "pdf", audio: "ogg" }[mediaType];
+          let ext = { image: "jpg", video: "mp4", document: "pdf", audio: "ogg", sticker: "webp" }[mediaType];
           let contentType = msg.message[mediaKey]?.mimetype || "application/octet-stream";
           if (mediaType === "image") {
             const webp = await toWebp(buffer);
@@ -434,8 +466,13 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       if (!text && !mediaUrl && !extra) continue; // ignora tipos não suportados sem conteúdo
 
       const name = isGroup ? await groupSubject(sock, jid) : msg.pushName || jid;
-      // Em grupo, o texto vai com o nome de quem mandou ("Maria: oi")
-      if (isGroup && text) text = `*${msg.pushName || (msg.key.participant || "").split("@")[0]}:* ${text}`;
+      // Em grupo: quem mandou vai separado (nome colorido + número no painel, igual WhatsApp)
+      let groupSender = null;
+      if (isGroup) {
+        const pjid = msg.key.participantPn || msg.key.participantAlt || msg.key.participant || "";
+        const phone = pjid.split("@")[0].split(":")[0];
+        groupSender = { name: msg.pushName || null, phone: /^\d{8,15}$/.test(phone) ? phone : null, id: msg.key.participant || pjid };
+      }
       const phoneFromJid = (msg.key.senderPn || msg.key.remoteJidAlt || jid || "").split("@")[0].split(":")[0];
       if (/^\d{10,15}$/.test(phoneFromJid)) {
         upsertContacts(accountId, channelId, [{ phone: phoneFromJid, pushName: msg.pushName }], "conversa").catch(() => {});
@@ -447,6 +484,12 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         name,
         channelId
       });
+      // Contato sem nome (só número): usa o nome do perfil do WhatsApp da pessoa.
+      const pushName = msg.pushName || msg.verifiedBizName;
+      if (!isGroup && pushName && (!conversation.name || /^\+?[\d\s@.()-]+$/.test(conversation.name) || conversation.name.includes("@"))) {
+        updateConversation(accountId, conversation.id, { name: pushName }).catch(() => {});
+        conversation.name = pushName;
+      }
 
       await addMessage({
         accountId,
@@ -457,7 +500,8 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         mediaUrl,
         mediaType,
         whatsappMessageId: msg.key.id,
-        extra,
+        senderName: groupSender ? groupSender.name || (groupSender.phone ? `+${groupSender.phone}` : null) : null,
+        extra: groupSender ? { ...(extra || {}), sender: groupSender } : extra,
         ...(quoted || {}),
         ...(quoted && !quoted.quotedAuthor ? { quotedAuthor: name } : {})
       });
