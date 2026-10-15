@@ -4,12 +4,12 @@ import { getDeals, createDealApi, updateDealApi, removeDeal, getTeam } from "../
 import DealDetailPanel from "./DealDetailPanel.jsx";
 
 export const STAGES = [
-  { id: "novo_lead", name: "Novo Lead", color: "#6e7a7a" },
-  { id: "contato", name: "Primeiro Contato", color: "#2b82ea" },
-  { id: "negociacao", name: "Em Negociação", color: "#6228d7" },
-  { id: "proposta", name: "Proposta Enviada", color: "#dd8a1f" },
-  { id: "fechado", name: "Fechado", color: "#1f9d6b" },
-  { id: "perdido", name: "Perdido", color: "#d94f4f" }
+  { id: "novo_lead", name: "Novo Lead", color: "#0a84ff" },
+  { id: "contato", name: "Primeiro Contato", color: "#bf5af2" },
+  { id: "negociacao", name: "Em Negociação", color: "#ff9f0a" },
+  { id: "proposta", name: "Proposta Enviada", color: "#ffcc00" },
+  { id: "fechado", name: "Fechado", color: "#30d158" },
+  { id: "perdido", name: "Perdido", color: "#ff453a" }
 ];
 
 const PLATFORM_LABELS = { whatsapp: "WhatsApp", messenger: "Messenger", instagram: "Instagram" };
@@ -156,7 +156,7 @@ export default function DealsPage({ onOpenConversation }) {
   return (
     <div className="page deals-page">
       <div className="deals-toolbar">
-        <div className="search-box" style={{ margin: 0, maxWidth: 260 }}>
+        <div className="cv-search" style={{ flex: "0 1 280px" }}>
           <input
             placeholder="Buscar negócio..."
             value={search}
@@ -185,6 +185,7 @@ export default function DealsPage({ onOpenConversation }) {
         {columns.map((col) => (
           <div
             key={col.id}
+            style={{ "--col": col.color }}
             className={`kanban-col ${dragOverStage === col.id ? "drag-over" : ""}`}
             onDragOver={(e) => {
               e.preventDefault();
@@ -197,7 +198,6 @@ export default function DealsPage({ onOpenConversation }) {
             }}
           >
             <div className="kanban-col-head">
-              <span className="col-dot" style={{ background: col.color }} />
               <span className="col-title">{col.name}</span>
               <span className="col-count">{col.items.length}</span>
             </div>
@@ -210,6 +210,7 @@ export default function DealsPage({ onOpenConversation }) {
                 return (
                   <div
                     key={deal.id}
+                    style={{ "--col": col.color }}
                     className="deal-card"
                     draggable
                     onDragStart={(e) => {
@@ -240,6 +241,12 @@ export default function DealsPage({ onOpenConversation }) {
                             {PLATFORM_LABELS[deal.conversationPlatform]}
                           </span>
                         )}
+                      </div>
+                    )}
+                    {!deal.conversationName && (deal.contactName || deal.contactPhone) && (
+                      <div className="deal-card-contact">
+                        {deal.contactName || ""} {deal.contactPhone ? `· +${deal.contactPhone}` : ""}
+                        {deal.source && <span className="deal-origin-badge">{deal.source}</span>}
                       </div>
                     )}
                     <div className="deal-card-bottom">

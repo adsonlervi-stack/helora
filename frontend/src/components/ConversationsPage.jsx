@@ -13,7 +13,8 @@ import {
   assignConversation,
   sendMediaMessage,
   sendAudioMessage,
-  reactToMessage
+  reactToMessage,
+  markUnreadApi
 } from "../api.js";
 import { supabase } from "../supabaseClient.js";
 
@@ -25,6 +26,7 @@ export default function ConversationsPage({
   openConversationId,
   onOpenConversationHandled,
   currentUserId,
+  canSeeAll = false,
   newConversationContact,
   onNewConversationHandled
 }) {
@@ -140,6 +142,13 @@ export default function ConversationsPage({
     refreshConversations();
   };
 
+  const handleMarkUnread = async () => {
+    if (!selectedId) return;
+    await markUnreadApi(selectedId);
+    setSelectedId(null);
+    refreshConversations();
+  };
+
   const handleAssign = async (agentId) => {
     if (!selectedId) return;
     await assignConversation(selectedId, agentId);
@@ -165,6 +174,7 @@ export default function ConversationsPage({
         selectedId={selectedId}
         onSelect={handleSelect}
         currentUserId={currentUserId}
+        canSeeAll={canSeeAll}
         onNewConversation={() => setShowNew(true)}
         className={selectedId ? "hidden-mobile" : ""}
       />
@@ -184,6 +194,8 @@ export default function ConversationsPage({
         onToggleLabel={handleToggleLabel}
         onTakeOver={handleTakeOver}
         onReturnToQueue={handleReturnToQueue}
+        onMarkUnread={handleMarkUnread}
+        onTransferred={refreshConversations}
         currentUserId={currentUserId}
         onBack={() => setSelectedId(null)}
         className={selectedId ? "visible-mobile" : ""}

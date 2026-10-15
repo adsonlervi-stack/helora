@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Building2, Megaphone, Trash2, LogIn, Briefcase } from "lucide-react";
-import { DashboardTab, InvoicesTab, CommercialEditor, SupportTab, brl } from "./GestaoTabs.jsx";
+import { DashboardTab, InvoicesTab, CommercialEditor, SupportTab, CreditsTab, brl } from "./GestaoTabs.jsx";
 import {
   getAdminAccounts,
   createAdminAccount,
@@ -257,7 +257,8 @@ function AnnouncementsTab() {
         userId: form.scope === "user" ? form.userId : undefined,
         title: form.title.trim(),
         message: form.message.trim(),
-        link: form.link.trim() || undefined
+        link: form.link.trim() || undefined,
+        sendEmail: !!form.sendEmail
       });
       setFeedback({ type: "success", text: "Comunicado enviado com sucesso." });
       setForm({ scope: "all", accountId: "", userId: "", title: "", message: "", link: "" });
@@ -375,6 +376,11 @@ function AnnouncementsTab() {
               />
             </label>
 
+            <label className="col-toggle-row" style={{ gap: 8 }}>
+              <input type="checkbox" checked={!!form.sendEmail} onChange={(e) => setForm((f) => ({ ...f, sendEmail: e.target.checked }))} />
+              Também enviar por e-mail (EmailJS)
+            </label>
+
             {feedback && <div className={`admin-feedback ${feedback.type}`}>{feedback.text}</div>}
 
             <button
@@ -432,27 +438,16 @@ function AnnouncementsTab() {
   );
 }
 
-export default function AdminPage() {
-  const [tab, setTab] = useState("dashboard");
-
+// As seções da Gestão agora ficam no menu lateral (App.jsx); aqui só renderiza a escolhida.
+export default function AdminPage({ tab = "dashboard" }) {
   return (
     <div className="page">
-      <div className="settings-tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`settings-tab ${tab === t.key ? "active" : ""}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {tab === "dashboard" && <DashboardTab />}
       {tab === "accounts" && <AccountsTab />}
       {tab === "invoices" && <InvoicesTab />}
       {tab === "support" && <SupportTab />}
+      {tab === "credits" && <CreditsTab />}
       {tab === "users" && <UsersTab />}
       {tab === "announcements" && <AnnouncementsTab />}
     </div>

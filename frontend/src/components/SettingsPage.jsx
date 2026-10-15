@@ -9,7 +9,9 @@ import {
   Users,
   Clock3,
   Smartphone,
-  Pencil
+  Pencil,
+  KeyRound,
+  Copy
 } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
 import {
@@ -30,7 +32,14 @@ import {
   createTeamMemberApi,
   updateTeamMemberApi,
   setTeamMemberPasswordApi,
-  removeTeamMemberApi
+  removeTeamMemberApi,
+  getChannels,
+  getGroups,
+  getMemberPermissions,
+  getApiKeys,
+  createApiKeyApi,
+  revokeApiKeyApi,
+  API_BASE
 } from "../api.js";
 
 const CARDS = [
@@ -66,7 +75,8 @@ const CARDS = [
     desc: "WhatsApp, Messenger e Instagram conectados",
     icon: Smartphone,
     external: true
-  }
+  },
+  { key: "api", label: "API e integrações", desc: "Chave para site, landing page e sistemas", icon: KeyRound, ownerOnly: true }
 ];
 
 export default function SettingsPage({ onGoToChannels, canManage = false }) {
@@ -76,7 +86,7 @@ export default function SettingsPage({ onGoToChannels, canManage = false }) {
     return (
       <div className="page">
         <div className="settings-grid">
-          {CARDS.map(({ key, label, desc, icon: Icon, external }) => (
+          {CARDS.filter((c) => !c.ownerOnly || canManage).map(({ key, label, desc, icon: Icon, external }) => (
             <button
               key={key}
               className="settings-card"
@@ -112,6 +122,7 @@ export default function SettingsPage({ onGoToChannels, canManage = false }) {
       {tab === "departments" && <DepartmentsTab />}
       {tab === "team" && <TeamTab canManage={canManage} />}
       {tab === "scheduled" && <ScheduledMessagesTab />}
+      {tab === "api" && canManage && <ApiTab />}
     </div>
   );
 }
@@ -389,8 +400,52 @@ function DepartmentsTab() {
 
 const ROLE_LABEL = { owner: "Gestor", agent: "Atendente" };
 
+/** Escolha de canais, setores e grupos que o usuário vê. */
+function usePermissionOptions() {
+  const [opts, setOpts] = useState({ channels: [], departments: [], groups: [] });
+  useEffect(() => {
+    Promise.all([getChannels().catch(() => []), getDepartments().catch(() => []), getGroups().catch(() => [])]).then(([channels, departments, groups]) =>
+      setOpts({ channels, departments, groups })
+    );
+  }, []);
+  return opts;
+}
+
+function PermissionPicker({ value, onChange, opts, role }) {
+  const toggle = (key, id) => {
+    const cur = value[key] || [];
+    onChange({ ...value, [key]: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  };
+  const Block = ({ title, hint, items, k, label }) => (
+    <div className="perm-block">
+      <div className="perm-title">{title}</div>
+      <div className="perm-hint">{hint}</div>
+      <div className="cv-chip-row">
+        {items.map((it) => (
+          <button type="button" key={it.id} className={`cv-chip ${(value[k] || []).includes(it.id) ? "active" : ""}`} onClick={() => toggle(k, it.id)}>
+            {label(it)}
+          </button>
+        ))}
+        {!items.length && <span className="cv-muted">Nenhum cadastrado ainda.</span>}
+      </div>
+    </div>
+  );
+  if (role === "owner") {
+    return <div className="perm-owner">Gestor vê todos os canais, setores e grupos da empresa e pode criar canais e usuários.</div>;
+  }
+  return (
+    <div className="perm-picker">
+      <Block title="Canais" hint="Nenhum marcado = vê todos os canais" items={opts.channels} k="channelIds" label={(c) => c.name || c.platform} />
+      <Block title="Setores" hint="Vê os atendimentos destes setores (e os atribuídos a ele)" items={opts.departments} k="departmentIds" label={(d) => d.name} />
+      <Block title="Grupos de WhatsApp" hint="Só vê os grupos marcados" items={opts.groups} k="groupIds" label={(g) => g.name || "Grupo"} />
+    </div>
+  );
+}
+
 function NewMemberForm({ onCreated }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "agent" });
+  const [perms, setPerms] = useState({ channelIds: [], departmentIds: [], groupIds: [] });
+  const opts = usePermissionOptions();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -404,8 +459,10 @@ function NewMemberForm({ onCreated }) {
         name: form.name.trim(),
         email: form.email.trim(),
         password: form.password || undefined,
-        role: form.role
+        role: form.role,
+        ...(form.role === "agent" ? perms : {})
       });
+      setPerms({ channelIds: [], departmentIds: [], groupIds: [] });
       setMsg({
         type: "success",
         text: r.invited
@@ -438,6 +495,7 @@ function NewMemberForm({ onCreated }) {
           {busy ? "Criando..." : "Criar usuário"}
         </button>
       </form>
+      <PermissionPicker value={perms} onChange={setPerms} opts={opts} role={form.role} />
       {msg && <div className={`admin-feedback ${msg.type}`}>{msg.text}</div>}
     </div>
   );
@@ -446,6 +504,11 @@ function NewMemberForm({ onCreated }) {
 function MemberEditor({ member, onClose, onSaved }) {
   const [name, setName] = useState(member.name || "");
   const [role, setRole] = useState(member.role);
+  const [perms, setPerms] = useState({ channelIds: [], departmentIds: [], groupIds: [] });
+  const opts = usePermissionOptions();
+  useEffect(() => {
+    getMemberPermissions(member.id).then(setPerms).catch(() => {});
+  }, [member.id]);
   const [password, setPassword] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -482,10 +545,11 @@ function MemberEditor({ member, onClose, onSaved }) {
             <option value="owner">Gestor (vê tudo e administra a empresa)</option>
           </select>
         </label>
+        <PermissionPicker value={perms} onChange={setPerms} opts={opts} role={role} />
         <button
           className="connect-btn"
           disabled={busy || !name.trim()}
-          onClick={() => run(() => updateTeamMemberApi(member.id, { name, role }), "Dados salvos.")}
+          onClick={() => run(() => updateTeamMemberApi(member.id, { name, role, ...(role === "agent" ? perms : {}) }), "Dados salvos.")}
         >
           Salvar
         </button>
@@ -618,6 +682,107 @@ function TeamTab({ canManage }) {
       </div>
 
       {editing && <MemberEditor member={editing} onClose={() => setEditing(null)} onSaved={load} />}
+    </>
+  );
+}
+
+
+function ApiTab() {
+  const [keys, setKeys] = useState([]);
+  const [name, setName] = useState("");
+  const [created, setCreated] = useState(null);
+  const [error, setError] = useState(null);
+  const base = API_BASE.replace(/\/$/, "") + "/public/v1";
+
+  const load = () => getApiKeys().then(setKeys).catch((e) => setError(e.response?.data?.error || e.message));
+  useEffect(() => {
+    load();
+  }, []);
+
+  const create = async (e) => {
+    e.preventDefault();
+    try {
+      setCreated(await createApiKeyApi(name.trim() || "Site"));
+      setName("");
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  };
+
+  const copy = (t) => navigator.clipboard?.writeText(t);
+  const key = created?.key || "SUA_CHAVE";
+  const exLead = `curl -X POST ${base}/leads \\
+  -H "X-API-Key: ${key}" -H "Content-Type: application/json" \\
+  -d '{"name":"Maria Souza","phone":"5584999998888","email":"maria@email.com","title":"Seguro auto","value":1500,"source":"site","message":"Olá Maria! Recebemos seu pedido 😊"}'`;
+  const exMsg = `curl -X POST ${base}/messages \\
+  -H "X-API-Key: ${key}" -H "Content-Type: application/json" \\
+  -d '{"phone":"5584999998888","text":"Sua apólice foi emitida!"}'`;
+  const exCamp = `curl -X POST ${base}/campaigns \\
+  -H "X-API-Key: ${key}" -H "Content-Type: application/json" \\
+  -d '{"name":"Black Friday","message":"Olá {nome}! ...","recipients":[{"phone":"5584999998888","name":"Maria"}]}'`;
+  const exForm = `<form id="lead">
+  <input name="name" placeholder="Nome" required>
+  <input name="phone" placeholder="WhatsApp com DDD" required>
+  <button>Quero uma cotação</button>
+</form>
+<script>
+document.getElementById("lead").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  await fetch("${base}/leads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": "${key}" },
+    body: JSON.stringify({ name: f.get("name"), phone: "55" + f.get("phone").replace(/\\D/g, ""), source: "landing page" })
+  });
+  alert("Recebemos! Em instantes falamos com você no WhatsApp.");
+};
+</script>`;
+
+  return (
+    <>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Chaves de API</div>
+        <div className="card-subtitle">
+          Use em sites, landing pages e sistemas para: criar leads no pipeline, enviar mensagem e disparar campanha.
+          Mensagens enviadas pela API usam 1 crédito cada.
+        </div>
+        <form className="admin-create-grid" onSubmit={create}>
+          <input className="response" placeholder="Nome da chave (ex: Site, Landing page)" value={name} onChange={(e) => setName(e.target.value)} />
+          <button className="connect-btn">Gerar nova chave</button>
+        </form>
+        {created && (
+          <div className="api-key-new">
+            <strong>Copie agora — ela não aparece de novo:</strong>
+            <code>{created.key}</code>
+            <button className="pill-btn" onClick={() => copy(created.key)}><Copy size={14} /> Copiar</button>
+          </div>
+        )}
+        {error && <div className="admin-feedback error">{error}</div>}
+        {keys.map((k) => (
+          <div key={k.id} className="reply-item">
+            <span className="reply-response">
+              <strong>{k.name}</strong>
+              <span className="gestao-muted"> · {k.prefix}… · criada {new Date(k.createdAt).toLocaleDateString("pt-BR")}{k.lastUsedAt ? ` · último uso ${new Date(k.lastUsedAt).toLocaleString("pt-BR")}` : " · nunca usada"}</span>
+            </span>
+            {k.revoked ? <span className="invoice-badge canceled">Revogada</span> : (
+              <button className="resolve-btn" onClick={async () => { await revokeApiKeyApi(k.id); load(); }}>Revogar</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Como usar</div>
+        <div className="card-subtitle">Endereço base: <code>{base}</code> · cabeçalho <code>X-API-Key</code></div>
+        {[["Criar lead no pipeline (e mandar boas-vindas no WhatsApp)", exLead], ["Enviar mensagem", exMsg], ["Disparar campanha", exCamp], ["Formulário de landing page (HTML)", exForm]].map(([t, code]) => (
+          <div key={t} className="api-example">
+            <div className="api-example-head"><strong>{t}</strong><button className="pill-btn" onClick={() => copy(code)}><Copy size={13} /> Copiar</button></div>
+            <pre>{code}</pre>
+          </div>
+        ))}
+        <p className="cv-muted">Etapas aceitas em "stage": novo_lead, contato, negociacao, proposta, fechado, perdido. Respostas de erro: 401 chave inválida, 402 sem créditos, 429 muitas chamadas.</p>
+      </div>
     </>
   );
 }

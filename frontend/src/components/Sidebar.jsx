@@ -26,34 +26,47 @@ function waitingFor(iso) {
 }
 
 /**
- * Filas (inspiradas no fluxo de atendimento de mercado):
- *  - Meus:       abertas e atribuídas a mim
- *  - Fila:       abertas, no modo humano, sem ninguém atribuído (esperando alguém assumir)
- *  - Bot:        abertas, ainda com o bot respondendo
- *  - Todas:      todas as abertas (gestor)
- *  - Resolvidas
+ * Abas (igual ao ClickMassa):
+ *  - Ativos:    abertas e comigo (ou de todos, com "Ver todos")
+ *  - Pendentes: abertas sem atendente (bot respondendo ou esperando alguém assumir)
+ *  - Grupos:    grupos de WhatsApp
+ *  - Fechados:  encerradas (minhas, ou de todos com "Ver todos")
  */
 const QUEUES = [
-  { key: "mine", label: "Meus" },
-  { key: "queue", label: "Fila" },
-  { key: "bot", label: "Bot" },
-  { key: "all", label: "Todas" },
-  { key: "resolved", label: "Resolvidas" }
+  { key: "active", label: "Ativos" },
+  { key: "pending", label: "Pendentes" },
+  { key: "groups", label: "Grupos" },
+  { key: "closed", label: "Fechados" }
 ];
 
-function inQueue(c, q, userId) {
+function inQueue(c, q, userId, viewAll) {
   const open = c.status !== "resolved";
-  if (q === "resolved") return !open;
-  if (!open) return false;
-  if (q === "mine") return c.assignedAgentId === userId;
-  if (q === "queue") return c.mode === "human" && !c.assignedAgentId;
-  if (q === "bot") return c.mode === "bot" && !c.assignedAgentId;
-  return true;
+  if (q === "groups") return c.isGroup;
+  if (c.isGroup) return false;
+  const mine = c.assignedAgentId === userId;
+  if (q === "active") return open && (viewAll ? !!c.assignedAgentId : mine);
+  if (q === "pending") return open && !c.assignedAgentId;
+  if (q === "closed") return !open && (viewAll || mine || !c.assignedAgentId);
+  return false;
 }
 
-export default function Sidebar({ conversations, selectedId, onSelect, onNewConversation, currentUserId, className = "" }) {
+export default function Sidebar({ conversations, selectedId, onSelect, onNewConversation, currentUserId, canSeeAll = false, className = "" }) {
   const [search, setSearch] = useState("");
-  const [queue, setQueue] = useState("queue");
+  const [queue, setQueue] = useState("pending");
+  const [viewAll, setViewAll] = useState(() => {
+    try {
+      return canSeeAll && localStorage.getItem("helora_view_all") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleViewAll = () =>
+    setViewAll((v) => {
+      try {
+        localStorage.setItem("helora_view_all", v ? "0" : "1");
+      } catch {}
+      return !v;
+    });
   const [showFilters, setShowFilters] = useState(false);
   const [labels, setLabels] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -67,20 +80,21 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
 
   // Começa em "Meus" se eu já tenho conversa; senão na fila.
   useEffect(() => {
-    if (conversations.some((c) => inQueue(c, "mine", currentUserId))) setQueue((q) => (q === "queue" ? "mine" : q));
+    if (conversations.some((c) => inQueue(c, "active", currentUserId, viewAll))) setQueue((q) => (q === "pending" ? "active" : q));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversations.length > 0]);
 
   const counts = useMemo(() => {
     const out = {};
-    QUEUES.forEach((q) => (out[q.key] = conversations.filter((c) => inQueue(c, q.key, currentUserId)).length));
+    QUEUES.forEach((q) => (out[q.key] = conversations.filter((c) => inQueue(c, q.key, currentUserId, viewAll)).length));
+    out.groupsUnread = conversations.filter((c) => c.isGroup && c.unread > 0).length;
     return out;
-  }, [conversations, currentUserId]);
+  }, [conversations, currentUserId, viewAll]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return conversations
-      .filter((c) => inQueue(c, queue, currentUserId))
+      .filter((c) => inQueue(c, queue, currentUserId, viewAll))
       .filter((c) => (labelFilter ? (c.labels || []).some((l) => l.id === labelFilter) : true))
       .filter((c) => (deptFilter ? c.departmentId === deptFilter : true))
       .filter((c) =>
@@ -90,7 +104,7 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
             (c.externalId || "").includes(term.replace(/\D/g, "") || "§") ||
             (c.lastMessagePreview || "").toLowerCase().includes(term)
       );
-  }, [conversations, search, queue, labelFilter, deptFilter, currentUserId]);
+  }, [conversations, search, queue, labelFilter, deptFilter, currentUserId, viewAll]);
 
   const activeFilters = (labelFilter ? 1 : 0) + (deptFilter ? 1 : 0);
 
@@ -126,10 +140,18 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
           {QUEUES.map((q) => (
             <button key={q.key} className={queue === q.key ? "active" : ""} onClick={() => setQueue(q.key)}>
               {q.label}
-              {counts[q.key] > 0 && q.key !== "resolved" && <span className="cv-seg-count">{counts[q.key]}</span>}
+              {q.key === "groups"
+                ? counts.groupsUnread > 0 && <span className="cv-seg-count dot">{counts.groupsUnread}</span>
+                : counts[q.key] > 0 && q.key !== "closed" && <span className="cv-seg-count">{counts[q.key]}</span>}
             </button>
           ))}
         </div>
+
+        {canSeeAll && (
+          <button className={`cv-viewall ${viewAll ? "on" : ""}`} onClick={toggleViewAll} title="Gestor: mostrar os atendimentos de toda a equipe">
+            <span className="cv-switch" /> Ver atendimentos de todos
+          </button>
+        )}
 
         {showFilters && (
           <div className="cv-filters">
@@ -173,7 +195,7 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
       <div className="conversation-list cv-list">
         {filtered.map((c) => {
           const pMeta = c.priority ? priorityMeta(c.priority) : null;
-          const waiting = queue === "queue" && c.mode === "human" && !c.assignedAgentId;
+          const waiting = queue === "pending" && c.mode === "human" && !c.assignedAgentId;
           return (
             <button
               key={c.id}
@@ -208,6 +230,7 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
                       {l.title}
                     </span>
                   ))}
+                  {queue === "pending" && c.mode === "bot" && <span className="cv-tag" style={{ "--tag": "#af52de" }}>🤖 Bot</span>}
                   {waiting && <span className="cv-tag warn">⏳ {waitingFor(c.lastMessageAt)}</span>}
                 </div>
               </div>
@@ -217,11 +240,10 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
 
         {filtered.length === 0 && (
           <div className="cv-empty">
-            {queue === "mine" && "Nenhuma conversa com você agora."}
-            {queue === "queue" && "Fila vazia. Ninguém esperando atendimento. 🎉"}
-            {queue === "bot" && "Nenhuma conversa com o bot no momento."}
-            {queue === "all" && "Nenhuma conversa aberta."}
-            {queue === "resolved" && "Nenhuma conversa resolvida ainda."}
+            {queue === "active" && (viewAll ? "Ninguém da equipe está em atendimento agora." : "Nenhum atendimento com você agora. Veja em Pendentes.")}
+            {queue === "pending" && "Nada pendente. Ninguém esperando atendimento. 🎉"}
+            {queue === "groups" && "Nenhum grupo ainda. As mensagens de grupos do WhatsApp conectado aparecem aqui."}
+            {queue === "closed" && "Nenhum atendimento encerrado ainda."}
           </div>
         )}
       </div>

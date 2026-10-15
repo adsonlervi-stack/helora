@@ -11,7 +11,11 @@ import {
   getSupportThreadsAdmin,
   getSupportMessagesAdmin,
   replySupportAdmin,
-  setSupportStatusAdmin
+  setSupportStatusAdmin,
+  getAdminCredits,
+  getAdminCreditLedger,
+  setAdminMonthlyCredits,
+  addAdminCredits
 } from "../api.js";
 
 export const brl = (v) =>
@@ -358,6 +362,94 @@ export function SupportTab() {
               <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Responder como Suporte Helora…" />
               <button className="composer-send" disabled={!text.trim()}>➤</button>
             </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ---------------------------------------------------------------- Créditos
+const KIND = { monthly: "Mensal", manual: "Liberado", campaign: "Campanha", api: "API", refund: "Estorno", adjust: "Ajuste" };
+
+export function CreditsTab() {
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState(null);
+  const [open, setOpen] = useState(null);
+  const [ledger, setLedger] = useState([]);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+
+  const load = () => getAdminCredits().then(setRows).catch((e) => setError(errText(e)));
+  useEffect(() => {
+    load();
+  }, []);
+
+  const openAcc = (r) => {
+    setOpen(r);
+    getAdminCreditLedger(r.id).then((d) => setLedger(d.ledger)).catch(() => {});
+  };
+
+  const saveMonthly = async (r, v) => {
+    await setAdminMonthlyCredits(r.id, v).catch((e) => setError(errText(e)));
+    load();
+  };
+
+  const launch = async (e) => {
+    e.preventDefault();
+    await addAdminCredits(open.id, parseInt(amount, 10), note).catch((err) => setError(errText(err)));
+    setAmount("");
+    setNote("");
+    load();
+    openAcc(open);
+  };
+
+  if (error && !rows.length)
+    return <div className="admin-feedback error">{error}{/credit/i.test(error) && " — rode o arquivo migration_015 no Supabase."}</div>;
+
+  return (
+    <div className="support-admin">
+      <div className="card">
+        <div className="card-title">Créditos por empresa</div>
+        <div className="card-subtitle">1 crédito = 1 mensagem de campanha ou API. A cota mensal é liberada automaticamente todo mês.</div>
+        {rows.map((r) => (
+          <button key={r.id} className={`support-thread ${open?.id === r.id ? "active" : ""}`} onClick={() => openAcc(r)}>
+            <span>
+              <strong>{r.name}</strong>
+              <small>Cota: {r.creditsMonthly}/mês · usados no mês: {r.usedThisMonth}</small>
+            </span>
+            <span className={`invoice-badge ${r.balance > 0 ? "paid" : "overdue"}`}>{r.balance} saldo</span>
+          </button>
+        ))}
+        {!rows.length && <div className="gestao-muted">Nenhuma empresa.</div>}
+      </div>
+      <div className="card">
+        {!open ? (
+          <div className="gestao-muted">Escolha uma empresa.</div>
+        ) : (
+          <>
+            <div className="card-title">{open.name}</div>
+            <label className="login-field">
+              <span>Cota mensal de créditos</span>
+              <input type="number" min="0" defaultValue={open.creditsMonthly} onBlur={(e) => saveMonthly(open, e.target.value)} key={open.id} />
+              <small className="fe-hint">Liberada no 1º uso de cada mês. Mudou aqui, vale a partir do próximo mês.</small>
+            </label>
+            <form className="admin-create-grid" onSubmit={launch}>
+              <input className="response" type="number" placeholder="Créditos avulsos (+ ou -)" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <input className="response" placeholder="Motivo (opcional)" value={note} onChange={(e) => setNote(e.target.value)} />
+              <button className="connect-btn" disabled={!parseInt(amount, 10)}>Lançar</button>
+            </form>
+            <div className="card-title" style={{ marginTop: 14 }}>Extrato</div>
+            {ledger.map((l) => (
+              <div key={l.id} className="reply-item">
+                <span className="reply-response">
+                  <strong style={{ color: l.delta > 0 ? "#248a3d" : "#c93400" }}>{l.delta > 0 ? "+" : ""}{l.delta}</strong>
+                  <span className="gestao-muted"> · {KIND[l.kind] || l.kind}{l.note ? ` · ${l.note}` : ""} · {new Date(l.createdAt).toLocaleString("pt-BR")}</span>
+                </span>
+              </div>
+            ))}
+            {!ledger.length && <div className="gestao-muted">Sem movimentação.</div>}
           </>
         )}
       </div>

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine } from "lucide-react";
+import { ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2, RotateCcw, Users } from "lucide-react";
 import Avatar from "./Avatar.jsx";
-import ContactPanel from "./ContactPanel.jsx";
-import TicketActions from "./TicketActions.jsx";
+import ClientPanel from "./ClientPanel.jsx";
+import TransferModal from "./TransferModal.jsx";
 import { getCannedResponses, getDepartments, getTeam } from "../api.js";
 
 const PLATFORM_LABELS = {
@@ -90,6 +90,8 @@ export default function ChatWindow({
   onToggleLabel,
   onTakeOver,
   onReturnToQueue,
+  onMarkUnread,
+  onTransferred,
   currentUserId,
   onBack,
   className = ""
@@ -102,6 +104,7 @@ export default function ChatWindow({
   const [departments, setDepartments] = useState([]);
   const [team, setTeam] = useState([]);
   const [recording, setRecording] = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
   // Assinatura (*Nome:* no começo da mensagem) — cada atendente escolhe; fica salvo no navegador.
   const [signOn, setSignOn] = useState(() => {
     try {
@@ -199,17 +202,20 @@ export default function ChatWindow({
           <button className="back-btn" onClick={onBack}>
             <ArrowLeft size={20} />
           </button>
+          <button className="chat-who" onClick={() => setPanelOpen(true)} title="Ver dados do cliente">
           <Avatar name={conversation.name} url={conversation.avatarUrl} size={40} />
           <div>
             <div className="chat-header-name">{conversation.name}</div>
             <div className="chat-header-platform">
+              {conversation.isGroup && <><Users size={12} style={{ verticalAlign: -2 }} /> Grupo · </>}
               {conversation.platform === "whatsapp" && /@s\.whatsapp\.net$/.test(conversation.externalId || "")
                 ? `+${conversation.externalId.split("@")[0]}`
                 : PLATFORM_LABELS[conversation.platform]}
               {conversation.departmentName ? ` · ${conversation.departmentName}` : ""}
-              {conversation.assignedAgentName ? ` · com ${conversation.assignedAgentName}` : " · na fila"}
+              {conversation.assignedAgentName ? ` · com ${conversation.assignedAgentName}` : " · pendente"}
             </div>
           </div>
+          </button>
         </div>
 
         <div className="chat-header-right">
@@ -218,21 +224,30 @@ export default function ChatWindow({
               <Hand size={15} /> Assumir
             </button>
           )}
-          {conversation.status !== "resolved" && conversation.assignedAgentId && (
-            <button className="pill-btn" onClick={onReturnToQueue} title="Devolver para a fila">
-              <Undo2 size={15} /> Fila
+          {conversation.status !== "resolved" && (
+            <button className="pill-btn" onClick={() => setShowTransfer(true)} title="Transferir para setor ou atendente">
+              <ArrowRightLeft size={15} /> Transferir
             </button>
           )}
-          <TicketActions
-            conversation={conversation}
-            departments={departments}
-            team={team}
-            onAssign={onAssign}
-            onSetDepartment={onSetDepartment}
-            onSetStatus={onSetStatus}
-          />
+          {conversation.status !== "resolved" && conversation.assignedAgentId && (
+            <button className="cv-icon-btn" onClick={onReturnToQueue} title="Devolver para Pendentes">
+              <Undo2 size={15} />
+            </button>
+          )}
+          <button className="cv-icon-btn" onClick={onMarkUnread} title="Marcar como não lida">
+            <MailOpen size={15} />
+          </button>
+          {conversation.status !== "resolved" ? (
+            <button className="cv-icon-btn ok" onClick={() => onSetStatus("resolved")} title="Encerrar atendimento">
+              <CheckCircle2 size={16} />
+            </button>
+          ) : (
+            <button className="pill-btn" onClick={() => onSetStatus("open")} title="Reabrir atendimento">
+              <RotateCcw size={15} /> Reabrir
+            </button>
+          )}
 
-          <div className="mode-toggle">
+          {!conversation.isGroup && <div className="mode-toggle">
             <button
               className={conversation.mode === "bot" ? "active" : ""}
               onClick={() => onSetMode("bot")}
@@ -245,7 +260,7 @@ export default function ChatWindow({
             >
               Atendente
             </button>
-          </div>
+          </div>}
 
           <button
             className={`icon-btn ${panelOpen ? "active" : ""}`}
@@ -335,7 +350,7 @@ export default function ChatWindow({
         </div>
 
         {panelOpen && (
-          <ContactPanel
+          <ClientPanel
             conversation={conversation}
             departments={departments}
             team={team}
@@ -347,6 +362,16 @@ export default function ChatWindow({
           />
         )}
       </div>
+
+      {showTransfer && (
+        <TransferModal
+          conversation={conversation}
+          departments={departments}
+          team={team}
+          onClose={() => setShowTransfer(false)}
+          onDone={onTransferred}
+        />
+      )}
     </div>
   );
 }
