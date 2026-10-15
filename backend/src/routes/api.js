@@ -139,6 +139,8 @@ import {
   getOnlineJids
 } from "../whatsapp/baileysClient.js";
 import { toJpeg, toWebp } from "../imageTools.js";
+import { getInvoicePix } from "../billing.js";
+import { mailWelcomeUser } from "../emails.js";
 import { sendMetaMessage } from "../meta/metaClient.js";
 import { CSAT_PROMPT_TEXT } from "../bot/engine.js";
 import { sendTextToConversation, sendSpecialToConversation, baileysQuoted } from "../messaging.js";
@@ -218,6 +220,15 @@ router.get("/billing", async (req, res) => {
     res.json(await getBilling(req.accountId));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// PIX da fatura (QR Code + copia e cola), gerado no Asaas na hora se ainda não existir
+router.get("/billing/invoices/:id/pix", async (req, res) => {
+  try {
+    res.json(await getInvoicePix(req.accountId, req.params.id));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -357,6 +368,7 @@ router.post("/team", requireOwner, async (req, res) => {
     await setProfilePermissions(req.accountId, user.id, { channelIds, departmentIds, groupIds }).catch((e) =>
       console.error("[Equipe] permissões:", e.message)
     );
+    mailWelcomeUser({ to: email.trim().toLowerCase(), name: name.trim(), company: (await getAccount(req.accountId).catch(() => null))?.name || "sua empresa", invitedBy: req.userName });
     res.status(201).json({ id: user.id, invited: !password });
   } catch (err) {
     const msg = /already|registered|exists/i.test(err.message)

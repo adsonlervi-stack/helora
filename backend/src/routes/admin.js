@@ -39,6 +39,10 @@ import {
 import { sendEmail, emailConfigured } from "../email.js";
 import { requireAuth, requireSuperAdmin } from "../middleware/auth.js";
 import { runMigration, migrationState } from "../migrateSupabase.js";
+import { mailWelcomeCompany } from "../emails.js";
+import { ensureAsaasCharge, runBillingCycle, markInvoicePaid } from "../billing.js";
+import { sendMail } from "../email.js";
+import { asaasConfigured } from "../asaas.js";
 
 const router = Router();
 
@@ -53,6 +57,42 @@ router.post("/migrate-supabase", async (req, res) => {
   res.status(202).json({ started: true });
 });
 router.get("/migrate-supabase", (req, res) => res.json(migrationState));
+
+// ---------- Cobrança (Asaas / PIX) ----------
+router.get("/billing/status", (req, res) => res.json({ asaas: asaasConfigured(), email: emailConfigured(), sandbox: process.env.ASAAS_SANDBOX === "1" }));
+router.post("/billing/run", async (req, res) => {
+  try {
+    res.json({ log: await runBillingCycle() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router.post("/invoices/:id/charge", async (req, res) => {
+  try {
+    const inv = await ensureAsaasCharge(req.params.id);
+    res.json({ asaasPaymentId: inv.asaas_payment_id, invoiceUrl: inv.invoice_url });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router.post("/invoices/:id/paid", async (req, res) => {
+  await markInvoicePaid(req.params.id, { method: req.body?.method || "manual" });
+  res.sendStatus(204);
+});
+router.post("/email/test", async (req, res) => {
+  try {
+    const ok = await sendMail({
+      to: req.body?.to,
+      subject: "Teste de e-mail – Helora",
+      title: "Está funcionando! ✅",
+      message: "Este é um e-mail de teste do Helora. Se chegou, o EmailJS está configurado certinho.",
+      buttonText: "Abrir o Helora"
+    });
+    res.json({ sent: ok });
+  } catch (err) {
+    res.status(400).json({ error: err.response?.data || err.message });
+  }
+});
 
 // ---------- Planos ----------
 router.get("/plans", async (req, res) => {
@@ -136,6 +176,7 @@ router.post("/accounts", async (req, res) => {
   // alguém clicar em "Conectar" (não fica gerando QR sem ninguém olhando).
   await createChannel({ accountId: account.id, platform: "whatsapp", name: "Principal" });
 
+  if (ownerUser && ownerEmail) mailWelcomeCompany({ to: ownerEmail.trim().toLowerCase(), name: ownerName, company: account.name, password: !!ownerPassword });
   res.status(201).json({ account, ownerEmail: ownerEmail || null, invited: !!ownerUser && !ownerPassword });
 });
 
@@ -206,6 +247,11 @@ router.patch("/invoices/:id", async (req, res) => {
     return res.status(400).json({ error: "Status inválido." });
   }
   try {
+    // Baixa manual também libera a empresa bloqueada e manda o e-mail de confirmação
+    if (status === "paid") {
+      await markInvoicePaid(req.params.id, { method: req.body.paymentMethod || "manual" });
+      return res.json({ ok: true });
+    }
     res.json(await updateInvoice(req.params.id, req.body || {}));
   } catch (err) {
     res.status(400).json({ error: err.message });
