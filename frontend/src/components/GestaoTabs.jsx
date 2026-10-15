@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Building2, TrendingUp, AlertTriangle, Wallet, CheckCircle2, Plus } from "lucide-react";
+import { useTyping } from "./useTyping.js";
 import {
   getManagementDashboard,
   getAdminAccounts,
