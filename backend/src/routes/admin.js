@@ -243,7 +243,7 @@ router.get("/announcements", async (req, res) => {
 });
 
 router.post("/announcements", async (req, res) => {
-  const { title, message, link, scope, accountId, userId } = req.body;
+  const { title, message, link, buttonText, scope, accountId, userId } = req.body;
   if (!title || !message || !scope) {
     return res.status(400).json({ error: "title, message e scope são obrigatórios" });
   }
@@ -261,6 +261,7 @@ router.post("/announcements", async (req, res) => {
     title,
     message,
     link,
+    buttonText,
     scope,
     accountId,
     userId,
@@ -283,7 +284,7 @@ router.post("/announcements", async (req, res) => {
       email = { queued: targets.length };
       (async () => {
         for (const t of targets) {
-          await sendEmail("EMAILJS_TEMPLATE_NOTICE", { to_email: t.email, to_name: t.name || "", title, message, link: link || "" }).catch((e) =>
+          await sendEmail("EMAILJS_TEMPLATE_NOTICE", { to_email: t.email, to_name: t.name || "", title, message, link: link || (process.env.FRONTEND_ORIGIN || "").split(",")[0], button_text: buttonText || "Abrir o Helora" }).catch((e) =>
             console.error("[E-mail] comunicado:", e.response?.data || e.message)
           );
           await new Promise((r) => setTimeout(r, 1200)); // EmailJS limita a ~1 envio/segundo

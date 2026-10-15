@@ -99,7 +99,10 @@ import {
   listCampaignRecipients,
   createApiKey,
   listApiKeys,
-  revokeApiKey
+  revokeApiKey,
+  updateMessageFields,
+  listPhonesByLabels,
+  getMessage as getMessageById
 } from "../config/db.js";
 import { runGraph } from "../bot/flowRunner.js";
 import {
@@ -114,11 +117,15 @@ import {
   requestWhatsAppPairingCode,
   importWhatsAppContacts,
   resolveWhatsAppNumber,
-  fetchWhatsAppAvatar
+  fetchWhatsAppAvatar,
+  deleteWhatsAppMessage,
+  sendWhatsAppMediaUrl,
+  getWhatsAppStatus as waStatus
 } from "../whatsapp/baileysClient.js";
+import { toJpeg, toWebp } from "../imageTools.js";
 import { sendMetaMessage } from "../meta/metaClient.js";
 import { CSAT_PROMPT_TEXT } from "../bot/engine.js";
-import { sendTextToConversation } from "../messaging.js";
+import { sendTextToConversation, sendSpecialToConversation, baileysQuoted } from "../messaging.js";
 import { requireAuth, requireOwner } from "../middleware/auth.js";
 import { uploadMedia, uploadAvatar } from "../storage.js";
 import { convertToOggOpus } from "../audio.js";
@@ -358,11 +365,12 @@ router.get("/channels", async (req, res) => {
 });
 
 router.post("/channels", requireOwner, async (req, res) => {
-  const { platform, name, departmentId } = req.body;
+  const { platform, name, departmentId, flowId } = req.body;
   if (!platform || !["whatsapp", "messenger", "instagram"].includes(platform)) {
     return res.status(400).json({ error: "platform inválida" });
   }
-  const channel = await createChannel({ accountId: req.accountId, platform, name, departmentId });
+  let channel = await createChannel({ accountId: req.accountId, platform, name, departmentId });
+  if (flowId) channel = (await updateChannel(req.accountId, channel.id, { flowId }).catch(() => null)) || channel;
 
   if (platform === "whatsapp") {
     startWhatsAppForChannel(channel.id, req.accountId).catch((err) => {
@@ -374,8 +382,12 @@ router.post("/channels", requireOwner, async (req, res) => {
 });
 
 router.post("/channels/:id", requireOwner, async (req, res) => {
-  const { name, departmentId } = req.body;
-  res.json(await updateChannel(req.accountId, req.params.id, { name, departmentId }));
+  const { name, departmentId, flowId } = req.body;
+  try {
+    res.json(await updateChannel(req.accountId, req.params.id, { name, departmentId, flowId }));
+  } catch (err) {
+    res.status(400).json({ error: /flow_id/.test(err.message) ? "Rode a migration 016 no Supabase para escolher o fluxo do canal." : err.message });
+  }
 });
 
 router.delete("/channels/:id", requireOwner, async (req, res) => {
@@ -691,6 +703,9 @@ router.post("/campaigns", requireOwner, async (req, res) => {
         all.filter((c) => b.allContacts || ids.has(c.id)).map((c) => ({ phone: c.phone, name: c.name || c.pushName }))
       );
     }
+    if (Array.isArray(b.labelIds) && b.labelIds.length) {
+      recipients = recipients.concat(await listPhonesByLabels(req.accountId, b.labelIds));
+    }
     if (recipients.length > 5000) return res.status(400).json({ error: "Máximo de 5000 destinatários por campanha." });
     res.status(201).json(await createCampaign(req.accountId, req.userId, b, recipients));
   } catch (err) {
@@ -867,13 +882,95 @@ router.post("/conversations/:id/send", async (req, res) => {
   try {
     message = await sendTextToConversation(req.accountId, conversation, text, {
       senderName: req.userName,
-      sign: req.body?.sign !== false
+      sign: req.body?.sign !== false,
+      quotedId: req.body?.quotedId || null
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 
   res.json(message);
+});
+
+// Contato (vCard) e localização
+router.post("/conversations/:id/send-special", async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!(await assertConversationAccess(req, res, conversation))) return;
+  try {
+    res.json(await sendSpecialToConversation(req.accountId, conversation, req.body || {}, { senderName: req.userName }));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Status do WhatsApp do canal desta conversa (bloqueia o campo de mensagem quando cai)
+router.get("/conversations/:id/channel-status", async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!conversation) return res.status(404).json({ error: "Conversa não encontrada" });
+  if (conversation.platform !== "whatsapp") return res.json({ status: "connected" });
+  const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
+  if (!channelId) return res.json({ status: "disconnected", channelId: null });
+  res.json({ status: waStatus(channelId).status, channelId });
+});
+
+// Apagar mensagem enviada (para todos no WhatsApp)
+router.post("/messages/:id/delete", async (req, res) => {
+  const message = await getMessageById(req.accountId, req.params.id);
+  if (!message) return res.status(404).json({ error: "Mensagem não encontrada." });
+  const conversation = await getConversation(req.accountId, message.conversationId);
+  if (!(await assertConversationAccess(req, res, conversation))) return;
+  if (message.direction !== "out") return res.status(400).json({ error: "Só dá para apagar mensagens enviadas pela empresa." });
+  if (message.deletedAt) return res.json(message);
+  if (Date.now() - new Date(message.timestamp).getTime() > 2 * 24 * 3600 * 1000) {
+    return res.status(400).json({ error: "O WhatsApp só deixa apagar para todos até 2 dias depois do envio." });
+  }
+  try {
+    if (conversation.platform === "whatsapp" && message.whatsappMessageId) {
+      const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
+      await deleteWhatsAppMessage(channelId, conversation.externalId, { id: message.whatsappMessageId, fromMe: true });
+    }
+    res.json(await updateMessageFields(req.accountId, message.id, { deleted_at: new Date().toISOString(), deleted_by: req.userName || "atendente" }));
+  } catch (err) {
+    res.status(400).json({ error: /deleted_at/.test(err.message) ? "Rode a migration 016 no Supabase." : err.message });
+  }
+});
+
+// Encaminhar para outras conversas
+router.post("/messages/:id/forward", async (req, res) => {
+  const message = await getMessageById(req.accountId, req.params.id);
+  if (!message) return res.status(404).json({ error: "Mensagem não encontrada." });
+  const source = await getConversation(req.accountId, message.conversationId);
+  if (!(await assertConversationAccess(req, res, source))) return;
+  const ids = (Array.isArray(req.body?.conversationIds) ? req.body.conversationIds : []).slice(0, 20);
+  if (!ids.length) return res.status(400).json({ error: "Escolha pelo menos uma conversa." });
+  const results = [];
+  for (const id of ids) {
+    try {
+      const target = await getConversation(req.accountId, id);
+      if (!target) throw new Error("Conversa não encontrada");
+      if (message.extra?.type) {
+        await sendSpecialToConversation(req.accountId, target, message.extra, { senderName: req.userName });
+      } else if (message.mediaUrl) {
+        const channelId = target.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
+        const waId = await sendWhatsAppMediaUrl(channelId, target.externalId, {
+          url: message.mediaUrl,
+          mediaType: message.mediaType === "audio" ? "document" : message.mediaType,
+          caption: message.text || undefined
+        });
+        await addMessage({
+          accountId: req.accountId, conversationId: target.id, direction: "out", author: "operator",
+          text: message.text || "", mediaUrl: message.mediaUrl, mediaType: message.mediaType,
+          whatsappMessageId: waId, senderName: req.userName, status: "sent", forwarded: true
+        });
+      } else {
+        await sendTextToConversation(req.accountId, target, message.text, { senderName: req.userName, sign: false, forwarded: true });
+      }
+      results.push({ id, ok: true });
+    } catch (err) {
+      results.push({ id, ok: false, error: err.message });
+    }
+  }
+  res.json({ results });
 });
 
 // Envio de anexo (imagem, vídeo ou documento) — só WhatsApp por enquanto.
@@ -899,20 +996,30 @@ router.post("/conversations/:id/send-media", upload.single("file"), async (req, 
     const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
     if (!channelId) return res.status(400).json({ error: "Nenhum dispositivo de WhatsApp conectado." });
 
+    // Imagem: JPEG comprimido para o WhatsApp e WebP leve para o painel.
+    let waBuffer = req.file.buffer;
+    let store = { buffer: req.file.buffer, extension, contentType: req.file.mimetype };
+    if (mediaType === "image" && !/gif/.test(req.file.mimetype)) {
+      waBuffer = (await toJpeg(req.file.buffer)) || req.file.buffer;
+      const webp = await toWebp(req.file.buffer);
+      if (webp) store = { buffer: webp, extension: "webp", contentType: "image/webp" };
+    }
+    let quoted = null;
+    if (req.body.quotedId) {
+      const q = await getMessageById(req.accountId, req.body.quotedId).catch(() => null);
+      if (q?.conversationId === conversation.id) quoted = baileysQuoted(conversation, q);
+    }
+
     const whatsappMessageId = await sendWhatsAppMedia(channelId, conversation.externalId, {
-      buffer: req.file.buffer,
+      buffer: waBuffer,
       mediaType,
       mimetype: req.file.mimetype,
       fileName: req.file.originalname,
-      caption: req.body.caption || undefined
+      caption: req.body.caption || undefined,
+      quoted
     });
 
-    const mediaUrl = await uploadMedia({
-      accountId: req.accountId,
-      buffer: req.file.buffer,
-      extension,
-      contentType: req.file.mimetype
-    });
+    const mediaUrl = await uploadMedia({ accountId: req.accountId, ...store });
 
     const message = await addMessage({
       accountId: req.accountId,
@@ -923,7 +1030,8 @@ router.post("/conversations/:id/send-media", upload.single("file"), async (req, 
       mediaUrl,
       mediaType,
       whatsappMessageId,
-      senderName: req.userName
+      senderName: req.userName,
+      status: "sent"
     });
 
     await updateConversation(req.accountId, conversation.id, { mode: "human" });
