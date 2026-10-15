@@ -10,6 +10,8 @@ import { startScheduledMessagesDispatcher } from "./scheduler.js";
 import { startCampaignDispatcher } from "./campaignRunner.js";
 import publicRoutes from "./routes/public.js";
 import { autoMigrateIfNeeded } from "./migrateSupabase.js";
+import { startBillingScheduler, markInvoicePaid } from "./billing.js";
+import { supabase as db } from "./config/db.js";
 import { supabase } from "./config/db.js";
 import { sendEmail, emailConfigured } from "./email.js";
 
@@ -24,6 +26,22 @@ const app = express();
 app.set("trust proxy", 1);
 
 // API aberta: aceita chamadas de qualquer site (protegida pela chave X-API-Key)
+// Webhook do Asaas (pagamento confirmado → fatura paga e empresa liberada)
+app.post("/webhook/asaas", express.json(), async (req, res) => {
+  const token = req.headers["asaas-access-token"];
+  if (process.env.ASAAS_WEBHOOK_TOKEN && token !== process.env.ASAAS_WEBHOOK_TOKEN) return res.sendStatus(401);
+  res.sendStatus(200);
+  const { event, payment } = req.body || {};
+  if (!payment?.id || !["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"].includes(event)) return;
+  try {
+    let { data: inv } = await db.from("invoices").select("id").eq("asaas_payment_id", payment.id).maybeSingle();
+    if (!inv && payment.externalReference) ({ data: inv } = await db.from("invoices").select("id").eq("id", payment.externalReference).maybeSingle());
+    if (inv) await markInvoicePaid(inv.id, { method: "pix" });
+  } catch (err) {
+    console.error("[Asaas webhook]", err.message);
+  }
+});
+
 // Planos (para o site da Helora) — público, sem chave
 app.get("/public/plans", cors(), async (req, res) => {
   try {
@@ -94,6 +112,9 @@ app.listen(PORT, "0.0.0.0", () => {
 startAllChannels().catch((err) => {
   console.error("[WhatsApp] Erro ao iniciar dispositivos:", err);
 });
+
+// Cobrança automática das mensalidades (PIX/Asaas + e-mails + bloqueio)
+startBillingScheduler();
 
 // Migração de banco (só roda se OLD_SUPABASE_* estiver configurado e o banco atual vazio)
 autoMigrateIfNeeded().catch((err) => console.error("[Migração]", err.message));
