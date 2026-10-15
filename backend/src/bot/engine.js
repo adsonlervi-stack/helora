@@ -1,5 +1,8 @@
-import { listAutoReplies, updateConversation, addCsatResponse, getBotFlow } from "../config/db.js";
+import { listAutoReplies, updateConversation, addCsatResponse, getBotFlow, getActiveFlow } from "../config/db.js";
 import { runFlow } from "./flowEngine.js";
+import { runActiveFlow } from "./flowRunner.js";
+
+const RESTART_AFTER_MS = 60 * 60 * 1000; // fluxo terminou há mais de 1h → começa de novo
 
 const MENU_TEXT =
   "Olá! 👋 Escolha uma opção:\n" +
@@ -35,7 +38,7 @@ function normalize(text = "") {
  * @param {string} rawText - texto recebido do usuário
  * @returns {Promise<string|null>}
  */
-export async function handleIncoming(accountId, conversation, rawText) {
+export async function handleIncoming(accountId, conversation, rawText, send) {
   // A pesquisa de satisfação tem prioridade sobre tudo — mesmo que a
   // conversa esteja em modo "Atendente", ainda queremos capturar a nota
   // que o cliente está respondendo.
@@ -49,12 +52,36 @@ export async function handleIncoming(accountId, conversation, rawText) {
     return CSAT_INVALID_TEXT;
   }
 
+  // Conversa resolvida que recebeu mensagem nova = novo atendimento:
+  // reabre, volta pro bot e reinicia o fluxo.
+  if (conversation.status === "resolved") {
+    const reset = { status: "open", mode: "bot", assignedAgentId: null, botNodeId: null, flowVars: {} };
+    await updateConversation(accountId, conversation.id, reset).catch(() => {});
+    Object.assign(conversation, reset, { isNew: true });
+  }
+
   if (conversation.mode === "human") {
     // Um atendente humano assumiu a conversa, o bot fica em silêncio.
     return null;
   }
 
   const text = normalize(rawText);
+
+  // ---------- Construtor de fluxos (canvas) — tem prioridade quando há um fluxo ativo ----------
+  const activeFlow = await getActiveFlow(accountId);
+  if (activeFlow) {
+    const vars = conversation.flowVars || {};
+    if (vars.__ended && !conversation.botNodeId) {
+      const endedAt = vars.__endedAt ? new Date(vars.__endedAt).getTime() : 0;
+      if (Date.now() - endedAt < RESTART_AFTER_MS) return null; // acabou de terminar: não repete o menu
+      conversation.flowVars = {};
+    }
+    const collected = [];
+    const sender = send || (async (t) => collected.push(t));
+    await runActiveFlow({ accountId, conversation, flow: activeFlow, text: rawText, send: sender });
+    return send ? null : collected.join("\n\n") || null;
+  }
+
   const flow = await getBotFlow(accountId);
 
   if (flow) {
