@@ -19,10 +19,10 @@ import {
 
 export const NAV_ITEMS = [
   { key: "home", label: "Início", icon: Home },
+  { key: "conversations", label: "Conversas", icon: MessageCircle },
   { key: "overview", label: "Painel", icon: LayoutDashboard },
   { key: "deals", label: "Pipeline", icon: KanbanSquare },
   { key: "agents", label: "Fluxos", icon: Workflow },
-  { key: "conversations", label: "Conversas", icon: MessageCircle },
   { key: "contacts", label: "Contatos", icon: Contact },
   { key: "campaigns", label: "Campanhas", icon: Megaphone },
   { key: "channels", label: "Canais", icon: Smartphone },
@@ -63,3 +63,6 @@ export const SECTION_TITLES = {
   g_announcements: "Comunicados",
   g_users: "Usuários"
 };
+
+// No celular o Helora funciona como app: só Conversas e Pipeline.
+export const MOBILE_NAV_KEYS = ["conversations", "deals"];

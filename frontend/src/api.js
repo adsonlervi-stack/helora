@@ -126,8 +126,8 @@ export const removeLabel = (id) => api.delete(`/labels/${id}`);
 
 // ---- Respostas prontas do atendente ----
 export const getCannedResponses = () => api.get("/canned-responses").then((r) => r.data);
-export const createCannedResponseApi = (shortCode, content) =>
-  api.post("/canned-responses", { shortCode, content }).then((r) => r.data);
+export const createCannedResponseApi = (shortCode, content, personal = false) =>
+  api.post("/canned-responses", { shortCode, content, personal }).then((r) => r.data);
 export const removeCannedResponse = (id) => api.delete(`/canned-responses/${id}`);
 
 // ---- Estatísticas ----
@@ -256,3 +256,21 @@ export const addAdminCredits = (accountId, amount, note) => api.post(`/admin/cre
 
 // ---- Recuperar senha (público) ----
 export const forgotPasswordApi = (email) => axios.post(`${API_BASE}/auth/forgot`, { email }).then((r) => r.data);
+
+// ---- v3 ----
+export const updateMyProfileApi = (name) => api.patch("/profile", { name }).then((r) => r.data);
+export const changeMyPasswordApi = (password) => api.post("/profile/password", { password });
+export const getAccountSettingsApi = () => api.get("/account-settings").then((r) => r.data);
+export const updateAccountSettingsApi = (patch) => api.patch("/account-settings", patch).then((r) => r.data);
+export const sendTypingApi = (id, typing) => api.post(`/conversations/${id}/typing`, { typing }).catch(() => {});
+export const getPresenceApi = (id) => api.get(`/conversations/${id}/presence`).then((r) => r.data);
+export const getStickersApi = () => api.get("/stickers").then((r) => r.data);
+export const sendStickerApi = (id, { url, file }) => {
+  if (file) {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post(`/conversations/${id}/send-sticker`, form).then((r) => r.data);
+  }
+  return api.post(`/conversations/${id}/send-sticker`, { url }).then((r) => r.data);
+};
+export const acceptSupportApi = (id) => api.post(`/admin/support/${id}/accept`);

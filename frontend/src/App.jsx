@@ -21,13 +21,23 @@ import SupportChat from "./components/SupportChat.jsx";
 import { showNotification } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
-import { NAV_ITEMS, ADMIN_NAV_ITEM, GESTAO_NAV_ITEMS } from "./navConfig.js";
+import { NAV_ITEMS, ADMIN_NAV_ITEM, GESTAO_NAV_ITEMS, MOBILE_NAV_KEYS } from "./navConfig.js";
+import ProfileModal from "./components/ProfileModal.jsx";
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = ainda não sabemos
   const [profile, setProfile] = useState(null);
 
   const [section, setSection] = useState("home");
+  const [showProfile, setShowProfile] = useState(false);
+  // Celular = modo app (só Conversas e Pipeline)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 760px)");
+    const on = () => setIsMobile(mq.matches);
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, []);
   const [whatsappStatus, setWhatsappStatus] = useState("disconnected");
   const [qr, setQr] = useState(null);
   const [whatsappChannelId, setWhatsappChannelId] = useState(null);
@@ -209,9 +219,12 @@ export default function App() {
   // Super admin fora de uma empresa = Painel Helora (só gestão).
   const isHeloraPanel = profile.isSuperAdmin && !profile.acting;
   const navItems = isHeloraPanel ? GESTAO_NAV_ITEMS : NAV_ITEMS;
-  const activeSection = isHeloraPanel
+  const mobileApp = isMobile && !isHeloraPanel;
+  const mobileItems = mobileApp ? NAV_ITEMS.filter((i) => MOBILE_NAV_KEYS.includes(i.key)) : navItems;
+  let activeSection = isHeloraPanel
     ? (section.startsWith("g_") ? section : "g_dashboard")
     : section.startsWith("g_") || section === "admin" ? "home" : section;
+  if (mobileApp && !MOBILE_NAV_KEYS.includes(activeSection)) activeSection = "conversations";
   const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
   const canEditFooter = profile.role === "owner" || profile.isSuperAdmin;
   const handleAvatarUpdated = (avatarUrl) => setProfile((p) => ({ ...p, avatarUrl }));
@@ -226,6 +239,7 @@ export default function App() {
         profile={profile}
         onAvatarUpdated={handleAvatarUpdated}
         onHelp={() => (isHeloraPanel ? setSection("g_support") : setShowSupport((v) => !v))}
+        onOpenProfile={() => setShowProfile(true)}
       />
 
       <div className="shell-main">
@@ -280,7 +294,9 @@ export default function App() {
       </div>
 
       <BottomTabBar
-        items={navItems}
+        items={mobileItems}
+        onOpenProfile={() => setShowProfile(true)}
+        onHelp={isHeloraPanel ? undefined : () => setShowSupport(true)}
         section={activeSection}
         onChange={setSection}
         unreadTotal={unreadTotal}
@@ -289,6 +305,15 @@ export default function App() {
       />
 
       {/* Aviso de rodapé ("versão / atualização") escondido: estava poluindo a tela. */}
+
+      {showProfile && (
+        <ProfileModal
+          profile={profile}
+          email={session.user.email}
+          onClose={() => setShowProfile(false)}
+          onSaved={(name) => setProfile((p) => ({ ...p, name }))}
+        />
+      )}
 
       {showSupport && !isHeloraPanel && <SupportChat onClose={() => setShowSupport(false)} />}
 
