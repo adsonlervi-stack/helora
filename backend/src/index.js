@@ -9,6 +9,7 @@ import { startAllChannels } from "./whatsapp/baileysClient.js";
 import { startScheduledMessagesDispatcher } from "./scheduler.js";
 import { startCampaignDispatcher } from "./campaignRunner.js";
 import publicRoutes from "./routes/public.js";
+import { autoMigrateIfNeeded } from "./migrateSupabase.js";
 import { supabase } from "./config/db.js";
 import { sendEmail, emailConfigured } from "./email.js";
 
@@ -84,6 +85,9 @@ app.listen(PORT, "0.0.0.0", () => {
 startAllChannels().catch((err) => {
   console.error("[WhatsApp] Erro ao iniciar dispositivos:", err);
 });
+
+// Migração de banco (só roda se OLD_SUPABASE_* estiver configurado e o banco atual vazio)
+autoMigrateIfNeeded().catch((err) => console.error("[Migração]", err.message));
 
 // Fica de olho nas mensagens agendadas (Etapa 8) e dispara quando vencem.
 startScheduledMessagesDispatcher();

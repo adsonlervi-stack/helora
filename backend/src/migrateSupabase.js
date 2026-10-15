@@ -4,7 +4,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 const TABLES = [
-  "accounts", "profiles", "departments", "profile_departments", "flows", "channels", "channel_permissions",
+  "plans", "accounts", "profiles", "departments", "profile_departments", "flows", "channels", "channel_permissions",
   "channel_status", "labels", "bot_flows", "conversations", "conversation_labels", "messages", "notes",
   "csat_responses", "auto_replies", "canned_responses", "deals", "deal_activities", "scheduled_messages",
   "announcements", "invoices", "contacts", "support_threads", "support_messages", "flow_events",
@@ -20,15 +20,19 @@ const log = (m) => {
 
 export async function runMigration() {
   if (migrationState.running) throw new Error("Migração já está rodando.");
-  const oldUrl = process.env.SUPABASE_URL;
-  const newUrl = process.env.NEW_SUPABASE_URL;
-  const newKey = process.env.NEW_SUPABASE_SERVICE_ROLE_KEY;
-  if (!newUrl || !newKey) throw new Error("Configure NEW_SUPABASE_URL e NEW_SUPABASE_SERVICE_ROLE_KEY no Railway.");
+  // Dois jeitos: (a) servidor ainda no banco antigo + NEW_* apontando pro novo, ou
+  // (b) servidor já no banco novo + OLD_* apontando pro antigo.
+  const viaOld = !!(process.env.OLD_SUPABASE_URL && process.env.OLD_SUPABASE_SERVICE_ROLE_KEY);
+  const oldUrl = viaOld ? process.env.OLD_SUPABASE_URL : process.env.SUPABASE_URL;
+  const oldKey = viaOld ? process.env.OLD_SUPABASE_SERVICE_ROLE_KEY : process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const newUrl = viaOld ? process.env.SUPABASE_URL : process.env.NEW_SUPABASE_URL;
+  const newKey = viaOld ? process.env.SUPABASE_SERVICE_ROLE_KEY : process.env.NEW_SUPABASE_SERVICE_ROLE_KEY;
+  if (!newUrl || !newKey || !oldUrl || !oldKey) throw new Error("Configure OLD_SUPABASE_URL e OLD_SUPABASE_SERVICE_ROLE_KEY no Railway.");
   if (newUrl.replace(/\/$/, "") === oldUrl.replace(/\/$/, "")) throw new Error("NEW_SUPABASE_URL é igual ao atual.");
   Object.assign(migrationState, { running: true, log: [], done: false, error: null, startedAt: new Date().toISOString() });
 
   const opts = { auth: { persistSession: false, autoRefreshToken: false } };
-  const src = createClient(oldUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, opts);
+  const src = createClient(oldUrl, oldKey, opts);
   const dst = createClient(newUrl, newKey, opts);
   const oldHost = new URL(oldUrl).host;
   const newHost = new URL(newUrl).host;
@@ -115,4 +119,17 @@ export async function runMigration() {
   } finally {
     migrationState.running = false;
   }
+}
+
+/** No boot: se OLD_* estiver configurado e o banco atual estiver vazio, copia tudo sozinho. */
+export async function autoMigrateIfNeeded() {
+  if (!process.env.OLD_SUPABASE_URL || !process.env.OLD_SUPABASE_SERVICE_ROLE_KEY) return;
+  const dst = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { count } = await dst.from("accounts").select("id", { count: "exact", head: true });
+  if (count > 0) return console.log("[Migração] Banco atual já tem dados — cópia automática não roda (use o botão/rota se precisar).");
+  console.log("[Migração] Banco atual vazio e OLD_SUPABASE_* configurado: copiando tudo do banco antigo...");
+  await runMigration().catch((e) => console.error("[Migração]", e.message));
+  // Religa os WhatsApps (as sessões continuam no volume do Railway)
+  const { startAllChannels } = await import("./whatsapp/baileysClient.js");
+  await startAllChannels().catch(() => {});
 }
