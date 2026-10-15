@@ -2,12 +2,28 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2,
   RotateCcw, Users, Check, CheckCheck, Clock, AlertCircle, Forward, Reply, Copy, Trash2, Ban, UserRound, MapPin, X,
-  LocateFixed, FileText, WifiOff
+  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
 import TransferModal from "./TransferModal.jsx";
-import { getCannedResponses, getDepartments, getTeam, getConversationChannelStatus } from "../api.js";
+import {
+  getCannedResponses, getDepartments, getTeam, getConversationChannelStatus, sendTypingApi, getPresenceApi,
+  getStickersApi, sendStickerApi, createScheduledMessageApi, getScheduledMessages, cancelScheduledMessageApi
+} from "../api.js";
+
+// Cor fixa por pessoa no grupo (igual WhatsApp)
+const GROUP_COLORS = ["#e5484d", "#0090ff", "#30a46c", "#f76b15", "#8e4ec6", "#d6409f", "#12a594", "#ad7f58", "#3e63dd", "#e54666"];
+function colorFor(key = "") {
+  let h = 0;
+  for (const ch of String(key)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return GROUP_COLORS[h % GROUP_COLORS.length];
+}
+function fmtPhone(p) {
+  const d = String(p || "").replace(/\D/g, "");
+  if (d.startsWith("55") && d.length >= 12) return `+55 ${d.slice(2, 4)} ${d.slice(4, d.length - 4)}-${d.slice(-4)}`;
+  return d ? `+${d}` : "";
+}
 
 const PLATFORM_LABELS = {
   whatsapp: "WhatsApp",
@@ -41,8 +57,22 @@ function Ticks({ status }) {
   return <Check size={14} className="tick" />;
 }
 
-function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat }) {
+function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat, isGroup }) {
   const deleted = !!message.deletedAt;
+  // Grupo: quem mandou (novo formato em extra.sender; antigo vinha "*Nome:* texto")
+  let groupSender = null;
+  let bodyText = message.text;
+  if (isGroup && message.direction === "in") {
+    if (message.extra?.sender) groupSender = message.extra.sender;
+    else {
+      const m = /^\*([^*\n]{1,60}):\*\s?/.exec(message.text || "");
+      if (m) {
+        groupSender = { name: m[1] };
+        bodyText = message.text.slice(m[0].length);
+      }
+    }
+  }
+  const isSticker = message.mediaType === "sticker";
   const authorLabel =
     message.author === "bot" ? "Bot" : message.author === "operator" ? message.senderName || "Atendente" : null;
   const extra = message.extra;
@@ -51,7 +81,7 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
   return (
     <div id={`msg-${message.id}`} className={`bubble-row ${message.direction}`}>
       <div
-        className={`bubble ${message.direction} ${deleted ? "deleted" : ""} ${menuOpen ? "menu-open" : ""}`}
+        className={`bubble ${message.direction} ${deleted ? "deleted" : ""} ${menuOpen ? "menu-open" : ""} ${isSticker && !deleted ? "sticker" : ""}`}
         onClick={(e) => {
           if (pending || deleted || e.target.closest("a,button,audio,video")) return;
           onToggleMenu(message.id);
@@ -62,6 +92,12 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
           onToggleMenu(message.id);
         }}
       >
+        {groupSender && (
+          <div className="bubble-sender" style={{ color: colorFor(groupSender.id || groupSender.phone || groupSender.name) }}>
+            <span className="bubble-sender-name">{groupSender.name || fmtPhone(groupSender.phone) || "Participante"}</span>
+            {groupSender.name && groupSender.phone && <span className="bubble-sender-phone">{fmtPhone(groupSender.phone)}</span>}
+          </div>
+        )}
         {message.forwarded && !deleted && <div className="bubble-forwarded"><Forward size={11} /> Encaminhada</div>}
 
         {message.quotedText && !deleted && (
@@ -82,6 +118,7 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
             {message.mediaUrl && message.mediaType === "image" && (
               <a href={message.mediaUrl} target="_blank" rel="noreferrer"><img src={message.mediaUrl} alt="Anexo" className="bubble-media-image" loading="lazy" /></a>
             )}
+            {message.mediaUrl && isSticker && <img src={message.mediaUrl} alt="Figurinha" className="bubble-sticker" loading="lazy" />}
             {message.mediaUrl && message.mediaType === "video" && <video src={message.mediaUrl} controls className="bubble-media-video" />}
             {message.mediaUrl && message.mediaType === "audio" && <audio src={message.mediaUrl} controls className="bubble-media-audio" />}
             {message.mediaUrl && message.mediaType === "document" && (
@@ -114,7 +151,7 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
               </a>
             )}
 
-            {message.text && <div className="bubble-text"><WaText text={message.text} /></div>}
+            {bodyText && <div className="bubble-text"><WaText text={bodyText} /></div>}
           </>
         )}
 
@@ -222,6 +259,80 @@ function ForwardModal({ message, conversations, onClose, onSend }) {
   );
 }
 
+function ScheduleModal({ conversation, initialText, onClose }) {
+  const pad = (n) => String(n).padStart(2, "0");
+  const d = new Date(Date.now() + 60 * 60 * 1000);
+  const [text, setText] = useState(initialText || "");
+  const [when, setWhen] = useState(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+  const [list, setList] = useState([]);
+  const [err, setErr] = useState(null);
+  const load = () =>
+    getScheduledMessages()
+      .then((all) => setList(all.filter((m) => m.conversationId === conversation.id && m.status === "pending")))
+      .catch(() => {});
+  useEffect(() => {
+    load();
+  }, []);
+  const save = async (e) => {
+    e.preventDefault();
+    try {
+      await createScheduledMessageApi({ conversationId: conversation.id, text: text.trim(), sendAt: new Date(when).toISOString() });
+      setText("");
+      setErr(null);
+      load();
+    } catch (e2) {
+      setErr(e2.response?.data?.error || e2.message);
+    }
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="modal lg-modal" onClick={(e) => e.stopPropagation()} onSubmit={save}>
+        <div className="modal-header"><h3>Agendar mensagem</h3><button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button></div>
+        <p className="cv-muted" style={{ margin: 0 }}>Para {conversation.name}. Enviada automaticamente no dia e hora escolhidos.</p>
+        <label className="login-field"><span>Mensagem</span><textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} autoFocus /></label>
+        <label className="login-field"><span>Enviar em</span><input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} /></label>
+        {err && <div className="admin-feedback error">{err}</div>}
+        <button className="connect-btn" disabled={!text.trim()}>Agendar</button>
+        {list.length > 0 && (
+          <div className="sched-list">
+            <div className="fe-field-label">Agendadas nesta conversa</div>
+            {list.map((m) => (
+              <div key={m.id} className="sched-item">
+                <span><strong>{new Date(m.sendAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong> · {m.text}</span>
+                <button type="button" className="icon-btn" title="Cancelar" onClick={async () => { await cancelScheduledMessageApi(m.id); load(); }}><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+      </form>
+    </div>
+  );
+}
+
+function StickerPicker({ onPick, onUpload, onClose }) {
+  const [items, setItems] = useState(null);
+  const fileRef = useRef(null);
+  useEffect(() => {
+    getStickersApi().then(setItems).catch(() => setItems([]));
+  }, []);
+  return (
+    <div className="sticker-picker" onMouseLeave={onClose}>
+      <div className="sticker-head">
+        <strong>Figurinhas</strong>
+        <button type="button" className="pill-btn" onClick={() => fileRef.current?.click()}><Upload size={13} /> Criar de uma imagem</button>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onUpload(f); }} />
+      </div>
+      <div className="sticker-grid">
+        {items === null && <span className="cv-muted">Carregando…</span>}
+        {items?.length === 0 && <span className="cv-muted">As figurinhas que chegarem no WhatsApp da empresa aparecem aqui para você reutilizar.</span>}
+        {items?.map((u) => (
+          <button type="button" key={u} onClick={() => onPick(u)}><img src={u} alt="" loading="lazy" /></button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SpecialModal({ kind, onClose, onSend }) {
   const [f, setF] = useState({ name: "", phone: "", lat: "", lng: "", address: "", link: "" });
   const [err, setErr] = useState(null);
@@ -285,6 +396,7 @@ export default function ChatWindow({
   onForwardMessage,
   onRetry,
   onStartChat,
+  onStickerSent,
   conversations = [],
   onSetMode,
   onSetStatus,
@@ -315,6 +427,10 @@ export default function ChatWindow({
   const [special, setSpecial] = useState(null); // "contact" | "location"
   const [attachOpen, setAttachOpen] = useState(false);
   const [chanStatus, setChanStatus] = useState("connected");
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [showStickers, setShowStickers] = useState(false);
+  const [clientTyping, setClientTyping] = useState(null); // null | "typing" | "recording"
+  const typingSentAt = useRef(0);
   // Assinatura (*Nome:* no começo da mensagem) — cada atendente escolhe; fica salvo no navegador.
   const [signOn, setSignOn] = useState(() => {
     try {
@@ -381,6 +497,23 @@ export default function ChatWindow({
     };
   }, [conversation?.id, conversation?.platform]);
 
+  // "Digitando…" do cliente (WhatsApp)
+  useEffect(() => {
+    setClientTyping(null);
+    if (!conversation?.id || conversation.platform !== "whatsapp" || conversation.isGroup) return;
+    let alive = true;
+    const poll = () =>
+      getPresenceApi(conversation.id)
+        .then((p) => alive && setClientTyping(p.typing ? "typing" : p.recording ? "recording" : null))
+        .catch(() => {});
+    poll();
+    const t = setInterval(poll, 3000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [conversation?.id, conversation?.platform, conversation?.isGroup]);
+
   const cannedSuggestions = useMemo(() => {
     if (!text.startsWith("/") || text.length < 1) return [];
     const query = text.slice(1).toLowerCase();
@@ -408,7 +541,31 @@ export default function ChatWindow({
     if (!text.trim() || offline) return;
     onSend(text.trim(), signOn, replyTo ? quotedOf(replyTo) : null);
     setText("");
+    typingSentAt.current = 0;
     setReplyTo(null);
+  };
+
+  const handleTextChange = (v) => {
+    setText(v);
+    if (conversation.platform !== "whatsapp" || conversation.isGroup) return;
+    const now = Date.now();
+    if (v && now - typingSentAt.current > 4000) {
+      typingSentAt.current = now;
+      sendTypingApi(conversation.id, true);
+    } else if (!v && typingSentAt.current) {
+      typingSentAt.current = 0;
+      sendTypingApi(conversation.id, false);
+    }
+  };
+
+  const sendSticker = async (payload) => {
+    setShowStickers(false);
+    try {
+      await sendStickerApi(conversation.id, payload);
+      onStickerSent?.();
+    } catch (e) {
+      alert(e.response?.data?.error || e.message);
+    }
   };
 
   const handleAction = async (action, m, emoji) => {
@@ -476,6 +633,7 @@ export default function ChatWindow({
           <div>
             <div className="chat-header-name">{conversation.name}</div>
             <div className="chat-header-platform">
+              {clientTyping && <span className="header-typing">{clientTyping === "recording" ? "gravando áudio…" : "digitando…"} · </span>}
               {conversation.isGroup && <><Users size={12} style={{ verticalAlign: -2 }} /> Grupo · </>}
               {conversation.platform === "whatsapp" && /@s\.whatsapp\.net$/.test(conversation.externalId || "")
                 ? `+${conversation.externalId.split("@")[0]}`
@@ -559,12 +717,20 @@ export default function ChatWindow({
                 key={m.id}
                 message={m}
                 menuOpen={menuId === m.id}
+                isGroup={conversation.isGroup}
                 onToggleMenu={(id) => setMenuId((cur) => (cur === id ? null : id))}
                 onAction={handleAction}
                 onRetry={onRetry}
                 onStartChat={onStartChat}
               />
             ))}
+            {clientTyping && (
+              <div className="bubble-row in">
+                <div className="bubble in typing-bubble" title={clientTyping === "recording" ? "gravando áudio…" : "digitando…"}>
+                  <span className="typing-dots"><i /><i /><i /></span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="composer-wrap">
@@ -614,6 +780,9 @@ export default function ChatWindow({
                 >
                   <Paperclip size={18} />
                 </button>
+                {showStickers && (
+                  <StickerPicker onClose={() => setShowStickers(false)} onPick={(url) => sendSticker({ url })} onUpload={(file) => sendSticker({ file })} />
+                )}
                 {attachOpen && (
                   <div className="attach-menu" onMouseLeave={() => setAttachOpen(false)}>
                     <button type="button" onClick={() => { setAttachOpen(false); fileInputRef.current?.click(); }}><FileText size={16} /> Foto, vídeo ou arquivo</button>
@@ -621,6 +790,10 @@ export default function ChatWindow({
                       <>
                         <button type="button" onClick={() => { setAttachOpen(false); setSpecial("contact"); }}><UserRound size={16} /> Contato</button>
                         <button type="button" onClick={() => { setAttachOpen(false); setSpecial("location"); }}><MapPin size={16} /> Localização</button>
+                        {!conversation.isGroup || true ? (
+                          <button type="button" onClick={() => { setAttachOpen(false); setShowStickers(true); }}><Sticker size={16} /> Figurinha</button>
+                        ) : null}
+                        <button type="button" onClick={() => { setAttachOpen(false); setShowSchedule(true); }}><CalendarClock size={16} /> Agendar mensagem</button>
                       </>
                     )}
                   </div>
@@ -641,7 +814,7 @@ export default function ChatWindow({
                 placeholder={offline ? "WhatsApp desconectado" : "Mensagem  ·  / para respostas prontas"}
                 value={text}
                 disabled={offline}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => handleTextChange(e.target.value)}
               />
 
               <button
@@ -683,6 +856,7 @@ export default function ChatWindow({
           onSend={onForwardMessage}
         />
       )}
+      {showSchedule && <ScheduleModal conversation={conversation} initialText={text} onClose={() => setShowSchedule(false)} />}
       {special && <SpecialModal kind={special} onClose={() => setSpecial(null)} onSend={onSendSpecial} />}
 
       {showTransfer && (

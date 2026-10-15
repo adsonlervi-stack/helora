@@ -12,6 +12,7 @@ import {
   getSupportMessagesAdmin,
   replySupportAdmin,
   setSupportStatusAdmin,
+  acceptSupportApi,
   getAdminCredits,
   getAdminCreditLedger,
   setAdminMonthlyCredits,
@@ -71,6 +72,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
     planName: account.plan_name || "",
     monthlyPrice: account.monthly_price ?? 0,
     dueDay: account.due_day ?? 10,
+    maxWhatsappChannels: account.max_whatsapp_channels ?? 1,
     status: account.status,
     document: account.document || "",
     contactName: account.contact_name || "",
@@ -103,6 +105,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
           <label className="login-field"><span>Plano</span><input value={f.planName} onChange={set("planName")} placeholder="Ex: Básico, Pro" /></label>
           <label className="login-field"><span>Mensalidade (R$)</span><input value={f.monthlyPrice} onChange={set("monthlyPrice")} inputMode="decimal" /></label>
           <label className="login-field"><span>Dia de vencimento</span><input type="number" min="1" max="28" value={f.dueDay} onChange={set("dueDay")} /></label>
+          <label className="login-field"><span>Números de WhatsApp liberados</span><input type="number" min="0" max="50" value={f.maxWhatsappChannels} onChange={set("maxWhatsappChannels")} /><small className="cv-muted">Messenger e Instagram: 1 de cada.</small></label>
           <label className="login-field">
             <span>Situação</span>
             <select className="deal-stage-select" value={f.status} onChange={set("status")}>
@@ -276,6 +279,7 @@ export function InvoicesTab() {
 
 export function SupportTab() {
   const [threads, setThreads] = useState([]);
+  const [replyError, setReplyError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -302,8 +306,24 @@ export function SupportTab() {
   const reply = async (e) => {
     e.preventDefault();
     if (!text.trim() || !selected) return;
-    await replySupportAdmin(selected.id, text.trim());
+    try {
+      await replySupportAdmin(selected.id, text.trim());
+      setReplyError(null);
+    } catch (err) {
+      return setReplyError(errText(err));
+    }
+    notify(false);
     setText("");
+    loadMessages(selected.id);
+    loadThreads();
+  };
+
+  const { othersTyping, notify } = useTyping(selected?.id, "admin");
+  const current = threads.find((t) => t.id === selected?.id) || selected;
+
+  const accept = async () => {
+    await acceptSupportApi(selected.id);
+    setSelected({ ...selected, status: "open" });
     loadMessages(selected.id);
     loadThreads();
   };
@@ -335,6 +355,7 @@ export function SupportTab() {
             </span>
             {t.unread > 0 && <span className="cv-unread">{t.unread}</span>}
             {t.status === "closed" && <span className="invoice-badge canceled">Fechado</span>}
+            {t.status === "waiting" && <span className="invoice-badge pending">Na fila</span>}
           </button>
         ))}
         {threads.length === 0 && <div className="gestao-muted" style={{ padding: 8 }}>Nenhum chamado ainda.</div>}
@@ -347,19 +368,39 @@ export function SupportTab() {
           <>
             <div className="gestao-row" style={{ justifyContent: "space-between" }}>
               <div className="card-title" style={{ margin: 0 }}>{selected.accountName}</div>
-              <button className="resolve-btn" onClick={toggle}>{selected.status === "open" ? "Fechar chamado" : "Reabrir"}</button>
+              <div className="gestao-row">
+                {current?.status === "waiting" && (
+                  <button className="pill-btn primary" onClick={accept}>Aceitar chamado</button>
+                )}
+                {current?.status !== "waiting" && (
+                  <button className="resolve-btn" onClick={toggle}>{current?.status === "open" ? "Fechar chamado" : "Reabrir"}</button>
+                )}
+              </div>
             </div>
             <div className="support-list" style={{ minHeight: 280 }}>
               {messages.map((m) => (
-                <div key={m.id} className={`support-msg ${m.fromAdmin ? "out" : "in"}`}>
-                  {!m.fromAdmin && <span className="support-author">{m.authorName || "Cliente"}</span>}
-                  <div>{m.text}</div>
+                <div key={m.id} className={`support-msg ${m.fromAdmin ? "out" : "in"} ${m.isBot ? "bot" : ""}`}>
+                  {(!m.fromAdmin || m.isBot) && <span className="support-author">{m.isBot ? "🤖 Helora Bot" : m.authorName || "Cliente"}</span>}
+                  <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
                   <small>{new Date(m.createdAt).toLocaleString("pt-BR")}</small>
                 </div>
               ))}
             </div>
+              {othersTyping && <div className="support-msg in typing-bubble"><span className="typing-dots"><i /><i /><i /></span></div>}
+            {current?.status === "waiting" && (
+              <div className="support-waiting">Este chamado está na fila. Clique em <strong>Aceitar chamado</strong> para conversar com o cliente.</div>
+            )}
+            {replyError && <div className="admin-feedback error">{replyError}</div>}
             <form className="support-composer" onSubmit={reply}>
-              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Responder como Suporte Helora…" />
+              <input
+                value={text}
+                disabled={current?.status === "waiting"}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  notify(!!e.target.value);
+                }}
+                placeholder={current?.status === "waiting" ? "Aceite o chamado para responder" : "Responder como Suporte Helora…"}
+              />
               <button className="composer-send" disabled={!text.trim()}>➤</button>
             </form>
           </>

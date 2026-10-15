@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Megaphone, Plus, Play, Pause, XCircle, Trash2, Coins, X, Search, ArrowLeft, AlertTriangle } from "lucide-react";
-import { getCampaigns, getCampaignApi, createCampaignApi, campaignActionApi, deleteCampaignApi, getCredits, getContacts, getLabels } from "../api.js";
+import { getCampaigns, getCampaignApi, createCampaignApi, campaignActionApi, deleteCampaignApi, getCredits, getContacts, getLabels, getChannels } from "../api.js";
 
 const STATUS = {
   draft: ["Rascunho", "#8e8e93"], scheduled: ["Agendada", "#0a84ff"], running: ["Enviando", "#30d158"],
@@ -33,6 +33,8 @@ function NewCampaign({ balance, onClose, onCreated }) {
   const [pasted, setPasted] = useState("");
   const [showAdv, setShowAdv] = useState(true);
   const [variants, setVariants] = useState(["", ""]);
+  const [channels, setChannels] = useState([]);
+  const [channelId, setChannelId] = useState("");
   const [labels, setLabels] = useState([]);
   const [pickedLabels, setPickedLabels] = useState(new Set());
   const [busy, setBusy] = useState(false);
@@ -42,6 +44,7 @@ function NewCampaign({ balance, onClose, onCreated }) {
   useEffect(() => {
     getContacts("").then(setContacts).catch(() => {});
     getLabels().then(setLabels).catch(() => {});
+    getChannels().then((l) => setChannels(l.filter((c) => c.platform === "whatsapp"))).catch(() => {});
   }, []);
 
   const visible = useMemo(
@@ -70,7 +73,8 @@ function NewCampaign({ balance, onClose, onCreated }) {
         contactIds: source === "contacts" ? [...picked] : [],
         recipients: source === "paste" ? pastedList : [],
         labelIds: source === "labels" ? [...pickedLabels] : [],
-        variants: variants.map((v) => v.trim()).filter(Boolean)
+        variants: variants.map((v) => v.trim()).filter(Boolean),
+        channelId: channelId || null
       };
       const c = await createCampaignApi(body);
       if (start && !f.scheduledAt) await campaignActionApi(c.id, "start");
@@ -165,6 +169,19 @@ function NewCampaign({ balance, onClose, onCreated }) {
           </label>
         )}
 
+        {channels.length > 0 && (
+          <label className="login-field">
+            <span>Número que vai disparar</span>
+            <select className="deal-stage-select" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+              <option value="">Padrão (primeiro número)</option>
+              {channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name || "WhatsApp"}{c.phone ? ` · +${c.phone}` : ""}{c.status !== "connected" ? " (desconectado)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="login-field"><span>Agendar para (opcional)</span><input type="datetime-local" value={f.scheduledAt} onChange={set("scheduledAt")} /></label>
 
         <button className="cv-viewall" onClick={() => setShowAdv((v) => !v)}>{showAdv ? "▾" : "▸"} Intervalo entre mensagens</button>

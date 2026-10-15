@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { MoreHorizontal, LogOut, X, Camera } from "lucide-react";
+import { MoreHorizontal, LogOut, X, Camera, UserRound, HelpCircle } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
 import { uploadAvatar } from "../api.js";
 import Avatar from "./Avatar.jsx";
@@ -13,7 +13,7 @@ function roleLabel(profile) {
 // Barra inferior do mobile: os 3 primeiros itens ficam à mostra, o resto
 // (+ o usuário logado e o Sair) fica atrás do botão "Mais" — igual ao
 // sistema de referência.
-export default function BottomTabBar({ items, section, onChange, unreadTotal, profile, onAvatarUpdated }) {
+export default function BottomTabBar({ items, section, onChange, unreadTotal, profile, onAvatarUpdated, onOpenProfile, onHelp }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
@@ -104,6 +104,16 @@ export default function BottomTabBar({ items, section, onChange, unreadTotal, pr
                 </button>
               ))}
 
+              <button className="more-sheet-item" onClick={() => { setMoreOpen(false); onOpenProfile?.(); }}>
+                <UserRound size={18} strokeWidth={2} />
+                Meu perfil
+              </button>
+              {onHelp && (
+                <button className="more-sheet-item" onClick={() => { setMoreOpen(false); onHelp(); }}>
+                  <HelpCircle size={18} strokeWidth={2} />
+                  Ajuda / Suporte
+                </button>
+              )}
               <button
                 className="more-sheet-item more-sheet-logout"
                 onClick={() => {

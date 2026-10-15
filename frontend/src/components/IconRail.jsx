@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { HelpCircle, LogOut, Camera } from "lucide-react";
+import { HelpCircle, LogOut, Camera, UserRound } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
 import { uploadAvatar } from "../api.js";
 import Avatar from "./Avatar.jsx";
@@ -13,7 +13,7 @@ function roleLabel(profile) {
 // Sidebar principal do painel — ícone + texto, colapsável com duplo clique
 // (como no sistema de referência). No mobile ela some e quem assume a
 // navegação é o BottomTabBar.
-export default function IconRail({ items, section, onChange, unreadTotal, profile, onAvatarUpdated, onHelp }) {
+export default function IconRail({ items, section, onChange, unreadTotal, profile, onAvatarUpdated, onHelp, onOpenProfile }) {
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem("helora_sidebar_collapsed") === "1";
@@ -120,6 +120,10 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
             <button className="nav-sidebar-footer-menu-photo" onClick={handlePickPhoto} disabled={uploading}>
               <Camera size={14} />
               {uploading ? "Enviando foto…" : "Trocar foto de perfil"}
+            </button>
+            <button className="nav-sidebar-footer-menu-photo" onClick={() => { setFooterMenuOpen(false); onOpenProfile?.(); }}>
+              <UserRound size={14} />
+              Meu perfil (nome e senha)
             </button>
             <button className="nav-sidebar-footer-menu-logout" onClick={() => supabase.auth.signOut()}>
               <LogOut size={14} style={{ marginRight: 6 }} />

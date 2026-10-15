@@ -39,10 +39,20 @@ import {
   getApiKeys,
   createApiKeyApi,
   revokeApiKeyApi,
-  API_BASE
+  API_BASE,
+  getAccountSettingsApi,
+  updateAccountSettingsApi
 } from "../api.js";
+import BusinessHoursEditor from "./BusinessHoursEditor.jsx";
 
 const CARDS = [
+  {
+    key: "attendance",
+    label: "Atendimento",
+    desc: "Horário de atendimento e pesquisa de satisfação",
+    icon: Clock3,
+    ownerOnly: true
+  },
   {
     key: "auto",
     label: "Respostas automáticas",
@@ -117,7 +127,8 @@ export default function SettingsPage({ onGoToChannels, canManage = false }) {
       </div>
 
       {tab === "auto" && <AutoRepliesTab />}
-      {tab === "canned" && <CannedResponsesTab />}
+      {tab === "canned" && <CannedResponsesTab canManage={canManage} />}
+      {tab === "attendance" && canManage && <AttendanceTab />}
       {tab === "labels" && <LabelsTab />}
       {tab === "departments" && <DepartmentsTab />}
       {tab === "team" && <TeamTab canManage={canManage} />}
@@ -195,8 +206,50 @@ function AutoRepliesTab() {
   );
 }
 
-function CannedResponsesTab() {
+function AttendanceTab() {
+  const [st, setSt] = useState(null);
+  const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    getAccountSettingsApi().then(setSt).catch((e) => setMsg({ ok: false, text: e.response?.data?.error || e.message }));
+  }, []);
+  const save = async (patch) => {
+    try {
+      setSt(await updateAccountSettingsApi(patch));
+      setMsg({ ok: true, text: "Salvo." });
+      setTimeout(() => setMsg(null), 2000);
+    } catch (e) {
+      setMsg({ ok: false, text: e.response?.data?.error || e.message });
+    }
+  };
+  if (!st) return msg ? <div className="admin-feedback error">{msg.text}</div> : <div className="cv-muted">Carregando…</div>;
+  return (
+    <>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title">Pesquisa de satisfação</div>
+        <div className="card-subtitle">Ao encerrar um atendimento, o cliente recebe "de 1 a 5, como você avalia esse atendimento?".</div>
+        <label className="bh-switch">
+          <input type="checkbox" checked={st.csatEnabled} onChange={(e) => save({ csatEnabled: e.target.checked })} />
+          <span>{st.csatEnabled ? "Ativada" : "Desativada"}</span>
+        </label>
+      </div>
+      <div className="card">
+        <div className="card-title">Horário de atendimento da empresa</div>
+        <div className="card-subtitle">
+          Fora do horário, quem mandar mensagem recebe o aviso automático (uma vez a cada 6h) e o bot não segue o fluxo.
+          Um fluxo pode ter horário próprio (aba Fluxos), que vale no lugar deste.
+        </div>
+        <BusinessHoursEditor value={st.businessHours} onChange={(bh) => setSt({ ...st, businessHours: bh })} />
+        <button className="connect-btn" style={{ marginTop: 12 }} onClick={() => save({ businessHours: st.businessHours })}>Salvar horário</button>
+      </div>
+      {msg && <div className={`admin-feedback ${msg.ok ? "success" : "error"}`} style={{ marginTop: 10 }}>{msg.text}</div>}
+    </>
+  );
+}
+
+function CannedResponsesTab({ canManage }) {
   const [items, setItems] = useState([]);
+  const [personal, setPersonal] = useState(!canManage);
+  const [err, setErr] = useState(null);
   const [shortCode, setShortCode] = useState("");
   const [content, setContent] = useState("");
 
@@ -208,14 +261,23 @@ function CannedResponsesTab() {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!shortCode.trim() || !content.trim()) return;
-    await createCannedResponseApi(shortCode.trim().replace(/^\//, ""), content.trim());
+    try {
+      await createCannedResponseApi(shortCode.trim().replace(/^\//, ""), content.trim(), personal);
+      setErr(null);
+    } catch (e2) {
+      return setErr(e2.response?.data?.error || e2.message);
+    }
     setShortCode("");
     setContent("");
     load();
   };
 
   const handleDelete = async (id) => {
-    await removeCannedResponse(id);
+    try {
+      await removeCannedResponse(id);
+    } catch (e2) {
+      setErr(e2.response?.data?.error || e2.message);
+    }
     load();
   };
 
@@ -242,11 +304,21 @@ function CannedResponsesTab() {
         />
         <button type="submit">Adicionar</button>
       </form>
+      {canManage ? (
+        <label className="bh-switch" style={{ margin: "4px 0 10px" }}>
+          <input type="checkbox" checked={personal} onChange={(e) => setPersonal(e.target.checked)} />
+          <span>Só para mim (desmarcado = toda a equipe vê)</span>
+        </label>
+      ) : (
+        <p className="cv-muted" style={{ margin: "4px 0 10px" }}>As respostas que você cria aqui são só suas.</p>
+      )}
+      {err && <div className="admin-feedback error">{err}</div>}
 
       <div>
         {items.map((r) => (
           <div className="reply-item" key={r.id}>
             <span className="reply-keyword">/{r.shortCode}</span>
+            <span className={`canned-scope ${r.personal ? "me" : ""}`}>{r.personal ? "Só minha" : "Empresa"}</span>
             <span className="reply-response">{r.content}</span>
             <button className="reply-delete" onClick={() => handleDelete(r.id)}>
               <Trash2 size={16} />
@@ -692,6 +764,10 @@ function ApiTab() {
   const [name, setName] = useState("");
   const [created, setCreated] = useState(null);
   const [error, setError] = useState(null);
+  const [channels, setChannels] = useState([]);
+  useEffect(() => {
+    getChannels().then((l) => setChannels(l.filter((c) => c.platform === "whatsapp"))).catch(() => {});
+  }, []);
   const base = API_BASE.replace(/\/$/, "") + "/public/v1";
 
   const load = () => getApiKeys().then(setKeys).catch((e) => setError(e.response?.data?.error || e.message));
@@ -779,6 +855,17 @@ document.getElementById("lead").onsubmit = async (e) => {
           <div key={t} className="api-example">
             <div className="api-example-head"><strong>{t}</strong><button className="pill-btn" onClick={() => copy(code)}><Copy size={13} /> Copiar</button></div>
             <pre>{code}</pre>
+          </div>
+        ))}
+        <div className="fe-field-label" style={{ marginTop: 12 }}>Escolher o número que envia (channelId)</div>
+        <p className="cv-muted" style={{ marginTop: 0 }}>
+          Com mais de um WhatsApp, mande <code>"channelId"</code> em /messages, /leads e /campaigns. Sem ele, usa o primeiro número.
+        </p>
+        {channels.map((c) => (
+          <div key={c.id} className="reply-item">
+            <span className="reply-response"><strong>{c.name || "WhatsApp"}</strong>{c.phone ? ` · +${c.phone}` : ""}</span>
+            <code style={{ fontSize: 12 }}>{c.id}</code>
+            <button className="pill-btn" onClick={() => copy(c.id)}><Copy size={13} /></button>
           </div>
         ))}
         <p className="cv-muted">Etapas aceitas em "stage": novo_lead, contato, negociacao, proposta, fechado, perdido. Respostas de erro: 401 chave inválida, 402 sem créditos, 429 muitas chamadas.</p>

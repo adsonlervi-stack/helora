@@ -268,6 +268,7 @@ export default function ConversationsPage({
         onDeleteMessage={handleDelete}
         onForwardMessage={handleForward}
         onRetry={handleRetry}
+        onStickerSent={() => selectedId && loadMessages(selectedId)}
         onStartChat={(c) => {
           setStartContact(c);
           setShowNew(true);

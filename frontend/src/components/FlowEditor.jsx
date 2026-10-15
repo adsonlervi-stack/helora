@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Save, Play, Plus, Minus, Maximize2, Trash2, Copy, X, RotateCcw, Send } from "lucide-react";
+import { ArrowLeft, Save, Play, Plus, Minus, Maximize2, Trash2, Copy, X, RotateCcw, Send, Clock3 } from "lucide-react";
+import BusinessHoursEditor from "./BusinessHoursEditor.jsx";
 import { getFlowApi, saveFlowApi, setFlowActiveApi, simulateFlowApi, getDepartments, getTeam, getLabels } from "../api.js";
 import {
   TYPES, PALETTE_GROUPS, NODE_W, HEAD_H, BODY_H, PORT_H, PORT_TOP_PAD,
@@ -20,6 +21,7 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
   const [stats, setStats] = useState({});
   const [days, setDays] = useState(7);
   const [dirty, setDirty] = useState(false);
+  const [showHours, setShowHours] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [selected, setSelected] = useState(null); // { kind: 'node'|'edge', id }
@@ -341,6 +343,9 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
           <button className={`pill-btn ${flow.active ? "on" : ""}`} onClick={toggleActive} disabled={!canEdit}>
             <span className={`fe-dot ${flow.active ? "on" : ""}`} /> {flow.active ? "Ativo" : "Inativo"}
           </button>
+          <button className={`pill-btn ${graph.hours?.enabled ? "on" : ""}`} onClick={() => setShowHours(true)} title="Horário de atendimento deste fluxo">
+            <Clock3 size={14} /> Horário
+          </button>
           <button className="pill-btn" onClick={() => setShowSim((v) => !v)}>
             <Play size={14} /> Testar
           </button>
@@ -350,6 +355,24 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
         </div>
       </div>
       {msg && <div className={`admin-feedback ${msg.type} fe-msg`}>{msg.text}</div>}
+      {showHours && (
+        <div className="modal-backdrop" onClick={() => setShowHours(false)}>
+          <div className="modal lg-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><h3>Horário deste fluxo</h3><button className="icon-btn" onClick={() => setShowHours(false)}><X size={16} /></button></div>
+            <p className="cv-muted" style={{ margin: 0 }}>Se ligado, vale no lugar do horário da empresa para os números que usam este fluxo. Depois clique em Salvar.</p>
+            <BusinessHoursEditor
+              value={graph.hours}
+              enableLabel="Horário próprio neste fluxo"
+              onChange={(hours) => {
+                if (!canEdit) return;
+                setGraph((g) => ({ ...g, hours }));
+                setDirty(true);
+              }}
+            />
+            <button className="connect-btn" onClick={() => setShowHours(false)}>Pronto</button>
+          </div>
+        </div>
+      )}
 
       <div className="fe-body">
         {/* Paleta */}
