@@ -18,7 +18,12 @@ import {
   generateMonthlyInvoices,
   createInvoice,
   updateInvoice,
-  getManagementDashboard
+  getManagementDashboard,
+  listSupportThreads,
+  listSupportMessages,
+  addSupportMessage,
+  markSupportRead,
+  setSupportThreadStatus
 } from "../config/db.js";
 import { requireAuth, requireSuperAdmin } from "../middleware/auth.js";
 
@@ -147,6 +152,45 @@ router.patch("/invoices/:id", async (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ---------- Suporte: conversas das empresas com a Helora ----------
+
+router.get("/support", async (req, res) => {
+  try {
+    res.json(await listSupportThreads());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/support/:id", async (req, res) => {
+  await markSupportRead(req.params.id, "admin");
+  res.json(await listSupportMessages(req.params.id));
+});
+
+router.post("/support/:id/messages", async (req, res) => {
+  const text = String(req.body?.text || "").trim();
+  if (!text) return res.status(400).json({ error: "Escreva uma mensagem." });
+  const { data: thread } = await supabase.from("support_threads").select("account_id").eq("id", req.params.id).maybeSingle();
+  if (!thread) return res.status(404).json({ error: "Conversa de suporte não encontrada." });
+  res.status(201).json(
+    await addSupportMessage({
+      accountId: thread.account_id,
+      threadId: req.params.id,
+      userId: req.userId,
+      authorName: "Suporte Helora",
+      fromAdmin: true,
+      text
+    })
+  );
+});
+
+router.patch("/support/:id", async (req, res) => {
+  const { status } = req.body || {};
+  if (!["open", "closed"].includes(status)) return res.status(400).json({ error: "Status inválido." });
+  await setSupportThreadStatus(req.params.id, status);
+  res.sendStatus(204);
 });
 
 // ---------- Comunicados (avisos do super admin pras contas/usuários) ----------

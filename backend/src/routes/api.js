@@ -60,7 +60,19 @@ import {
   countOwners,
   getAuthEmails,
   setUserPassword,
-  deleteAuthUser
+  deleteAuthUser,
+  listContacts,
+  createContact,
+  updateContact,
+  deleteContact,
+  upsertContacts,
+  onlyDigits,
+  findOrCreateConversation,
+  setConversationAvatar,
+  getOpenSupportThread,
+  listSupportMessages,
+  addSupportMessage,
+  markSupportRead
 } from "../config/db.js";
 import {
   getWhatsAppStatus,
@@ -71,7 +83,10 @@ import {
   stopWhatsAppForChannel,
   connectWhatsAppChannel,
   resetWhatsAppChannel,
-  requestWhatsAppPairingCode
+  requestWhatsAppPairingCode,
+  importWhatsAppContacts,
+  resolveWhatsAppNumber,
+  fetchWhatsAppAvatar
 } from "../whatsapp/baileysClient.js";
 import { sendMetaMessage } from "../meta/metaClient.js";
 import { CSAT_PROMPT_TEXT } from "../bot/engine.js";
@@ -404,6 +419,122 @@ router.get("/conversations", async (req, res) => {
   const scope = { role: req.isSuperAdmin ? "owner" : req.role, departmentIds: req.departmentIds, userId: req.userId };
   const conversations = await listConversations(req.accountId, scope);
   res.json(conversations);
+});
+
+// ---------- Contatos ----------
+
+router.get("/contacts", async (req, res) => {
+  try {
+    res.json(await listContacts(req.accountId, req.query.search));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/contacts", async (req, res) => {
+  const phone = onlyDigits(req.body?.phone);
+  if (phone.length < 10) return res.status(400).json({ error: "Telefone inválido. Use DDI + DDD + número." });
+  try {
+    res.status(201).json(await createContact(req.accountId, { ...req.body, phone }));
+  } catch (err) {
+    res.status(400).json({ error: /duplicate|unique/i.test(err.message) ? "Já existe um contato com esse número." : err.message });
+  }
+});
+
+router.patch("/contacts/:id", async (req, res) => {
+  try {
+    res.json(await updateContact(req.accountId, req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/contacts/:id", requireOwner, async (req, res) => {
+  await deleteContact(req.accountId, req.params.id);
+  res.sendStatus(204);
+});
+
+// Importa a agenda do WhatsApp conectado + todo mundo que já conversou.
+router.post("/contacts/import", async (req, res) => {
+  const channelId = await getPrimaryWhatsAppChannel(req.accountId);
+  if (!channelId) return res.status(400).json({ error: "Nenhum WhatsApp cadastrado nesta empresa." });
+  try {
+    const { received } = await importWhatsAppContacts(channelId);
+    const convs = await listConversations(req.accountId, { role: "owner" });
+    const fromConvs = convs
+      .filter((c) => c.platform === "whatsapp" && /@s\.whatsapp\.net$/.test(c.externalId))
+      .map((c) => ({ phone: c.externalId.split("@")[0], pushName: c.name }));
+    const r = await upsertContacts(req.accountId, channelId, fromConvs, "conversa");
+    res.json({ fromWhatsApp: received, fromConversations: r.created });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Inicia (ou reabre) uma conversa de WhatsApp pelo número e já manda a 1ª mensagem.
+router.post("/conversations/start", async (req, res) => {
+  const phone = onlyDigits(req.body?.phone);
+  const text = String(req.body?.text || "").trim();
+  if (phone.length < 10) return res.status(400).json({ error: "Telefone inválido. Use DDI + DDD + número." });
+  if (!text) return res.status(400).json({ error: "Escreva a primeira mensagem." });
+
+  const channelId = await getPrimaryWhatsAppChannel(req.accountId);
+  if (!channelId) return res.status(400).json({ error: "Nenhum WhatsApp cadastrado nesta empresa." });
+
+  try {
+    const jid = await resolveWhatsAppNumber(channelId, phone);
+    const name = req.body?.name?.trim() || phone;
+    let conversation = await findOrCreateConversation({
+      accountId: req.accountId,
+      platform: "whatsapp",
+      externalId: jid,
+      name,
+      channelId
+    });
+    conversation = await updateConversation(req.accountId, conversation.id, {
+      status: "open",
+      mode: "human",
+      assignedAgentId: req.userId,
+      isNew: false
+    });
+    await upsertContacts(req.accountId, channelId, [{ phone, name: req.body?.name?.trim() || null }], "manual");
+    fetchWhatsAppAvatar(channelId, jid).then((url) => url && setConversationAvatar(conversation.id, url));
+    await sendTextToConversation(req.accountId, conversation, text, { senderName: req.userName });
+    res.status(201).json(conversation);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------- Suporte (fala com a Helora) ----------
+
+router.get("/support", async (req, res) => {
+  try {
+    const thread = await getOpenSupportThread(req.accountId);
+    if (!thread) return res.json({ thread: null, messages: [] });
+    await markSupportRead(thread.id, "user");
+    res.json({ thread: { id: thread.id, status: thread.status }, messages: await listSupportMessages(thread.id) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/support/messages", async (req, res) => {
+  const text = String(req.body?.text || "").trim();
+  if (!text) return res.status(400).json({ error: "Escreva uma mensagem." });
+  try {
+    res.status(201).json(
+      await addSupportMessage({
+        accountId: req.accountId,
+        userId: req.userId,
+        authorName: req.userName,
+        fromAdmin: false,
+        text
+      })
+    );
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get("/conversations/:id/messages", async (req, res) => {
