@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, PanelRight, Paperclip, Mic, Square } from "lucide-react";
+import { ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send } from "lucide-react";
+import Avatar from "./Avatar.jsx";
 import ContactPanel from "./ContactPanel.jsx";
 import TicketActions from "./TicketActions.jsx";
 import { getCannedResponses, getDepartments, getTeam } from "../api.js";
@@ -87,6 +88,9 @@ export default function ChatWindow({
   onSetDepartment,
   onAssign,
   onToggleLabel,
+  onTakeOver,
+  onReturnToQueue,
+  currentUserId,
   onBack,
   className = ""
 }) {
@@ -180,16 +184,30 @@ export default function ChatWindow({
           <button className="back-btn" onClick={onBack}>
             <ArrowLeft size={20} />
           </button>
+          <Avatar name={conversation.name} url={conversation.avatarUrl} size={40} />
           <div>
             <div className="chat-header-name">{conversation.name}</div>
             <div className="chat-header-platform">
-              {PLATFORM_LABELS[conversation.platform]}
+              {conversation.platform === "whatsapp" && /@s\.whatsapp\.net$/.test(conversation.externalId || "")
+                ? `+${conversation.externalId.split("@")[0]}`
+                : PLATFORM_LABELS[conversation.platform]}
               {conversation.departmentName ? ` · ${conversation.departmentName}` : ""}
+              {conversation.assignedAgentName ? ` · com ${conversation.assignedAgentName}` : " · na fila"}
             </div>
           </div>
         </div>
 
         <div className="chat-header-right">
+          {conversation.status !== "resolved" && conversation.assignedAgentId !== currentUserId && (
+            <button className="pill-btn primary" onClick={onTakeOver} title="Assumir este atendimento">
+              <Hand size={15} /> Assumir
+            </button>
+          )}
+          {conversation.status !== "resolved" && conversation.assignedAgentId && (
+            <button className="pill-btn" onClick={onReturnToQueue} title="Devolver para a fila">
+              <Undo2 size={15} /> Fila
+            </button>
+          )}
           <TicketActions
             conversation={conversation}
             departments={departments}
@@ -271,7 +289,7 @@ export default function ChatWindow({
 
               <input
                 ref={inputRef}
-                placeholder="Digite uma mensagem, ou / para respostas prontas..."
+                placeholder="Mensagem  ·  / para respostas prontas"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
               />
@@ -285,7 +303,9 @@ export default function ChatWindow({
                 {recording ? <Square size={16} /> : <Mic size={18} />}
               </button>
 
-              <button type="submit">Enviar</button>
+              <button type="submit" className="composer-send" disabled={!text.trim()} title="Enviar">
+                <Send size={17} />
+              </button>
             </form>
           </div>
         </div>

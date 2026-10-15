@@ -13,7 +13,7 @@ function roleLabel(profile) {
 // Sidebar principal do painel — ícone + texto, colapsável com duplo clique
 // (como no sistema de referência). No mobile ela some e quem assume a
 // navegação é o BottomTabBar.
-export default function IconRail({ items, section, onChange, unreadTotal, profile, onAvatarUpdated }) {
+export default function IconRail({ items, section, onChange, unreadTotal, profile, onAvatarUpdated, onHelp }) {
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem("helora_sidebar_collapsed") === "1";
@@ -96,7 +96,7 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
         ))}
       </div>
 
-      <button className="nav-sidebar-item nav-sidebar-help" title="Ajuda">
+      <button className="nav-sidebar-item nav-sidebar-help" title="Falar com o suporte" onClick={onHelp}>
         <HelpCircle size={18} strokeWidth={2} />
         <span>Ajuda</span>
       </button>

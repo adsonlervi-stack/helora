@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 import ChatWindow from "./ChatWindow.jsx";
+import NewConversationModal from "./NewConversationModal.jsx";
 import {
   getConversationMessages,
   sendMessage,
@@ -22,9 +23,18 @@ export default function ConversationsPage({
   whatsappStatus,
   onOpenConnect,
   openConversationId,
-  onOpenConversationHandled
+  onOpenConversationHandled,
+  currentUserId,
+  newConversationContact,
+  onNewConversationHandled
 }) {
   const [selectedId, setSelectedId] = useState(null);
+  const [showNew, setShowNew] = useState(false);
+
+  // Vindo da aba Contatos ("Conversar"): abre a janela já com o contato.
+  useEffect(() => {
+    if (newConversationContact) setShowNew(true);
+  }, [newConversationContact]);
   const [messages, setMessages] = useState([]);
 
   const loadMessages = useCallback((id) => {
@@ -117,6 +127,19 @@ export default function ConversationsPage({
     refreshConversations();
   };
 
+  const handleTakeOver = async () => {
+    if (!selectedId) return;
+    await assignConversation(selectedId, currentUserId);
+    await setConversationMode(selectedId, "human");
+    refreshConversations();
+  };
+
+  const handleReturnToQueue = async () => {
+    if (!selectedId) return;
+    await assignConversation(selectedId, null);
+    refreshConversations();
+  };
+
   const handleAssign = async (agentId) => {
     if (!selectedId) return;
     await assignConversation(selectedId, agentId);
@@ -141,8 +164,8 @@ export default function ConversationsPage({
         conversations={conversations}
         selectedId={selectedId}
         onSelect={handleSelect}
-        whatsappStatus={whatsappStatus}
-        onOpenConnect={onOpenConnect}
+        currentUserId={currentUserId}
+        onNewConversation={() => setShowNew(true)}
         className={selectedId ? "hidden-mobile" : ""}
       />
 
@@ -159,9 +182,28 @@ export default function ConversationsPage({
         onSetDepartment={handleSetDepartment}
         onAssign={handleAssign}
         onToggleLabel={handleToggleLabel}
+        onTakeOver={handleTakeOver}
+        onReturnToQueue={handleReturnToQueue}
+        currentUserId={currentUserId}
         onBack={() => setSelectedId(null)}
         className={selectedId ? "visible-mobile" : ""}
       />
+      {showNew && (
+        <NewConversationModal
+          initialContact={newConversationContact}
+          onClose={() => {
+            setShowNew(false);
+            onNewConversationHandled?.();
+          }}
+          onStarted={(conv) => {
+            setShowNew(false);
+            onNewConversationHandled?.();
+            refreshConversations();
+            setSelectedId(conv.id);
+            loadMessages(conv.id);
+          }}
+        />
+      )}
     </div>
   );
 }

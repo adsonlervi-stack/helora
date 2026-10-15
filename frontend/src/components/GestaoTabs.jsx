@@ -7,7 +7,11 @@ import {
   getInvoices,
   generateInvoicesApi,
   createInvoiceApi,
-  updateInvoiceApi
+  updateInvoiceApi,
+  getSupportThreadsAdmin,
+  getSupportMessagesAdmin,
+  replySupportAdmin,
+  setSupportStatusAdmin
 } from "../api.js";
 
 export const brl = (v) =>
@@ -261,5 +265,102 @@ export function InvoicesTab() {
         </div>
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------- Suporte
+
+export function SupportTab() {
+  const [threads, setThreads] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+  const [error, setError] = useState(null);
+
+  const loadThreads = () => getSupportThreadsAdmin().then(setThreads).catch((e) => setError(errText(e)));
+  const loadMessages = (id) => getSupportMessagesAdmin(id).then(setMessages).catch(() => {});
+
+  useEffect(() => {
+    loadThreads();
+    const t = setInterval(() => {
+      loadThreads();
+      if (selected) loadMessages(selected.id);
+    }, 5000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  const open = (t) => {
+    setSelected(t);
+    loadMessages(t.id);
+  };
+
+  const reply = async (e) => {
+    e.preventDefault();
+    if (!text.trim() || !selected) return;
+    await replySupportAdmin(selected.id, text.trim());
+    setText("");
+    loadMessages(selected.id);
+    loadThreads();
+  };
+
+  const toggle = async () => {
+    const status = selected.status === "open" ? "closed" : "open";
+    await setSupportStatusAdmin(selected.id, status);
+    setSelected({ ...selected, status });
+    loadThreads();
+  };
+
+  if (error)
+    return (
+      <div className="admin-feedback error">
+        {error}
+        {/support/i.test(error) && " — rode o arquivo migration_013_contatos_suporte.sql no Supabase."}
+      </div>
+    );
+
+  return (
+    <div className="support-admin">
+      <div className="card support-admin-list">
+        <div className="card-title">Chamados</div>
+        {threads.map((t) => (
+          <button key={t.id} className={`support-thread ${selected?.id === t.id ? "active" : ""}`} onClick={() => open(t)}>
+            <span>
+              <strong>{t.accountName}</strong>
+              <small>{t.userName || "—"} · {t.subject || "Sem assunto"}</small>
+            </span>
+            {t.unread > 0 && <span className="cv-unread">{t.unread}</span>}
+            {t.status === "closed" && <span className="invoice-badge canceled">Fechado</span>}
+          </button>
+        ))}
+        {threads.length === 0 && <div className="gestao-muted" style={{ padding: 8 }}>Nenhum chamado ainda.</div>}
+      </div>
+
+      <div className="card support-admin-chat">
+        {!selected ? (
+          <div className="gestao-muted">Escolha um chamado à esquerda.</div>
+        ) : (
+          <>
+            <div className="gestao-row" style={{ justifyContent: "space-between" }}>
+              <div className="card-title" style={{ margin: 0 }}>{selected.accountName}</div>
+              <button className="resolve-btn" onClick={toggle}>{selected.status === "open" ? "Fechar chamado" : "Reabrir"}</button>
+            </div>
+            <div className="support-list" style={{ minHeight: 280 }}>
+              {messages.map((m) => (
+                <div key={m.id} className={`support-msg ${m.fromAdmin ? "out" : "in"}`}>
+                  {!m.fromAdmin && <span className="support-author">{m.authorName || "Cliente"}</span>}
+                  <div>{m.text}</div>
+                  <small>{new Date(m.createdAt).toLocaleString("pt-BR")}</small>
+                </div>
+              ))}
+            </div>
+            <form className="support-composer" onSubmit={reply}>
+              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Responder como Suporte Helora…" />
+              <button className="composer-send" disabled={!text.trim()}>➤</button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

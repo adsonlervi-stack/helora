@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Building2, Megaphone, Trash2, LogIn, Briefcase } from "lucide-react";
-import { DashboardTab, InvoicesTab, CommercialEditor, brl } from "./GestaoTabs.jsx";
+import { DashboardTab, InvoicesTab, CommercialEditor, SupportTab, brl } from "./GestaoTabs.jsx";
 import {
   getAdminAccounts,
   createAdminAccount,
@@ -20,6 +20,7 @@ const TABS = [
   { key: "dashboard", label: "Painel" },
   { key: "accounts", label: "Empresas" },
   { key: "invoices", label: "Cobranças" },
+  { key: "support", label: "Suporte" },
   { key: "users", label: "Usuários" },
   { key: "announcements", label: "Comunicados" }
 ];
@@ -451,6 +452,7 @@ export default function AdminPage() {
       {tab === "dashboard" && <DashboardTab />}
       {tab === "accounts" && <AccountsTab />}
       {tab === "invoices" && <InvoicesTab />}
+      {tab === "support" && <SupportTab />}
       {tab === "users" && <UsersTab />}
       {tab === "announcements" && <AnnouncementsTab />}
     </div>

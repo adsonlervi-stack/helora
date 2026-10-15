@@ -1,180 +1,227 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getLabels } from "../api.js";
+import { Search, SquarePen, SlidersHorizontal, X } from "lucide-react";
+import { getLabels, getDepartments } from "../api.js";
 import { priorityMeta } from "./PrioritySelector.jsx";
+import Avatar from "./Avatar.jsx";
 
-const PLATFORM_LABELS = {
-  whatsapp: "WhatsApp",
-  messenger: "Messenger",
-  instagram: "Instagram"
-};
+const PLATFORM_COLORS = { whatsapp: "#25d366", messenger: "#0084ff", instagram: "#e1306c" };
 
-const PLATFORM_COLORS = {
-  whatsapp: "var(--wa)",
-  messenger: "var(--messenger)",
-  instagram: "var(--instagram-2)"
-};
-
-function initials(name = "") {
-  return name.trim().slice(0, 2).toUpperCase();
-}
-
-function formatTime(iso) {
+function formatWhen(iso) {
+  if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
-export default function Sidebar({
-  conversations,
-  selectedId,
-  onSelect,
-  whatsappStatus,
-  onOpenConnect,
-  className = ""
-}) {
+function waitingFor(iso) {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  return h < 24 ? `${h}h ${mins % 60}m` : `${Math.floor(h / 24)}d`;
+}
+
+/**
+ * Filas (inspiradas no fluxo de atendimento de mercado):
+ *  - Meus:       abertas e atribuídas a mim
+ *  - Fila:       abertas, no modo humano, sem ninguém atribuído (esperando alguém assumir)
+ *  - Bot:        abertas, ainda com o bot respondendo
+ *  - Todas:      todas as abertas (gestor)
+ *  - Resolvidas
+ */
+const QUEUES = [
+  { key: "mine", label: "Meus" },
+  { key: "queue", label: "Fila" },
+  { key: "bot", label: "Bot" },
+  { key: "all", label: "Todas" },
+  { key: "resolved", label: "Resolvidas" }
+];
+
+function inQueue(c, q, userId) {
+  const open = c.status !== "resolved";
+  if (q === "resolved") return !open;
+  if (!open) return false;
+  if (q === "mine") return c.assignedAgentId === userId;
+  if (q === "queue") return c.mode === "human" && !c.assignedAgentId;
+  if (q === "bot") return c.mode === "bot" && !c.assignedAgentId;
+  return true;
+}
+
+export default function Sidebar({ conversations, selectedId, onSelect, onNewConversation, currentUserId, className = "" }) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [queue, setQueue] = useState("open"); // 'open' | 'resolved'
-  const [allLabels, setAllLabels] = useState([]);
+  const [queue, setQueue] = useState("queue");
+  const [showFilters, setShowFilters] = useState(false);
+  const [labels, setLabels] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [labelFilter, setLabelFilter] = useState(null);
+  const [deptFilter, setDeptFilter] = useState(null);
 
   useEffect(() => {
-    getLabels().then(setAllLabels).catch(console.error);
+    getLabels().then(setLabels).catch(() => {});
+    getDepartments().then(setDepartments).catch(() => {});
   }, []);
 
-  const openCount = conversations.filter((c) => c.status !== "resolved").length;
-  const resolvedCount = conversations.filter((c) => c.status === "resolved").length;
+  // Começa em "Meus" se eu já tenho conversa; senão na fila.
+  useEffect(() => {
+    if (conversations.some((c) => inQueue(c, "mine", currentUserId))) setQueue((q) => (q === "queue" ? "mine" : q));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations.length > 0]);
+
+  const counts = useMemo(() => {
+    const out = {};
+    QUEUES.forEach((q) => (out[q.key] = conversations.filter((c) => inQueue(c, q.key, currentUserId)).length));
+    return out;
+  }, [conversations, currentUserId]);
 
   const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
     return conversations
-      .filter((c) => (queue === "open" ? c.status !== "resolved" : c.status === "resolved"))
-      .filter((c) => (filter === "all" ? true : c.platform === filter))
+      .filter((c) => inQueue(c, queue, currentUserId))
       .filter((c) => (labelFilter ? (c.labels || []).some((l) => l.id === labelFilter) : true))
-      .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
-  }, [conversations, search, filter, labelFilter, queue]);
+      .filter((c) => (deptFilter ? c.departmentId === deptFilter : true))
+      .filter((c) =>
+        !term
+          ? true
+          : (c.name || "").toLowerCase().includes(term) ||
+            (c.externalId || "").includes(term.replace(/\D/g, "") || "§") ||
+            (c.lastMessagePreview || "").toLowerCase().includes(term)
+      );
+  }, [conversations, search, queue, labelFilter, deptFilter, currentUserId]);
+
+  const activeFilters = (labelFilter ? 1 : 0) + (deptFilter ? 1 : 0);
 
   return (
-    <aside className={`conv-panel ${className}`}>
-      <div className="conv-panel-header">
-        <p className="conv-panel-title">Conversas</p>
-
-        <div className="status-strip">
-          <div className="status-pill">
-            <span
-              className={`status-dot ${whatsappStatus === "connected" ? "online" : ""}`}
-            />
-            WhatsApp
-          </div>
-          <div className="status-pill">
-            <span className="status-dot" />
-            Messenger
-          </div>
-          <div className="status-pill">
-            <span className="status-dot" />
-            Instagram
-          </div>
+    <aside className={`conv-panel lg-panel ${className}`}>
+      <div className="cv-head">
+        <div className="cv-head-row">
+          <h2 className="cv-title">Conversas</h2>
+          <button className="cv-icon-btn primary" title="Nova conversa" onClick={onNewConversation}>
+            <SquarePen size={17} />
+          </button>
         </div>
 
-        <button className="connect-btn" onClick={onOpenConnect}>
-          {whatsappStatus === "connected" ? "WhatsApp conectado ✓" : "Conectar WhatsApp (QR Code)"}
-        </button>
-      </div>
-
-      <div className="queue-tabs">
-        <button
-          className={`queue-tab ${queue === "open" ? "active" : ""}`}
-          onClick={() => setQueue("open")}
-        >
-          Abertas
-          <span className="queue-tab-count">{openCount}</span>
-        </button>
-        <button
-          className={`queue-tab ${queue === "resolved" ? "active" : ""}`}
-          onClick={() => setQueue("resolved")}
-        >
-          Resolvidas
-          <span className="queue-tab-count">{resolvedCount}</span>
-        </button>
-      </div>
-
-      <div className="search-box">
-        <input
-          placeholder="Buscar conversa..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-
-      <div className="filter-tabs">
-        {["all", "whatsapp", "messenger", "instagram"].map((f) => (
+        <div className="cv-search">
+          <Search size={15} />
+          <input placeholder="Buscar nome, número ou mensagem" value={search} onChange={(e) => setSearch(e.target.value)} />
+          {search && (
+            <button onClick={() => setSearch("")} aria-label="Limpar">
+              <X size={14} />
+            </button>
+          )}
           <button
-            key={f}
-            className={`filter-tab ${filter === f ? "active" : ""}`}
-            onClick={() => setFilter(f)}
+            className={`cv-filter-btn ${showFilters || activeFilters ? "on" : ""}`}
+            title="Filtros"
+            onClick={() => setShowFilters((v) => !v)}
           >
-            {f === "all" ? "Todos" : PLATFORM_LABELS[f]}
+            <SlidersHorizontal size={15} />
+            {activeFilters > 0 && <span className="cv-dot-count">{activeFilters}</span>}
           </button>
-        ))}
-      </div>
+        </div>
 
-      {allLabels.length > 0 && (
-        <div className="filter-tabs label-filter-tabs">
-          {allLabels.map((l) => (
-            <button
-              key={l.id}
-              className={`filter-tab label-filter-tab ${labelFilter === l.id ? "active" : ""}`}
-              style={labelFilter === l.id ? { background: l.color, borderColor: l.color } : {}}
-              onClick={() => setLabelFilter((cur) => (cur === l.id ? null : l.id))}
-            >
-              <span className="label-dot" style={{ background: l.color }} />
-              {l.title}
+        <div className="cv-segment" role="tablist">
+          {QUEUES.map((q) => (
+            <button key={q.key} className={queue === q.key ? "active" : ""} onClick={() => setQueue(q.key)}>
+              {q.label}
+              {counts[q.key] > 0 && q.key !== "resolved" && <span className="cv-seg-count">{counts[q.key]}</span>}
             </button>
           ))}
         </div>
-      )}
 
-      <div className="conversation-list">
+        {showFilters && (
+          <div className="cv-filters">
+            {departments.length > 0 && (
+              <div className="cv-chip-row">
+                <span className="cv-chip-label">Setor</span>
+                {departments.map((d) => (
+                  <button
+                    key={d.id}
+                    className={`cv-chip ${deptFilter === d.id ? "active" : ""}`}
+                    onClick={() => setDeptFilter((cur) => (cur === d.id ? null : d.id))}
+                  >
+                    {d.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {labels.length > 0 && (
+              <div className="cv-chip-row">
+                <span className="cv-chip-label">Etiqueta</span>
+                {labels.map((l) => (
+                  <button
+                    key={l.id}
+                    className={`cv-chip ${labelFilter === l.id ? "active" : ""}`}
+                    style={labelFilter === l.id ? { background: l.color, borderColor: l.color, color: "#fff" } : {}}
+                    onClick={() => setLabelFilter((cur) => (cur === l.id ? null : l.id))}
+                  >
+                    <span className="label-dot" style={{ background: l.color }} />
+                    {l.title}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!departments.length && !labels.length && (
+              <div className="cv-muted">Crie setores e etiquetas em Configurações para filtrar aqui.</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="conversation-list cv-list">
         {filtered.map((c) => {
-          const pMeta = priorityMeta(c.priority);
+          const pMeta = c.priority ? priorityMeta(c.priority) : null;
+          const waiting = queue === "queue" && c.mode === "human" && !c.assignedAgentId;
           return (
-            <div
+            <button
               key={c.id}
-              className={`conversation-item ${selectedId === c.id ? "active" : ""}`}
+              className={`cv-item ${selectedId === c.id ? "active" : ""} ${c.unread > 0 ? "unread" : ""} ${waiting ? "waiting" : ""}`}
               onClick={() => onSelect(c.id)}
             >
-              <div className={`avatar ${c.platform}`}>
-                {c.priority && (
-                  <span className="priority-corner-dot" style={{ background: pMeta.color }} />
-                )}
-                {initials(c.name)}
-                <span
-                  className="platform-dot"
-                  style={{ background: PLATFORM_COLORS[c.platform] }}
-                />
+              <div className="cv-avatar">
+                <Avatar name={c.name} url={c.avatarUrl} size={46} />
+                <span className="cv-platform" style={{ background: PLATFORM_COLORS[c.platform] }} />
               </div>
-              <div className="conv-meta">
-                <div className="conv-name">{c.name}</div>
-                <div className="conv-preview">
-                  {c.mode === "human" ? "Atendimento humano" : "Bot ativo"}
+              <div className="cv-body">
+                <div className="cv-row">
+                  <span className="cv-name">{c.name}</span>
+                  <span className="cv-time">{formatWhen(c.lastMessageAt)}</span>
                 </div>
-                {c.labels && c.labels.length > 0 && (
-                  <div className="conv-label-row">
-                    {c.labels.slice(0, 3).map((l) => (
-                      <span key={l.id} className="label-chip-mini" style={{ background: l.color }} />
-                    ))}
-                  </div>
-                )}
+                <div className="cv-row">
+                  <span className="cv-preview">
+                    {c.lastMessagePreview || (c.mode === "bot" ? "Bot em atendimento" : "Atendimento humano")}
+                  </span>
+                  {c.unread > 0 && <span className="cv-unread">{c.unread}</span>}
+                </div>
+                <div className="cv-tags">
+                  {pMeta && (
+                    <span className="cv-tag" style={{ "--tag": pMeta.color }}>
+                      {pMeta.label}
+                    </span>
+                  )}
+                  {c.departmentName && <span className="cv-tag neutral">{c.departmentName}</span>}
+                  {c.assignedAgentName && <span className="cv-tag blue">{c.assignedAgentName}</span>}
+                  {(c.labels || []).slice(0, 2).map((l) => (
+                    <span key={l.id} className="cv-tag" style={{ "--tag": l.color }}>
+                      {l.title}
+                    </span>
+                  ))}
+                  {waiting && <span className="cv-tag warn">⏳ {waitingFor(c.lastMessageAt)}</span>}
+                </div>
               </div>
-              <div className="conv-side">
-                <span className="conv-time">{formatTime(c.lastMessageAt)}</span>
-                {c.unread > 0 && <span className="unread-badge">{c.unread}</span>}
-              </div>
-            </div>
+            </button>
           );
         })}
 
         {filtered.length === 0 && (
-          <div className="conv-empty">
-            {queue === "open" ? "Nenhuma conversa aberta por aqui." : "Nenhuma conversa resolvida ainda."}
+          <div className="cv-empty">
+            {queue === "mine" && "Nenhuma conversa com você agora."}
+            {queue === "queue" && "Fila vazia. Ninguém esperando atendimento. 🎉"}
+            {queue === "bot" && "Nenhuma conversa com o bot no momento."}
+            {queue === "all" && "Nenhuma conversa aberta."}
+            {queue === "resolved" && "Nenhuma conversa resolvida ainda."}
           </div>
         )}
       </div>
