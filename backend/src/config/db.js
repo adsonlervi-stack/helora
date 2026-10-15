@@ -536,6 +536,26 @@ export async function getChannel(accountId, id) {
   return mapChannel(data);
 }
 
+/** Limite de canais: WhatsApp conforme liberado pela Gestão Helora; Messenger e Instagram 1 de cada. */
+export async function checkChannelLimit(accountId, platform) {
+  const { data: rows } = await supabase.from("channels").select("id").eq("account_id", accountId).eq("platform", platform);
+  const used = (rows || []).length;
+  let max = 1;
+  if (platform === "whatsapp") {
+    const acc = await getAccount(accountId);
+    max = acc?.max_whatsapp_channels ?? 1;
+  }
+  if (used >= max) {
+    const label = { whatsapp: "WhatsApp", messenger: "Messenger", instagram: "Instagram" }[platform] || platform;
+    throw new Error(
+      platform === "whatsapp"
+        ? `Seu plano permite ${max} número(s) de WhatsApp e todos já estão em uso. Fale com a Helora para liberar mais.`
+        : `Só é possível ter 1 canal de ${label} por empresa.`
+    );
+  }
+  return { used, max };
+}
+
 export async function createChannel({ accountId, platform, name, departmentId }) {
   const { data, error } = await supabase
     .from("channels")
@@ -979,24 +999,30 @@ export async function setConversationLabels(accountId, conversationId, labelIds)
 
 // ---------- Respostas prontas do atendente (canned responses) ----------
 
-export async function listCannedResponses(accountId) {
+const mapCanned = (r) => ({ id: r.id, shortCode: r.short_code, content: r.content, personal: !!r.owner_id, ownerId: r.owner_id || null });
+
+/** Respostas da empresa + as pessoais do usuário. */
+export async function listCannedResponses(accountId, userId = null) {
   const { data, error } = await supabase
     .from("canned_responses")
     .select("*")
     .eq("account_id", accountId)
     .order("short_code");
   if (error) throw error;
-  return data.map((r) => ({ id: r.id, shortCode: r.short_code, content: r.content }));
+  return data.filter((r) => !r.owner_id || r.owner_id === userId).map(mapCanned);
 }
 
-export async function createCannedResponse({ accountId, shortCode, content }) {
-  const { data, error } = await supabase
-    .from("canned_responses")
-    .insert({ account_id: accountId, short_code: shortCode.toLowerCase(), content })
-    .select()
-    .single();
+export async function createCannedResponse({ accountId, shortCode, content, ownerId = null }) {
+  const row = { account_id: accountId, short_code: shortCode.toLowerCase(), content };
+  if (ownerId) row.owner_id = ownerId;
+  const { data, error } = await supabase.from("canned_responses").insert(row).select().single();
   if (error) throw error;
-  return { id: data.id, shortCode: data.short_code, content: data.content };
+  return mapCanned(data);
+}
+
+export async function getCannedResponse(accountId, id) {
+  const { data } = await supabase.from("canned_responses").select("*").eq("account_id", accountId).eq("id", id).maybeSingle();
+  return data ? mapCanned(data) : null;
 }
 
 export async function deleteCannedResponse(accountId, id) {
@@ -1376,7 +1402,8 @@ const ACCOUNT_COMMERCIAL_FIELDS = {
   contactPhone: "contact_phone",
   contactEmail: "contact_email",
   notes: "notes",
-  soldAt: "sold_at"
+  soldAt: "sold_at",
+  maxWhatsappChannels: "max_whatsapp_channels"
 };
 
 export async function updateAccountCommercial(accountId, body) {
@@ -1386,6 +1413,7 @@ export async function updateAccountCommercial(accountId, body) {
     let v = body[key];
     if (key === "monthlyPrice") v = Number(String(v).replace(",", ".")) || 0;
     if (key === "dueDay") v = Math.min(28, Math.max(1, parseInt(v, 10) || 10));
+    if (key === "maxWhatsappChannels") v = Math.min(50, Math.max(0, parseInt(v, 10) || 0));
     if (typeof v === "string") v = v.trim() || null;
     patch[col] = v;
   }
@@ -1626,7 +1654,41 @@ export async function setConversationAvatar(conversationId, avatarUrl) {
 // ============================================================
 
 function mapSupportMessage(m) {
-  return { id: m.id, text: m.text, fromAdmin: m.from_admin, authorName: m.author_name, createdAt: m.created_at };
+  return { id: m.id, text: m.text, fromAdmin: m.from_admin, isBot: !!m.is_bot, authorName: m.author_name, createdAt: m.created_at };
+}
+
+const SUPPORT_TOPICS = {
+  "1": { subject: "Dúvida de uso", tip: "Muitas dúvidas se resolvem em Configurações (equipe, setores, respostas prontas) e em Fluxos (bot). Já pode ir contando o que precisa que o time lê assim que entrar." },
+  "2": { subject: "WhatsApp / conexão", tip: "Dica rápida: em Canais, clique em Conectar e veja se o status está “Conectado”. Se caiu, use “Gerar novo QR Code” e escaneie de novo pelo celular (Aparelhos conectados)." },
+  "3": { subject: "Financeiro", tip: "Para boletos, créditos de campanha e plano, nossa equipe financeira vai te responder por aqui mesmo." },
+  "4": { subject: "Sugestão", tip: "Adoramos sugestões! Escreva com detalhes o que você gostaria de ver no Helora. 💡" }
+};
+const SUPPORT_MENU = "Para agilizar, me diga o assunto (responda com o número):\n1️⃣ Dúvida de uso\n2️⃣ WhatsApp / conexão\n3️⃣ Financeiro\n4️⃣ Sugestão";
+
+async function insertSupportBot(threadId, accountId, text) {
+  const row = { thread_id: threadId, account_id: accountId, author_name: "Helora Bot", from_admin: true, text, is_bot: true };
+  let { error } = await supabase.from("support_messages").insert(row);
+  if (error && /is_bot/.test(error.message)) {
+    delete row.is_bot;
+    ({ error } = await supabase.from("support_messages").insert(row));
+  }
+}
+
+/** Posição na fila de quem está aguardando (1 = próximo). */
+export async function supportQueuePosition(threadId) {
+  const { data } = await supabase.from("support_threads").select("id, created_at").eq("status", "waiting").order("created_at");
+  const i = (data || []).findIndex((t) => t.id === threadId);
+  return i >= 0 ? i + 1 : null;
+}
+
+export async function acceptSupportThread(threadId, adminName) {
+  let { error } = await supabase
+    .from("support_threads")
+    .update({ status: "open", accepted_by: adminName, accepted_at: new Date().toISOString() })
+    .eq("id", threadId);
+  if (error) throw error;
+  const { data: t } = await supabase.from("support_threads").select("account_id").eq("id", threadId).single();
+  await insertSupportBot(threadId, t.account_id, `✅ ${adminName} da equipe Helora entrou no atendimento. Pode falar! 😊`);
 }
 
 export async function getOpenSupportThread(accountId) {
@@ -1634,7 +1696,7 @@ export async function getOpenSupportThread(accountId) {
     .from("support_threads")
     .select("*")
     .eq("account_id", accountId)
-    .eq("status", "open")
+    .in("status", ["waiting", "open"])
     .order("last_message_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -1654,14 +1716,23 @@ export async function listSupportMessages(threadId) {
 
 export async function addSupportMessage({ accountId, threadId, userId, authorName, fromAdmin, text }) {
   let thread = threadId ? { id: threadId } : await getOpenSupportThread(accountId);
+  let isNewThread = false;
   if (!thread) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("support_threads")
-      .insert({ account_id: accountId, user_id: userId, subject: text.slice(0, 80) })
+      .insert({ account_id: accountId, user_id: userId, subject: text.slice(0, 80), status: "waiting" })
       .select()
       .single();
+    if (error && /check|status/i.test(error.message)) {
+      ({ data, error } = await supabase
+        .from("support_threads")
+        .insert({ account_id: accountId, user_id: userId, subject: text.slice(0, 80) })
+        .select()
+        .single());
+    }
     if (error) throw error;
     thread = data;
+    isNewThread = true;
   }
   const { data: msg, error } = await supabase
     .from("support_messages")
@@ -1675,11 +1746,23 @@ export async function addSupportMessage({ accountId, threadId, userId, authorNam
     .from("support_threads")
     .update({
       last_message_at: msg.created_at,
-      status: "open",
       unread_admin: fromAdmin ? 0 : (t?.unread_admin || 0) + 1,
       unread_user: fromAdmin ? (t?.unread_user || 0) + 1 : 0
     })
     .eq("id", thread.id);
+
+  // Chatbot do suporte: recebe, pergunta o assunto e dá uma dica enquanto ninguém aceita.
+  if (!fromAdmin) {
+    const first = String(authorName || "").split(" ")[0];
+    const { data: th } = await supabase.from("support_threads").select("status, subject").eq("id", thread.id).single();
+    if (isNewThread) {
+      await insertSupportBot(thread.id, accountId, `Olá${first ? `, ${first}` : ""}! 👋 Sou a assistente da Helora. Recebi sua mensagem e já avisei nossa equipe.\n\n${SUPPORT_MENU}`);
+    } else if (th?.status === "waiting" && SUPPORT_TOPICS[text.trim().replace(/\D/g, "")]) {
+      const topic = SUPPORT_TOPICS[text.trim().replace(/\D/g, "")];
+      await supabase.from("support_threads").update({ subject: topic.subject }).eq("id", thread.id);
+      await insertSupportBot(thread.id, accountId, `Anotado: *${topic.subject}*. ${topic.tip}\n\nUm atendente vai aceitar seu chamado em instantes.`);
+    }
+  }
   return { threadId: thread.id, message: mapSupportMessage(msg) };
 }
 
@@ -1701,6 +1784,7 @@ export async function listSupportThreads() {
     userName: t.profiles?.name,
     subject: t.subject,
     status: t.status,
+    acceptedBy: t.accepted_by || null,
     unread: t.unread_admin,
     lastMessageAt: t.last_message_at
   }));
@@ -2056,7 +2140,7 @@ function mapCampaign(r) {
     id: r.id, name: r.name, message: r.message, mediaUrl: r.media_url, mediaType: r.media_type,
     status: r.status, scheduledAt: r.scheduled_at, minDelay: r.min_delay, maxDelay: r.max_delay,
     hourlyLimit: r.hourly_limit, total: r.total, sent: r.sent, failed: r.failed, pauseReason: r.pause_reason,
-    variants: Array.isArray(r.variants) ? r.variants : [], labelIds: r.label_ids || [],
+    variants: Array.isArray(r.variants) ? r.variants : [], labelIds: r.label_ids || [], channelId: r.channel_id || null,
     createdAt: r.created_at, startedAt: r.started_at, finishedAt: r.finished_at
   };
 }
@@ -2094,6 +2178,7 @@ export async function createCampaign(accountId, userId, body, recipients) {
       message: body.message,
       ...(variantsOf(body).length ? { variants: variantsOf(body) } : {}),
       ...(Array.isArray(body.labelIds) && body.labelIds.length ? { label_ids: body.labelIds } : {}),
+      ...(body.channelId ? { channel_id: body.channelId } : {}),
       media_url: body.mediaUrl || null,
       media_type: body.mediaType || null,
       status: body.scheduledAt ? "scheduled" : "draft",
@@ -2287,4 +2372,48 @@ export async function listPhonesByLabels(accountId, labelIds) {
     if (/^\d{10,15}$/.test(phone)) out.push({ phone, name: c.name });
   }
   return out;
+}
+
+
+// ---------- Configurações da empresa: pesquisa de satisfação, horário ----------
+export async function getAccountSettings(accountId) {
+  const acc = await getAccount(accountId);
+  return {
+    csatEnabled: acc?.csat_enabled !== false,
+    businessHours: acc?.business_hours || null,
+    maxWhatsappChannels: acc?.max_whatsapp_channels ?? 1
+  };
+}
+
+export async function updateAccountSettings(accountId, body) {
+  const patch = {};
+  if (body.csatEnabled !== undefined) patch.csat_enabled = !!body.csatEnabled;
+  if (body.businessHours !== undefined) patch.business_hours = body.businessHours || null;
+  if (!Object.keys(patch).length) return getAccountSettings(accountId);
+  const { error } = await supabase.from("accounts").update(patch).eq("id", accountId);
+  if (error) throw error;
+  return getAccountSettings(accountId);
+}
+
+export async function updateMyName(userId, name) {
+  const { error } = await supabase.from("profiles").update({ name }).eq("id", userId);
+  if (error) throw error;
+}
+
+export async function getChannelForAccountById(accountId, channelId) {
+  if (!channelId) return null;
+  const { data } = await supabase.from("channels").select("id, platform").eq("account_id", accountId).eq("id", channelId).maybeSingle();
+  return data;
+}
+
+export async function listStickerUrls(accountId) {
+  const { data } = await supabase
+    .from("messages")
+    .select("media_url")
+    .eq("account_id", accountId)
+    .eq("media_type", "sticker")
+    .not("media_url", "is", null)
+    .order("timestamp", { ascending: false })
+    .limit(400);
+  return [...new Set((data || []).map((r) => r.media_url))].slice(0, 120);
 }
