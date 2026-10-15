@@ -44,6 +44,8 @@ function mapConversation(row) {
     unread: row.unread,
     isNew: row.is_new,
     botNodeId: row.bot_node_id,
+    lastMessagePreview: row.last_message_preview || null,
+    avatarUrl: row.avatar_url || null,
     ...(labels ? { labels } : {})
   };
 }
@@ -751,7 +753,11 @@ export async function addMessage({
 
   if (error) throw error;
 
-  const patch = { last_message_at: msgRow.timestamp };
+  const preview =
+    (text || "").trim().slice(0, 120) ||
+    { image: "📷 Foto", video: "🎥 Vídeo", audio: "🎤 Áudio", document: "📄 Documento" }[mediaType] ||
+    "";
+  const patch = { last_message_at: msgRow.timestamp, last_message_preview: preview };
   if (direction === "in") {
     const { data: conv } = await supabase
       .from("conversations")
@@ -760,7 +766,12 @@ export async function addMessage({
       .maybeSingle();
     patch.unread = (conv?.unread || 0) + 1;
   }
-  await supabase.from("conversations").update(patch).eq("id", conversationId);
+  const { error: convErr } = await supabase.from("conversations").update(patch).eq("id", conversationId);
+  if (convErr && /last_message_preview/.test(convErr.message)) {
+    // Banco ainda sem a migration 013: grava sem a prévia.
+    delete patch.last_message_preview;
+    await supabase.from("conversations").update(patch).eq("id", conversationId);
+  }
 
   return mapMessage(msgRow);
 }
@@ -1405,4 +1416,209 @@ export async function getManagementDashboard() {
     overdue: { count: overdue.length, amount: sum(overdue) },
     receivedThisMonth: { count: paidThisMonth.length, amount: sum(paidThisMonth) }
   };
+}
+
+
+// ============================================================
+// Contatos
+// ============================================================
+
+export const onlyDigits = (v) => String(v || "").replace(/\D/g, "");
+
+function mapContact(r) {
+  return {
+    id: r.id,
+    phone: r.phone,
+    name: r.name,
+    pushName: r.push_name,
+    email: r.email,
+    notes: r.notes,
+    source: r.source,
+    channelId: r.channel_id,
+    createdAt: r.created_at
+  };
+}
+
+export async function listContacts(accountId, search = "") {
+  let q = supabase.from("contacts").select("*").eq("account_id", accountId).order("name", { nullsFirst: false }).limit(2000);
+  const term = String(search || "").trim();
+  if (term) {
+    const digits = onlyDigits(term);
+    const safe = term.replace(/[%,()]/g, " ");
+    q = digits.length >= 3
+      ? q.or(`name.ilike.%${safe}%,push_name.ilike.%${safe}%,phone.ilike.%${digits}%`)
+      : q.or(`name.ilike.%${safe}%,push_name.ilike.%${safe}%`);
+  }
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map(mapContact);
+}
+
+export async function createContact(accountId, { phone, name, email, notes }) {
+  const { data, error } = await supabase
+    .from("contacts")
+    .insert({ account_id: accountId, phone: onlyDigits(phone), name: name?.trim() || null, email: email || null, notes: notes || null, source: "manual" })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapContact(data);
+}
+
+export async function updateContact(accountId, id, { phone, name, email, notes }) {
+  const patch = { updated_at: new Date().toISOString() };
+  if (phone !== undefined) patch.phone = onlyDigits(phone);
+  if (name !== undefined) patch.name = name?.trim() || null;
+  if (email !== undefined) patch.email = email || null;
+  if (notes !== undefined) patch.notes = notes || null;
+  const { data, error } = await supabase.from("contacts").update(patch).eq("account_id", accountId).eq("id", id).select().single();
+  if (error) throw error;
+  return mapContact(data);
+}
+
+export async function deleteContact(accountId, id) {
+  const { error } = await supabase.from("contacts").delete().eq("account_id", accountId).eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Grava/atualiza vários contatos de uma vez sem sobrescrever o nome que a
+ * empresa editou no painel. list: [{ phone, name, pushName }]
+ */
+export async function upsertContacts(accountId, channelId, list, source = "whatsapp") {
+  const clean = new Map();
+  for (const c of list || []) {
+    const phone = onlyDigits(c.phone);
+    if (phone.length < 10 || phone.length > 15) continue;
+    const prev = clean.get(phone) || {};
+    clean.set(phone, { phone, name: c.name || prev.name || null, pushName: c.pushName || prev.pushName || null });
+  }
+  if (!clean.size) return { created: 0, updated: 0 };
+
+  const phones = [...clean.keys()];
+  const existing = new Map();
+  for (let i = 0; i < phones.length; i += 500) {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select("id, phone, name, push_name")
+      .eq("account_id", accountId)
+      .in("phone", phones.slice(i, i + 500));
+    if (error) throw error;
+    data.forEach((r) => existing.set(r.phone, r));
+  }
+
+  const inserts = [];
+  let updated = 0;
+  for (const c of clean.values()) {
+    const ex = existing.get(c.phone);
+    if (!ex) {
+      inserts.push({ account_id: accountId, channel_id: channelId || null, phone: c.phone, name: c.name, push_name: c.pushName, source });
+    } else if ((!ex.name && c.name) || (c.pushName && c.pushName !== ex.push_name)) {
+      const patch = { updated_at: new Date().toISOString() };
+      if (!ex.name && c.name) patch.name = c.name;
+      if (c.pushName) patch.push_name = c.pushName;
+      await supabase.from("contacts").update(patch).eq("id", ex.id);
+      updated++;
+    }
+  }
+  for (let i = 0; i < inserts.length; i += 500) {
+    const { error } = await supabase
+      .from("contacts")
+      .upsert(inserts.slice(i, i + 500), { onConflict: "account_id,phone", ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  return { created: inserts.length, updated };
+}
+
+export async function setConversationAvatar(conversationId, avatarUrl) {
+  await supabase.from("conversations").update({ avatar_url: avatarUrl }).eq("id", conversationId);
+}
+
+// ============================================================
+// Suporte (empresa ↔ Helora)
+// ============================================================
+
+function mapSupportMessage(m) {
+  return { id: m.id, text: m.text, fromAdmin: m.from_admin, authorName: m.author_name, createdAt: m.created_at };
+}
+
+export async function getOpenSupportThread(accountId) {
+  const { data, error } = await supabase
+    .from("support_threads")
+    .select("*")
+    .eq("account_id", accountId)
+    .eq("status", "open")
+    .order("last_message_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function listSupportMessages(threadId) {
+  const { data, error } = await supabase
+    .from("support_messages")
+    .select("*")
+    .eq("thread_id", threadId)
+    .order("created_at");
+  if (error) throw error;
+  return data.map(mapSupportMessage);
+}
+
+export async function addSupportMessage({ accountId, threadId, userId, authorName, fromAdmin, text }) {
+  let thread = threadId ? { id: threadId } : await getOpenSupportThread(accountId);
+  if (!thread) {
+    const { data, error } = await supabase
+      .from("support_threads")
+      .insert({ account_id: accountId, user_id: userId, subject: text.slice(0, 80) })
+      .select()
+      .single();
+    if (error) throw error;
+    thread = data;
+  }
+  const { data: msg, error } = await supabase
+    .from("support_messages")
+    .insert({ thread_id: thread.id, account_id: accountId, author_id: userId, author_name: authorName, from_admin: !!fromAdmin, text })
+    .select()
+    .single();
+  if (error) throw error;
+
+  const { data: t } = await supabase.from("support_threads").select("unread_admin, unread_user").eq("id", thread.id).single();
+  await supabase
+    .from("support_threads")
+    .update({
+      last_message_at: msg.created_at,
+      status: "open",
+      unread_admin: fromAdmin ? 0 : (t?.unread_admin || 0) + 1,
+      unread_user: fromAdmin ? (t?.unread_user || 0) + 1 : 0
+    })
+    .eq("id", thread.id);
+  return { threadId: thread.id, message: mapSupportMessage(msg) };
+}
+
+export async function markSupportRead(threadId, side) {
+  await supabase.from("support_threads").update({ [side === "admin" ? "unread_admin" : "unread_user"]: 0 }).eq("id", threadId);
+}
+
+export async function listSupportThreads() {
+  const { data, error } = await supabase
+    .from("support_threads")
+    .select("*, accounts(name), profiles:user_id(name)")
+    .order("last_message_at", { ascending: false })
+    .limit(300);
+  if (error) throw error;
+  return data.map((t) => ({
+    id: t.id,
+    accountId: t.account_id,
+    accountName: t.accounts?.name,
+    userName: t.profiles?.name,
+    subject: t.subject,
+    status: t.status,
+    unread: t.unread_admin,
+    lastMessageAt: t.last_message_at
+  }));
+}
+
+export async function setSupportThreadStatus(threadId, status) {
+  const { error } = await supabase.from("support_threads").update({ status }).eq("id", threadId);
+  if (error) throw error;
 }
