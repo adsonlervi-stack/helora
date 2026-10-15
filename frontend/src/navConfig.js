@@ -14,7 +14,10 @@ import {
   Receipt,
   Coins,
   LifeBuoy,
-  Users
+  Users,
+  Layers,
+  BarChart3,
+  Wallet
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -25,7 +28,9 @@ export const NAV_ITEMS = [
   { key: "agents", label: "Fluxos", icon: Workflow },
   { key: "contacts", label: "Contatos", icon: Contact },
   { key: "campaigns", label: "Campanhas", icon: Megaphone },
+  { key: "reports", label: "Relatórios", icon: BarChart3 },
   { key: "channels", label: "Canais", icon: Smartphone },
+  { key: "finance", label: "Financeiro", icon: Wallet, ownerOnly: true },
   { key: "settings", label: "Config.", icon: Settings2 }
 ];
 
@@ -34,6 +39,7 @@ export const GESTAO_NAV_ITEMS = [
   { key: "g_dashboard", label: "Painel", icon: LayoutDashboard },
   { key: "g_accounts", label: "Empresas", icon: Building2 },
   { key: "g_invoices", label: "Cobranças", icon: Receipt },
+  { key: "g_plans", label: "Planos", icon: Layers },
   { key: "g_credits", label: "Créditos", icon: Coins },
   { key: "g_support", label: "Suporte", icon: LifeBuoy },
   { key: "g_announcements", label: "Comunicados", icon: Megaphone },
@@ -59,6 +65,9 @@ export const SECTION_TITLES = {
   g_accounts: "Empresas",
   g_invoices: "Cobranças",
   g_credits: "Créditos",
+  g_plans: "Planos",
+  reports: "Relatórios",
+  finance: "Financeiro",
   g_support: "Suporte",
   g_announcements: "Comunicados",
   g_users: "Usuários"

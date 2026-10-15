@@ -50,6 +50,7 @@ export const sendMessage = (id, text, sign = true, quotedId = null) =>
   api.post(`/conversations/${id}/send`, { text, sign, quotedId }).then((r) => r.data);
 export const sendSpecialApi = (id, payload) => api.post(`/conversations/${id}/send-special`, payload).then((r) => r.data);
 export const getConversationChannelStatus = (id) => api.get(`/conversations/${id}/channel-status`).then((r) => r.data);
+export const downloadMediaApi = (messageId) => api.post(`/messages/${messageId}/download`).then((r) => r.data);
 export const deleteMessageApi = (messageId) => api.post(`/messages/${messageId}/delete`).then((r) => r.data);
 export const forwardMessageApi = (messageId, conversationIds) =>
   api.post(`/messages/${messageId}/forward`, { conversationIds }).then((r) => r.data);
@@ -98,8 +99,8 @@ export const setProfileDepartmentsApi = (profileId, departmentIds) =>
 
 // ---- Canais (dispositivos WhatsApp / Messenger / Instagram) ----
 export const getChannels = () => api.get("/channels").then((r) => r.data);
-export const createChannelApi = (platform, name, departmentId, flowId) =>
-  api.post("/channels", { platform, name, departmentId, flowId }).then((r) => r.data);
+export const createChannelApi = (platform, name, departmentId, flowId, extra = {}) =>
+  api.post("/channels", { platform, name, departmentId, flowId, ...extra }).then((r) => r.data);
 export const updateChannelApi = (id, patch) => api.post(`/channels/${id}`, patch).then((r) => r.data);
 export const removeChannel = (id) => api.delete(`/channels/${id}`);
 export const getChannelStatusApi = (id) => api.get(`/channels/${id}/status`).then((r) => r.data);
@@ -203,6 +204,7 @@ export const updateInvoiceApi = (id, patch) => api.patch(`/admin/invoices/${id}`
 
 // ---- Contatos e nova conversa ----
 export const getContacts = (search = "") => api.get("/contacts", { params: { search } }).then((r) => r.data);
+export const getContactsPage = (search = "", page = 1) => api.get("/contacts", { params: { search, page } }).then((r) => r.data);
 export const createContactApi = (data) => api.post("/contacts", data).then((r) => r.data);
 export const updateContactApi = (id, data) => api.patch(`/contacts/${id}`, data).then((r) => r.data);
 export const removeContactApi = (id) => api.delete(`/contacts/${id}`);
@@ -274,3 +276,13 @@ export const sendStickerApi = (id, { url, file }) => {
   return api.post(`/conversations/${id}/send-sticker`, { url }).then((r) => r.data);
 };
 export const acceptSupportApi = (id) => api.post(`/admin/support/${id}/accept`);
+
+// ---- v4 ----
+export const getBillingApi = () => api.get("/billing").then((r) => r.data);
+export const getReportsApi = (params) => api.get("/reports", { params }).then((r) => r.data);
+export const getLegalStatusApi = () => api.get("/legal/status").then((r) => r.data);
+export const acceptLegalApi = (contract) => api.post("/legal/accept", { contract });
+export const getPlansAdmin = () => api.get("/admin/plans").then((r) => r.data);
+export const savePlanAdmin = (id, data) => (id ? api.patch(`/admin/plans/${id}`, data) : api.post("/admin/plans", data)).then((r) => r.data);
+export const deletePlanAdmin = (id) => api.delete(`/admin/plans/${id}`);
+export const setAccountPlanAdmin = (accountId, planId) => api.post(`/admin/accounts/${accountId}/plan`, { planId });

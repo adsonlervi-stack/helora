@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import IconRail from "./components/IconRail.jsx";
 import BottomTabBar from "./components/BottomTabBar.jsx";
 import TopBar from "./components/TopBar.jsx";
@@ -18,11 +18,14 @@ import FlowsPage from "./components/FlowsPage.jsx";
 import ResetPasswordPage from "./components/ResetPasswordPage.jsx";
 import CampaignsPage from "./components/CampaignsPage.jsx";
 import SupportChat from "./components/SupportChat.jsx";
-import { showNotification } from "./notifications.js";
+import { notifyEvent } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
 import { NAV_ITEMS, ADMIN_NAV_ITEM, GESTAO_NAV_ITEMS, MOBILE_NAV_KEYS } from "./navConfig.js";
 import ProfileModal from "./components/ProfileModal.jsx";
+import ReportsPage from "./components/ReportsPage.jsx";
+import FinancePage from "./components/FinancePage.jsx";
+import TermsGate from "./components/TermsGate.jsx";
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = ainda não sabemos
@@ -43,6 +46,10 @@ export default function App() {
   const [whatsappChannelId, setWhatsappChannelId] = useState(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [conversations, setConversations] = useState([]);
+  const conversationsRef = useRef([]);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
   const [statsVersion, setStatsVersion] = useState(0);
   const [footerNote, setFooterNote] = useState(null);
   const [profileError, setProfileError] = useState(null);
@@ -124,10 +131,17 @@ export default function App() {
   }, [session, profileRetryKey]);
 
   // ---------- Dados do painel (só depois de logado) ----------
+  // Recarrega a lista juntando vários pedidos seguidos num só (evita travadas)
+  const refreshTimer = useRef(null);
   const refreshConversations = useCallback(() => {
     if (!session) return;
-    getConversations().then(setConversations).catch(console.error);
+    clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => getConversations().then(setConversations).catch(console.error), 350);
   }, [session]);
+  // Atualiza uma conversa na tela na hora (antes do servidor responder)
+  const patchConversation = useCallback((id, patch) => {
+    setConversations((list) => list.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  }, []);
 
   useEffect(() => {
     if (!session || !profile) return;
@@ -170,18 +184,46 @@ export default function App() {
           const m = payload.new || {};
           // Só avisa mensagem de cliente, da empresa que está aberta no painel.
           if (m.direction === "in" && (!profile.accountId || m.account_id === profile.accountId)) {
-            showNotification("Nova mensagem", m.text || "📎 Arquivo recebido", () => {
-              setSection("conversations");
-              setPendingConversationId(m.conversation_id);
-            });
+            const conv = conversationsRef.current.find((c) => c.id === m.conversation_id);
+            const type = conv?.isGroup ? "group" : !conv || !conv.assignedAgentId ? "pending" : conv.assignedAgentId === session.user.id ? "message" : null;
+            if (type)
+              notifyEvent(type, conv?.isGroup ? `Grupo ${conv.name}` : type === "pending" ? "Conversa na fila" : "Nova mensagem", m.text || "📎 Arquivo recebido", () => {
+                setSection("conversations");
+                setPendingConversationId(m.conversation_id);
+              });
           }
         }
       )
       .subscribe();
 
+    // Conversa transferida para mim
+    const transferChannel = supabase
+      .channel("conversations_assign")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "conversations" }, (payload) => {
+        const n = payload.new || {};
+        const before = conversationsRef.current.find((c) => c.id === n.id);
+        if (n.assigned_agent_id === session.user.id && before && before.assignedAgentId !== session.user.id) {
+          notifyEvent("transfer", "Conversa para você", n.name || "Atendimento transferido", () => {
+            setSection("conversations");
+            setPendingConversationId(n.id);
+          });
+        }
+      })
+      .subscribe();
+    // Resposta do suporte Helora
+    const supportChannel = supabase
+      .channel("support_replies")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" }, (payload) => {
+        const m = payload.new || {};
+        if (m.from_admin && !m.is_bot && !profile.isSuperAdmin) notifyEvent("support", "Suporte Helora", m.text, () => setShowSupport(true));
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(statusChannel);
       supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(transferChannel);
+      supabase.removeChannel(supportChannel);
     };
   }, [session, profile, refreshConversations]);
 
@@ -218,7 +260,8 @@ export default function App() {
 
   // Super admin fora de uma empresa = Painel Helora (só gestão).
   const isHeloraPanel = profile.isSuperAdmin && !profile.acting;
-  const navItems = isHeloraPanel ? GESTAO_NAV_ITEMS : NAV_ITEMS;
+  const isManager = profile.role === "owner" || profile.isSuperAdmin;
+  const navItems = isHeloraPanel ? GESTAO_NAV_ITEMS : NAV_ITEMS.filter((i) => !i.ownerOnly || isManager);
   const mobileApp = isMobile && !isHeloraPanel;
   const mobileItems = mobileApp ? NAV_ITEMS.filter((i) => MOBILE_NAV_KEYS.includes(i.key)) : navItems;
   let activeSection = isHeloraPanel
@@ -263,6 +306,7 @@ export default function App() {
             <ConversationsPage
               conversations={conversations}
               refreshConversations={refreshConversations}
+              patchConversation={patchConversation}
               whatsappStatus={whatsappStatus}
               onOpenConnect={() => setShowConnectModal(true)}
               openConversationId={pendingConversationId}
@@ -279,6 +323,8 @@ export default function App() {
             <SettingsPage onGoToChannels={() => setSection("channels")} canManage={profile.role === "owner" || profile.isSuperAdmin} />
           )}
           {activeSection === "channels" && <ChannelsPage />}
+          {activeSection === "reports" && <ReportsPage />}
+          {activeSection === "finance" && isManager && <FinancePage />}
           {activeSection === "campaigns" && <CampaignsPage canEdit={profile.role === "owner" || profile.isSuperAdmin} />}
           {activeSection === "contacts" && (
             <ContactsPage
@@ -305,6 +351,8 @@ export default function App() {
       />
 
       {/* Aviso de rodapé ("versão / atualização") escondido: estava poluindo a tela. */}
+
+      {!isHeloraPanel && <TermsGate />}
 
       {showProfile && (
         <ProfileModal
