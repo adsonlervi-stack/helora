@@ -79,7 +79,27 @@ import {
   updateFlow,
   setFlowActive,
   deleteFlow,
-  getFlowStats
+  getFlowStats,
+  getAgentAccess,
+  canAgentSee,
+  getProfilePermissions,
+  setProfilePermissions,
+  listGroups,
+  markConversationUnread,
+  getOrCreateContactForConversation,
+  updateContactLead,
+  listDealsForConversation,
+  getCreditBalance,
+  listCreditLedger,
+  listCampaigns,
+  getCampaign,
+  createCampaign,
+  updateCampaign,
+  deleteCampaign,
+  listCampaignRecipients,
+  createApiKey,
+  listApiKeys,
+  revokeApiKey
 } from "../config/db.js";
 import { runGraph } from "../bot/flowRunner.js";
 import {
@@ -113,15 +133,14 @@ router.use(requireAuth);
 // Um atendente (role 'agent') só pode agir numa conversa do próprio setor
 // ou atribuída a ele — a "visão de túnel" do PRD. Gestor/owner e super
 // admin não têm essa restrição.
-function assertConversationAccess(req, res, conversation) {
+async function assertConversationAccess(req, res, conversation) {
   if (!conversation) {
     res.status(404).json({ error: "Conversa não encontrada" });
     return false;
   }
   if (req.role === "agent" && !req.isSuperAdmin) {
-    const ownDept = conversation.departmentId && req.departmentIds.includes(conversation.departmentId);
-    const assignedToMe = conversation.assignedAgentId === req.userId;
-    if (!ownDept && !assignedToMe) {
+    const access = await getAgentAccess(req.accountId, req.userId, req.departmentIds);
+    if (!canAgentSee(conversation, access)) {
       res.status(403).json({ error: "Você não tem acesso a esta conversa." });
       return false;
     }
@@ -238,6 +257,10 @@ router.post("/team", requireOwner, async (req, res) => {
       name: name.trim(),
       isSuperAdmin: false
     });
+    const { channelIds, departmentIds, groupIds } = req.body || {};
+    await setProfilePermissions(req.accountId, user.id, { channelIds, departmentIds, groupIds }).catch((e) =>
+      console.error("[Equipe] permissões:", e.message)
+    );
     res.status(201).json({ id: user.id, invited: !password });
   } catch (err) {
     const msg = /already|registered|exists/i.test(err.message)
@@ -258,7 +281,22 @@ router.patch("/team/:profileId", requireOwner, async (req, res) => {
   if (member.role === "owner" && role === "agent" && (await countOwners(req.accountId)) <= 1) {
     return res.status(400).json({ error: "A empresa precisa ter pelo menos um Gestor." });
   }
-  res.json(await updateProfileInAccount(req.accountId, member.id, { name, role }));
+  const updated = await updateProfileInAccount(req.accountId, member.id, { name, role });
+  const { channelIds, departmentIds, groupIds } = req.body || {};
+  if (channelIds || departmentIds || groupIds) {
+    await setProfilePermissions(req.accountId, member.id, { channelIds, departmentIds, groupIds });
+  }
+  res.json(updated);
+});
+
+router.get("/team/:profileId/permissions", requireOwner, async (req, res) => {
+  const member = await getProfileInAccount(req.accountId, req.params.profileId);
+  if (!member) return res.status(404).json({ error: "Usuário não encontrado nesta empresa." });
+  res.json(await getProfilePermissions(req.accountId, member.id));
+});
+
+router.get("/groups", async (req, res) => {
+  res.json(await listGroups(req.accountId));
 });
 
 // Define uma nova senha para o usuário.
@@ -546,9 +584,168 @@ router.post("/support/messages", async (req, res) => {
   }
 });
 
+// ---------- Atendimento: não lido, transferência, painel do cliente ----------
+
+router.post("/conversations/:id/unread", async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!(await assertConversationAccess(req, res, conversation))) return;
+  await markConversationUnread(req.accountId, req.params.id);
+  res.sendStatus(204);
+});
+
+router.post("/conversations/:id/transfer", async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!(await assertConversationAccess(req, res, conversation))) return;
+  const { departmentId, agentId, note } = req.body || {};
+  if (!departmentId && !agentId) return res.status(400).json({ error: "Escolha um setor ou um atendente." });
+  const patch = { mode: "human" };
+  if (departmentId !== undefined) patch.departmentId = departmentId || null;
+  patch.assignedAgentId = agentId || null; // sem atendente = vai para Pendentes do setor
+  const updated = await updateConversation(req.accountId, req.params.id, patch);
+  const team = await listTeam(req.accountId);
+  const deps = await listDepartments(req.accountId);
+  const to = [deps.find((d) => d.id === departmentId)?.name, team.find((t) => t.id === agentId)?.name].filter(Boolean).join(" / ");
+  await addNote({
+    accountId: req.accountId,
+    conversationId: req.params.id,
+    content: `🔁 Transferido por ${req.userName || "atendente"} para ${to || "a fila"}${note ? `\nObservação: ${note}` : ""}`
+  });
+  res.json(updated);
+});
+
+router.get("/conversations/:id/contact", async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!(await assertConversationAccess(req, res, conversation))) return;
+  try {
+    const contact = await getOrCreateContactForConversation(req.accountId, conversation);
+    const deals = await listDealsForConversation(req.accountId, conversation.id, contact?.phone);
+    res.json({ contact, deals });
+  } catch (err) {
+    res.json({ contact: null, deals: [], error: err.message });
+  }
+});
+
+router.patch("/contacts/:id/lead", async (req, res) => {
+  try {
+    res.json(await updateContactLead(req.accountId, req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/conversations/:id/deals", async (req, res) => {
+  const conversation = await getConversation(req.accountId, req.params.id);
+  if (!(await assertConversationAccess(req, res, conversation))) return;
+  const { title, value, stage } = req.body || {};
+  const phone = String(conversation.externalId || "").split("@")[0];
+  try {
+    res.status(201).json(
+      await createDeal({
+        accountId: req.accountId,
+        conversationId: conversation.id,
+        title: title || conversation.name,
+        value,
+        stage,
+        ownerId: req.userId,
+        contactName: conversation.name,
+        contactPhone: /^\d{10,15}$/.test(phone) ? phone : null,
+        source: "conversa"
+      })
+    );
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---------- Créditos ----------
+
+router.get("/credits", async (req, res) => {
+  res.json({ balance: await getCreditBalance(req.accountId), ledger: await listCreditLedger(req.accountId, 50) });
+});
+
+// ---------- Campanhas (disparo em massa) ----------
+
+router.get("/campaigns", async (req, res) => {
+  try {
+    res.json(await listCampaigns(req.accountId));
+  } catch (err) {
+    res.status(500).json({ error: /campaigns/.test(err.message) ? "Rode o arquivo migration_015 no Supabase." : err.message });
+  }
+});
+
+router.get("/campaigns/:id", async (req, res) => {
+  const c = await getCampaign(req.accountId, req.params.id);
+  if (!c) return res.status(404).json({ error: "Campanha não encontrada." });
+  res.json({ ...c, recipients: await listCampaignRecipients(req.accountId, c.id) });
+});
+
+router.post("/campaigns", requireOwner, async (req, res) => {
+  const b = req.body || {};
+  if (!String(b.message || "").trim()) return res.status(400).json({ error: "Escreva a mensagem." });
+  try {
+    let recipients = Array.isArray(b.recipients) ? b.recipients : [];
+    if (b.allContacts || (Array.isArray(b.contactIds) && b.contactIds.length)) {
+      const all = await listContacts(req.accountId, "");
+      const ids = new Set(b.contactIds || []);
+      recipients = recipients.concat(
+        all.filter((c) => b.allContacts || ids.has(c.id)).map((c) => ({ phone: c.phone, name: c.name || c.pushName }))
+      );
+    }
+    if (recipients.length > 5000) return res.status(400).json({ error: "Máximo de 5000 destinatários por campanha." });
+    res.status(201).json(await createCampaign(req.accountId, req.userId, b, recipients));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/campaigns/:id/:action(start|pause|cancel)", requireOwner, async (req, res) => {
+  const c = await getCampaign(req.accountId, req.params.id);
+  if (!c) return res.status(404).json({ error: "Campanha não encontrada." });
+  const action = req.params.action;
+  if (action === "start") {
+    if (["done", "canceled"].includes(c.status)) return res.status(400).json({ error: "Campanha já encerrada." });
+    const balance = await getCreditBalance(req.accountId);
+    const pending = c.total - c.sent - c.failed;
+    if (balance <= 0) return res.status(402).json({ error: "Sem créditos. Fale com a Helora para liberar mais." });
+    const patch = { status: "running", pause_reason: balance < pending ? `Saldo (${balance}) menor que o restante (${pending}); vai pausar quando acabar.` : null };
+    if (!c.startedAt) patch.started_at = new Date().toISOString();
+    return res.json(await updateCampaign(req.accountId, c.id, patch));
+  }
+  if (action === "pause") return res.json(await updateCampaign(req.accountId, c.id, { status: "paused", pause_reason: "Pausada manualmente." }));
+  return res.json(await updateCampaign(req.accountId, c.id, { status: "canceled", finished_at: new Date().toISOString() }));
+});
+
+router.delete("/campaigns/:id", requireOwner, async (req, res) => {
+  await deleteCampaign(req.accountId, req.params.id);
+  res.sendStatus(204);
+});
+
+// ---------- Chaves da API aberta ----------
+
+router.get("/api-keys", requireOwner, async (req, res) => {
+  try {
+    res.json(await listApiKeys(req.accountId));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/api-keys", requireOwner, async (req, res) => {
+  try {
+    res.status(201).json(await createApiKey(req.accountId, req.userId, String(req.body?.name || "Chave").slice(0, 60)));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/api-keys/:id", requireOwner, async (req, res) => {
+  await revokeApiKey(req.accountId, req.params.id);
+  res.sendStatus(204);
+});
+
 router.get("/conversations/:id/messages", async (req, res) => {
   const conversation = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, conversation)) return;
+  if (!(await assertConversationAccess(req, res, conversation))) return;
 
   await markConversationSeen(req.accountId, req.params.id);
   const messages = await listMessages(req.accountId, req.params.id);
@@ -561,7 +758,7 @@ router.post("/conversations/:id/mode", async (req, res) => {
     return res.status(400).json({ error: "mode deve ser 'bot' ou 'human'" });
   }
   const existing = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, existing)) return;
+  if (!(await assertConversationAccess(req, res, existing))) return;
   const conversation = await updateConversation(req.accountId, req.params.id, { mode });
   res.json(conversation);
 });
@@ -573,7 +770,7 @@ router.post("/conversations/:id/status", async (req, res) => {
   }
 
   const before = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, before)) return;
+  if (!(await assertConversationAccess(req, res, before))) return;
 
   const conversation = await updateConversation(req.accountId, req.params.id, { status });
 
@@ -612,7 +809,7 @@ router.post("/conversations/:id/priority", async (req, res) => {
     return res.status(400).json({ error: "priority inválida" });
   }
   const existing = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, existing)) return;
+  if (!(await assertConversationAccess(req, res, existing))) return;
   const conversation = await updateConversation(req.accountId, req.params.id, { priority });
   res.json(conversation);
 });
@@ -621,7 +818,7 @@ router.post("/conversations/:id/priority", async (req, res) => {
 router.post("/conversations/:id/department", async (req, res) => {
   const { departmentId } = req.body;
   const existing = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, existing)) return;
+  if (!(await assertConversationAccess(req, res, existing))) return;
   const conversation = await updateConversation(req.accountId, req.params.id, { departmentId });
   res.json(conversation);
 });
@@ -630,7 +827,7 @@ router.post("/conversations/:id/department", async (req, res) => {
 router.post("/conversations/:id/assign", async (req, res) => {
   const { agentId } = req.body;
   const existing = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, existing)) return;
+  if (!(await assertConversationAccess(req, res, existing))) return;
   const conversation = await updateConversation(req.accountId, req.params.id, { assignedAgentId: agentId || null });
   res.json(conversation);
 });
@@ -642,7 +839,7 @@ router.post("/conversations/:id/labels", async (req, res) => {
     return res.status(400).json({ error: "labelIds deve ser um array" });
   }
   const existing = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, existing)) return;
+  if (!(await assertConversationAccess(req, res, existing))) return;
   const conversation = await setConversationLabels(req.accountId, req.params.id, labelIds);
   res.json(conversation);
 });
@@ -664,7 +861,7 @@ router.post("/conversations/:id/send", async (req, res) => {
   if (!text) return res.status(400).json({ error: "text é obrigatório" });
 
   const conversation = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, conversation)) return;
+  if (!(await assertConversationAccess(req, res, conversation))) return;
 
   let message;
   try {
@@ -684,7 +881,7 @@ router.post("/conversations/:id/send-media", upload.single("file"), async (req, 
   if (!req.file) return res.status(400).json({ error: "Nenhum arquivo enviado." });
 
   const conversation = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, conversation)) return;
+  if (!(await assertConversationAccess(req, res, conversation))) return;
 
   if (conversation.platform !== "whatsapp") {
     return res.status(400).json({ error: "Envio de anexos hoje só é suportado no WhatsApp." });
@@ -741,7 +938,7 @@ router.post("/conversations/:id/send-audio", upload.single("file"), async (req, 
   if (!req.file) return res.status(400).json({ error: "Nenhum áudio enviado." });
 
   const conversation = await getConversation(req.accountId, req.params.id);
-  if (!assertConversationAccess(req, res, conversation)) return;
+  if (!(await assertConversationAccess(req, res, conversation))) return;
 
   if (conversation.platform !== "whatsapp") {
     return res.status(400).json({ error: "Nota de voz hoje só é suportada no WhatsApp." });
@@ -793,7 +990,7 @@ router.post("/messages/:id/react", async (req, res) => {
   if (!message) return res.status(404).json({ error: "Mensagem não encontrada" });
 
   const conversation = await getConversation(req.accountId, message.conversationId);
-  if (!assertConversationAccess(req, res, conversation)) return;
+  if (!(await assertConversationAccess(req, res, conversation))) return;
 
   if (conversation.platform === "whatsapp" && message.whatsappMessageId) {
     try {
@@ -849,7 +1046,7 @@ router.post("/scheduled-messages", async (req, res) => {
     return res.status(400).json({ error: "A data/hora precisa ser no futuro." });
   }
   const conversation = await getConversation(req.accountId, conversationId);
-  if (!assertConversationAccess(req, res, conversation)) return;
+  if (!(await assertConversationAccess(req, res, conversation))) return;
 
   const scheduled = await createScheduledMessage({
     accountId: req.accountId,

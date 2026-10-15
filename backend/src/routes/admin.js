@@ -23,8 +23,15 @@ import {
   listSupportMessages,
   addSupportMessage,
   markSupportRead,
-  setSupportThreadStatus
+  setSupportThreadStatus,
+  listCreditsOverview,
+  setMonthlyCredits,
+  addCreditEntry,
+  listCreditLedger,
+  getCreditBalance,
+  listUserEmails
 } from "../config/db.js";
+import { sendEmail, emailConfigured } from "../email.js";
 import { requireAuth, requireSuperAdmin } from "../middleware/auth.js";
 
 const router = Router();
@@ -193,6 +200,42 @@ router.patch("/support/:id", async (req, res) => {
   res.sendStatus(204);
 });
 
+// ---------- Créditos (liberação mensal e avulsa) ----------
+
+router.get("/credits", async (req, res) => {
+  try {
+    res.json(await listCreditsOverview());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/credits/:accountId", async (req, res) => {
+  res.json({ balance: await getCreditBalance(req.params.accountId), ledger: await listCreditLedger(req.params.accountId, 200) });
+});
+
+// Define a cota mensal (liberada automaticamente todo dia 1º)
+router.patch("/credits/:accountId", async (req, res) => {
+  try {
+    await setMonthlyCredits(req.params.accountId, req.body?.monthly);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Lança créditos avulsos (positivo = libera, negativo = retira)
+router.post("/credits/:accountId", async (req, res) => {
+  const amount = parseInt(req.body?.amount, 10);
+  if (!amount) return res.status(400).json({ error: "Informe a quantidade." });
+  try {
+    await addCreditEntry(req.params.accountId, amount, amount > 0 ? "manual" : "adjust", { note: req.body?.note || null });
+    res.json({ balance: await getCreditBalance(req.params.accountId) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ---------- Comunicados (avisos do super admin pras contas/usuários) ----------
 
 router.get("/announcements", async (req, res) => {
@@ -223,7 +266,32 @@ router.post("/announcements", async (req, res) => {
     userId,
     createdBy: req.userName
   });
-  res.status(201).json(created);
+
+  // Também por e-mail (EmailJS), se marcado e configurado. Roda em segundo plano.
+  let email = null;
+  if (req.body.sendEmail) {
+    if (!emailConfigured()) {
+      email = { error: "E-mail ainda não configurado (EmailJS)." };
+    } else {
+      let targets;
+      if (scope === "user") {
+        const { data } = await supabase.auth.admin.getUserById(userId);
+        targets = data?.user?.email ? [{ name: "", email: data.user.email }] : [];
+      } else {
+        targets = await listUserEmails({ accountId: scope === "account" ? accountId : null });
+      }
+      email = { queued: targets.length };
+      (async () => {
+        for (const t of targets) {
+          await sendEmail("EMAILJS_TEMPLATE_NOTICE", { to_email: t.email, to_name: t.name || "", title, message, link: link || "" }).catch((e) =>
+            console.error("[E-mail] comunicado:", e.response?.data || e.message)
+          );
+          await new Promise((r) => setTimeout(r, 1200)); // EmailJS limita a ~1 envio/segundo
+        }
+      })();
+    }
+  }
+  res.status(201).json({ ...created, email });
 });
 
 router.delete("/announcements/:id", async (req, res) => {
