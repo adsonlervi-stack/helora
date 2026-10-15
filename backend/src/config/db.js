@@ -46,6 +46,7 @@ function mapConversation(row) {
     botNodeId: row.bot_node_id,
     lastMessagePreview: row.last_message_preview || null,
     flowId: row.flow_id || null,
+    isGroup: !!row.is_group,
     flowVars: row.flow_vars || {},
     avatarUrl: row.avatar_url || null,
     ...(labels ? { labels } : {})
@@ -668,23 +669,48 @@ export async function findOrCreateConversation({ accountId, platform, externalId
 // retorna conversas do(s) setor(es) do atendente OU atribuídas a ele
 // ("visão de túnel"). Gestor/owner e super admin veem tudo.
 export async function listConversations(accountId, scope) {
-  let query = supabase
+  const { data, error } = await supabase
     .from("conversations")
     .select(CONVERSATION_SELECT)
-    .eq("account_id", accountId);
-
-  if (scope && scope.role === "agent") {
-    const deptIds = scope.departmentIds || [];
-    const parts = [`assigned_agent_id.eq.${scope.userId}`];
-    if (deptIds.length > 0) {
-      parts.push(`department_id.in.(${deptIds.join(",")})`);
-    }
-    query = query.or(parts.join(","));
-  }
-
-  const { data, error } = await query.order("last_message_at", { ascending: false });
+    .eq("account_id", accountId)
+    .order("last_message_at", { ascending: false });
   if (error) throw error;
-  return data.map(mapConversation);
+  const all = data.map(mapConversation);
+  if (!scope || scope.role !== "agent") return all;
+  const access = await getAgentAccess(accountId, scope.userId, scope.departmentIds);
+  return all.filter((c) => canAgentSee(c, access));
+}
+
+/** O que um atendente pode ver: setores, canais liberados e grupos liberados. */
+export async function getAgentAccess(accountId, userId, departmentIds = []) {
+  const [mine, channelRules, groups] = await Promise.all([
+    supabase.from("profile_channels").select("channel_id").eq("profile_id", userId),
+    supabase.from("channel_permissions").select("channel_id, profile_id"),
+    supabase.from("group_permissions").select("conversation_id").eq("profile_id", userId)
+  ]);
+  const myChannels = new Set((mine.data || []).map((r) => r.channel_id));
+  const restricted = new Map(); // canal com lista fechada (permissão por canal, tela Canais)
+  for (const r of channelRules.data || []) {
+    if (!restricted.has(r.channel_id)) restricted.set(r.channel_id, new Set());
+    restricted.get(r.channel_id).add(r.profile_id);
+  }
+  return {
+    userId,
+    departmentIds,
+    myChannels,
+    restricted,
+    groups: new Set((groups.data || []).map((r) => r.conversation_id))
+  };
+}
+
+export function canAgentSee(c, a) {
+  if (c.channelId) {
+    if (a.myChannels.size && !a.myChannels.has(c.channelId)) return false;
+    const r = a.restricted.get(c.channelId);
+    if (r && !r.has(a.userId)) return false;
+  }
+  if (c.isGroup) return a.groups.has(c.id);
+  return c.assignedAgentId === a.userId || (c.departmentId && a.departmentIds.includes(c.departmentId));
 }
 
 export async function getConversation(accountId, id) {
@@ -1006,7 +1032,12 @@ function mapDeal(row) {
     createdAt: row.created_at,
     closedAt: row.closed_at,
     conversationName: row.conversations?.name,
-    conversationPlatform: row.conversations?.platform
+    conversationPlatform: row.conversations?.platform,
+    contactName: row.contact_name || row.conversations?.name || null,
+    contactPhone: row.contact_phone || null,
+    contactEmail: row.contact_email || null,
+    source: row.source || null,
+    notes: row.notes || null
   };
 }
 
@@ -1022,17 +1053,24 @@ export async function listDeals(accountId) {
   return data.map(mapDeal);
 }
 
-export async function createDeal({ accountId, conversationId, title, value, stage, ownerId }) {
+export async function createDeal({ accountId, conversationId, title, value, stage, ownerId, contactName, contactPhone, contactEmail, source, notes }) {
+  const row = {
+    account_id: accountId,
+    conversation_id: conversationId || null,
+    owner_id: ownerId || null,
+    title,
+    value: value || null,
+    stage: stage || "novo_lead"
+  };
+  // Campos da migration 015 (lead vindo de site/API); só envia se preenchidos.
+  if (contactName) row.contact_name = contactName;
+  if (contactPhone) row.contact_phone = String(contactPhone).replace(/\D/g, "");
+  if (contactEmail) row.contact_email = contactEmail;
+  if (source) row.source = source;
+  if (notes) row.notes = notes;
   const { data, error } = await supabase
     .from("deals")
-    .insert({
-      account_id: accountId,
-      conversation_id: conversationId || null,
-      owner_id: ownerId || null,
-      title,
-      value: value || null,
-      stage: stage || "novo_lead"
-    })
+    .insert(row)
     .select(DEAL_SELECT)
     .single();
   if (error) throw error;
@@ -1050,7 +1088,10 @@ export async function createDeal({ accountId, conversationId, title, value, stag
 const DEAL_PATCH_MAP = {
   ownerId: "owner_id",
   lostReason: "lost_reason",
-  conversationId: "conversation_id"
+  conversationId: "conversation_id",
+  contactName: "contact_name",
+  contactPhone: "contact_phone",
+  contactEmail: "contact_email"
 };
 
 export async function updateDeal(accountId, id, patch) {
@@ -1757,4 +1798,398 @@ export async function addLabelToConversation(accountId, conversationId, labelId)
     .from("conversation_labels")
     .upsert({ account_id: accountId, conversation_id: conversationId, label_id: labelId }, { onConflict: "conversation_id,label_id", ignoreDuplicates: true });
   if (error) console.error("[Fluxo] Falha ao etiquetar:", error.message);
+}
+
+// ============================================================
+// Migration 015 — permissões, grupos, painel do cliente
+// ============================================================
+
+/** Permissões de um usuário: canais, setores e grupos que ele vê. */
+export async function getProfilePermissions(accountId, profileId) {
+  const [ch, dp, gp] = await Promise.all([
+    supabase.from("profile_channels").select("channel_id").eq("profile_id", profileId),
+    supabase.from("profile_departments").select("department_id").eq("profile_id", profileId),
+    supabase.from("group_permissions").select("conversation_id").eq("profile_id", profileId)
+  ]);
+  return {
+    channelIds: (ch.data || []).map((r) => r.channel_id),
+    departmentIds: (dp.data || []).map((r) => r.department_id),
+    groupIds: (gp.data || []).map((r) => r.conversation_id)
+  };
+}
+
+export async function setProfilePermissions(accountId, profileId, { channelIds, departmentIds, groupIds }) {
+  if (Array.isArray(channelIds)) {
+    await supabase.from("profile_channels").delete().eq("profile_id", profileId);
+    if (channelIds.length) {
+      const { error } = await supabase
+        .from("profile_channels")
+        .insert(channelIds.map((channel_id) => ({ profile_id: profileId, channel_id, account_id: accountId })));
+      if (error) throw error;
+    }
+  }
+  if (Array.isArray(departmentIds)) await setProfileDepartments(profileId, departmentIds);
+  if (Array.isArray(groupIds)) {
+    await supabase.from("group_permissions").delete().eq("profile_id", profileId);
+    if (groupIds.length) {
+      const { error } = await supabase
+        .from("group_permissions")
+        .insert(groupIds.map((conversation_id) => ({ conversation_id, profile_id: profileId, account_id: accountId })));
+      if (error) throw error;
+    }
+  }
+}
+
+export async function listGroups(accountId) {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("id, name, external_id, last_message_at")
+    .eq("account_id", accountId)
+    .eq("is_group", true)
+    .order("name");
+  if (error) return [];
+  return data.map((g) => ({ id: g.id, name: g.name, externalId: g.external_id }));
+}
+
+export async function markConversationAsGroup(conversationId, name) {
+  const patch = { is_group: true, mode: "human" };
+  if (name) patch.name = name;
+  await supabase.from("conversations").update(patch).eq("id", conversationId);
+}
+
+export async function markConversationUnread(accountId, id) {
+  const { data } = await supabase.from("conversations").select("unread").eq("id", id).eq("account_id", accountId).maybeSingle();
+  await supabase.from("conversations").update({ unread: Math.max(1, data?.unread || 0) }).eq("id", id).eq("account_id", accountId);
+}
+
+const BR_TWIN = (p) =>
+  /^55\d{2}9\d{8}$/.test(p) ? p.slice(0, 4) + p.slice(5) : /^55\d{2}\d{8}$/.test(p) ? p.slice(0, 4) + "9" + p.slice(4) : null;
+
+function mapContactFull(r) {
+  return {
+    id: r.id,
+    phone: r.phone,
+    name: r.name,
+    pushName: r.push_name,
+    email: r.email,
+    notes: r.notes,
+    source: r.source,
+    leadOrigin: r.lead_origin || null,
+    leadStatus: r.lead_status || null,
+    defaultAgentId: r.default_agent_id || null,
+    defaultDepartmentId: r.default_department_id || null,
+    createdAt: r.created_at
+  };
+}
+
+/** Contato ligado a uma conversa (pelo número). Cria se não existir. */
+export async function getOrCreateContactForConversation(accountId, conversation) {
+  const phone = String(conversation.externalId || "").split("@")[0];
+  if (!/^\d{10,15}$/.test(phone) || conversation.isGroup) return null;
+  const phones = [phone, BR_TWIN(phone)].filter(Boolean);
+  const { data } = await supabase.from("contacts").select("*").eq("account_id", accountId).in("phone", phones).limit(1);
+  if (data?.length) return mapContactFull(data[0]);
+  const { data: created, error } = await supabase
+    .from("contacts")
+    .insert({ account_id: accountId, phone, push_name: conversation.name, source: "conversa", channel_id: conversation.channelId || null })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapContactFull(created);
+}
+
+export async function updateContactLead(accountId, id, body) {
+  const map = {
+    name: "name", email: "email", notes: "notes",
+    leadOrigin: "lead_origin", leadStatus: "lead_status",
+    defaultAgentId: "default_agent_id", defaultDepartmentId: "default_department_id"
+  };
+  const patch = { updated_at: new Date().toISOString() };
+  for (const [k, col] of Object.entries(map)) if (body[k] !== undefined) patch[col] = body[k] === "" ? null : body[k];
+  const { data, error } = await supabase.from("contacts").update(patch).eq("account_id", accountId).eq("id", id).select().single();
+  if (error) throw error;
+  return mapContactFull(data);
+}
+
+export async function listDealsForConversation(accountId, conversationId, phone) {
+  const ors = [`conversation_id.eq.${conversationId}`];
+  if (phone) ors.push(`contact_phone.eq.${phone}`);
+  const { data, error } = await supabase
+    .from("deals")
+    .select(DEAL_SELECT)
+    .eq("account_id", accountId)
+    .or(ors.join(","))
+    .order("created_at", { ascending: false });
+  if (error) {
+    // sem a migration 015 (coluna contact_phone): busca só pela conversa
+    const r = await supabase.from("deals").select(DEAL_SELECT).eq("account_id", accountId).eq("conversation_id", conversationId);
+    return (r.data || []).map(mapDeal);
+  }
+  return data.map(mapDeal);
+}
+
+// ============================================================
+// Créditos (1 crédito = 1 mensagem de campanha / API)
+// ============================================================
+
+const monthRef = (d = new Date()) => d.toISOString().slice(0, 7);
+
+/** Libera o crédito do mês (uma vez por mês) quando a empresa tem cota mensal. */
+export async function ensureMonthlyGrant(accountId) {
+  const { data: acc } = await supabase.from("accounts").select("credits_monthly, status").eq("id", accountId).maybeSingle();
+  if (!acc?.credits_monthly || acc.status === "suspended") return;
+  await supabase
+    .from("credit_ledger")
+    .upsert(
+      { account_id: accountId, delta: acc.credits_monthly, kind: "monthly", reference: monthRef(), note: "Crédito mensal" },
+      { onConflict: "account_id,reference", ignoreDuplicates: true }
+    );
+}
+
+export async function getCreditBalance(accountId) {
+  await ensureMonthlyGrant(accountId).catch(() => {});
+  let total = 0;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase.from("credit_ledger").select("delta").eq("account_id", accountId).range(from, from + 999);
+    if (error) return 0;
+    total += data.reduce((s, r) => s + r.delta, 0);
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  return total;
+}
+
+export async function addCreditEntry(accountId, delta, kind, { reference = null, note = null } = {}) {
+  const { error } = await supabase.from("credit_ledger").insert({ account_id: accountId, delta, kind, reference, note });
+  if (error) throw error;
+}
+
+export async function listCreditLedger(accountId, limit = 100) {
+  const { data, error } = await supabase
+    .from("credit_ledger")
+    .select("*")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return [];
+  return data.map((r) => ({ id: r.id, delta: r.delta, kind: r.kind, reference: r.reference, note: r.note, createdAt: r.created_at }));
+}
+
+/** Resumo de créditos de todas as empresas (Gestão). */
+export async function listCreditsOverview() {
+  const { data: accounts } = await supabase.from("accounts").select("id, name, status, credits_monthly").order("name");
+  const out = [];
+  for (const a of accounts || []) {
+    const balance = await getCreditBalance(a.id);
+    const { data: used } = await supabase
+      .from("credit_ledger")
+      .select("delta")
+      .eq("account_id", a.id)
+      .lt("delta", 0)
+      .gte("created_at", monthRef() + "-01");
+    out.push({
+      id: a.id,
+      name: a.name,
+      status: a.status,
+      creditsMonthly: a.credits_monthly || 0,
+      balance,
+      usedThisMonth: -(used || []).reduce((s, r) => s + r.delta, 0)
+    });
+  }
+  return out;
+}
+
+export async function setMonthlyCredits(accountId, credits) {
+  const { error } = await supabase.from("accounts").update({ credits_monthly: Math.max(0, parseInt(credits, 10) || 0) }).eq("id", accountId);
+  if (error) throw error;
+}
+
+// ============================================================
+// Campanhas
+// ============================================================
+
+function mapCampaign(r) {
+  return {
+    id: r.id, name: r.name, message: r.message, mediaUrl: r.media_url, mediaType: r.media_type,
+    status: r.status, scheduledAt: r.scheduled_at, minDelay: r.min_delay, maxDelay: r.max_delay,
+    hourlyLimit: r.hourly_limit, total: r.total, sent: r.sent, failed: r.failed, pauseReason: r.pause_reason,
+    createdAt: r.created_at, startedAt: r.started_at, finishedAt: r.finished_at
+  };
+}
+
+export async function listCampaigns(accountId) {
+  const { data, error } = await supabase.from("campaigns").select("*").eq("account_id", accountId).order("created_at", { ascending: false });
+  if (error) throw error;
+  return data.map(mapCampaign);
+}
+
+export async function getCampaign(accountId, id) {
+  const { data, error } = await supabase.from("campaigns").select("*").eq("account_id", accountId).eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? mapCampaign(data) : null;
+}
+
+export async function createCampaign(accountId, userId, body, recipients) {
+  const clean = new Map();
+  for (const r of recipients || []) {
+    const phone = String(r.phone || "").replace(/\D/g, "");
+    if (phone.length >= 10 && phone.length <= 15 && !clean.has(phone)) clean.set(phone, { phone, name: r.name || null });
+  }
+  if (!clean.size) throw new Error("Nenhum número válido na lista.");
+  const minDelay = Math.max(5, parseInt(body.minDelay, 10) || 15);
+  const maxDelay = Math.max(minDelay, parseInt(body.maxDelay, 10) || 45);
+  const { data, error } = await supabase
+    .from("campaigns")
+    .insert({
+      account_id: accountId,
+      name: body.name || "Campanha",
+      message: body.message,
+      media_url: body.mediaUrl || null,
+      media_type: body.mediaType || null,
+      status: body.scheduledAt ? "scheduled" : "draft",
+      scheduled_at: body.scheduledAt || null,
+      min_delay: minDelay,
+      max_delay: maxDelay,
+      hourly_limit: Math.min(300, Math.max(10, parseInt(body.hourlyLimit, 10) || 120)),
+      total: clean.size,
+      created_by: userId || null
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  const rows = [...clean.values()].map((r) => ({ campaign_id: data.id, account_id: accountId, phone: r.phone, name: r.name }));
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error: e2 } = await supabase.from("campaign_recipients").insert(rows.slice(i, i + 500));
+    if (e2) throw e2;
+  }
+  return mapCampaign(data);
+}
+
+export async function updateCampaign(accountId, id, patch) {
+  const { data, error } = await supabase.from("campaigns").update(patch).eq("account_id", accountId).eq("id", id).select().single();
+  if (error) throw error;
+  return mapCampaign(data);
+}
+
+export async function deleteCampaign(accountId, id) {
+  const { error } = await supabase.from("campaigns").delete().eq("account_id", accountId).eq("id", id).in("status", ["draft", "done", "canceled", "paused", "scheduled"]);
+  if (error) throw error;
+}
+
+export async function listCampaignRecipients(accountId, campaignId, limit = 500) {
+  const { data, error } = await supabase
+    .from("campaign_recipients")
+    .select("*")
+    .eq("account_id", accountId)
+    .eq("campaign_id", campaignId)
+    .order("id")
+    .limit(limit);
+  if (error) throw error;
+  return data.map((r) => ({ id: r.id, phone: r.phone, name: r.name, status: r.status, error: r.error, sentAt: r.sent_at }));
+}
+
+/** Campanhas que precisam rodar agora (todas as empresas). */
+export async function listRunnableCampaigns() {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("*")
+    .or(`status.eq.running,and(status.eq.scheduled,scheduled_at.lte.${now})`);
+  if (error) return [];
+  return data.map((r) => ({ ...mapCampaign(r), accountId: r.account_id }));
+}
+
+export async function nextPendingRecipient(campaignId) {
+  const { data } = await supabase
+    .from("campaign_recipients")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .eq("status", "pending")
+    .order("id")
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+export async function markRecipient(id, status, errorText = null) {
+  await supabase
+    .from("campaign_recipients")
+    .update({ status, error: errorText, sent_at: status === "sent" ? new Date().toISOString() : null })
+    .eq("id", id);
+}
+
+export async function countCampaign(campaignId) {
+  const count = async (status) => {
+    const { count: n } = await supabase.from("campaign_recipients").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("status", status);
+    return n || 0;
+  };
+  const [sent, failed, pending] = await Promise.all([count("sent"), count("failed"), count("pending")]);
+  return { sent, failed, pending };
+}
+
+export async function sentInLastHour(campaignId) {
+  const since = new Date(Date.now() - 3600000).toISOString();
+  const { count } = await supabase
+    .from("campaign_recipients")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("status", "sent")
+    .gte("sent_at", since);
+  return count || 0;
+}
+
+// ============================================================
+// API aberta (chaves por empresa)
+// ============================================================
+import crypto from "crypto";
+
+const sha256 = (v) => crypto.createHash("sha256").update(v).digest("hex");
+
+export async function createApiKey(accountId, userId, name) {
+  const key = "hl_" + crypto.randomBytes(24).toString("hex");
+  const { data, error } = await supabase
+    .from("api_keys")
+    .insert({ account_id: accountId, name: name || "Chave", prefix: key.slice(0, 10), key_hash: sha256(key), created_by: userId })
+    .select()
+    .single();
+  if (error) throw error;
+  return { id: data.id, name: data.name, prefix: data.prefix, createdAt: data.created_at, key };
+}
+
+export async function listApiKeys(accountId) {
+  const { data, error } = await supabase
+    .from("api_keys")
+    .select("id, name, prefix, created_at, last_used_at, revoked_at")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data.map((k) => ({ id: k.id, name: k.name, prefix: k.prefix, createdAt: k.created_at, lastUsedAt: k.last_used_at, revoked: !!k.revoked_at }));
+}
+
+export async function revokeApiKey(accountId, id) {
+  const { error } = await supabase.from("api_keys").update({ revoked_at: new Date().toISOString() }).eq("account_id", accountId).eq("id", id);
+  if (error) throw error;
+}
+
+export async function findApiKey(rawKey) {
+  if (!rawKey || !rawKey.startsWith("hl_")) return null;
+  const { data } = await supabase.from("api_keys").select("id, account_id, revoked_at").eq("key_hash", sha256(rawKey)).maybeSingle();
+  if (!data || data.revoked_at) return null;
+  supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", data.id).then(() => {});
+  return { keyId: data.id, accountId: data.account_id };
+}
+
+/** E-mails de todos os usuários (comunicados por e-mail). */
+export async function listUserEmails({ accountId = null, onlyOwners = false } = {}) {
+  let q = supabase.from("profiles").select("id, name, role, account_id");
+  if (accountId) q = q.eq("account_id", accountId);
+  if (onlyOwners) q = q.eq("role", "owner");
+  const { data } = await q;
+  const out = [];
+  for (const p of data || []) {
+    const { data: u } = await supabase.auth.admin.getUserById(p.id);
+    if (u?.user?.email) out.push({ name: p.name, email: u.user.email });
+  }
+  return out;
 }
