@@ -319,7 +319,7 @@ export async function deleteAnnouncement(id) {
 export async function listAllUsers() {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, name, role, is_super_admin, created_at, accounts(id, name, status)")
+    .select("id, name, role, is_super_admin, created_at, accounts!profiles_account_id_fkey(id, name, status)")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data.map((p) => ({
@@ -410,7 +410,7 @@ export async function setProfileDepartments(profileId, departmentIds) {
 export async function getMyProfile(userId) {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, name, role, is_super_admin, avatar_url, account_id, accounts(name)")
+    .select("id, name, role, is_super_admin, avatar_url, account_id, accounts!profiles_account_id_fkey(name)")
     .eq("id", userId)
     .maybeSingle();
   if (error) throw error;
