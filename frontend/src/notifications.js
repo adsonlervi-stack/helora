@@ -94,7 +94,7 @@ export function notifyEvent(type, title, body, onClick) {
   const p = getNotifyPrefs()[type];
   if (!p?.on) return;
   playSound(p.sound);
-  if (!notifyEnabled() || !document.hidden) return;
+  if (!notifyEnabled() || (!document.hidden && document.hasFocus())) return;
   try {
     const n = new Notification(title, { body, icon: "/favicon.png", tag: `${type}-${title}` });
     n.onclick = () => {
@@ -107,7 +107,7 @@ export function notifyEvent(type, title, body, onClick) {
 
 export function showNotification(title, body, onClick) {
   playPing();
-  if (!notifyEnabled() || !document.hidden) return;
+  if (!notifyEnabled() || (!document.hidden && document.hasFocus())) return;
   try {
     const n = new Notification(title, { body, icon: "/favicon.png", tag: title });
     n.onclick = () => {

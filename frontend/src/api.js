@@ -297,6 +297,7 @@ export const adminTestEmail = (to) => api.post("/admin/email/test", { to }).then
 
 // ---- v4 ----
 export const getBillingApi = () => api.get("/billing").then((r) => r.data);
+export const getAttendancesApi = (params) => api.get("/reports/attendances", { params }).then((r) => r.data);
 export const getReportsApi = (params) => api.get("/reports", { params }).then((r) => r.data);
 export const getLegalStatusApi = () => api.get("/legal/status").then((r) => r.data);
 export const acceptLegalApi = (contract) => api.post("/legal/accept", { contract });
