@@ -434,6 +434,7 @@ function SpecialModal({ kind, onClose, onSend }) {
   );
 }
 
+const DRAFTS = new Map();
 const EMOJIS = "😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 😉 😍 🥰 😘 😋 😜 🤪 🤗 🤭 🤔 🤨 😐 😶 🙄 😏 😬 😌 😴 😎 🤓 🥳 😕 😟 😮 😲 🥺 😢 😭 😱 😡 🤯 👍 👎 👏 🙌 🙏 🤝 💪 👋 ✌️ 🤞 👌 👉 👀 ❤️ 🧡 💛 💚 💙 💜 🖤 💔 💯 ✅ ❌ ⚠️ 🔥 ⭐ ✨ 🎉 🎁 📌 📞 📲 💬 📄 📅 ⏰ 💰 💳 🚗 🏠 🏥 ☀️ 🌙 🌧️ ☕ 🍕 🎂".split(" ");
 
 export default function ChatWindow({
@@ -465,7 +466,19 @@ export default function ChatWindow({
   onBack,
   className = ""
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => DRAFTS.get(conversation?.id) || "");
+  // Rascunho por conversa: o que foi digitado fica na conversa certa ao trocar
+  const draftConvRef = useRef(conversation?.id);
+  useEffect(() => {
+    if (draftConvRef.current === conversation?.id) return;
+    draftConvRef.current = conversation?.id;
+    setText(DRAFTS.get(conversation?.id) || "");
+  }, [conversation?.id]);
+  useEffect(() => {
+    const id = draftConvRef.current;
+    if (!id) return;
+    if (text) DRAFTS.set(id, text); else DRAFTS.delete(id);
+  }, [text]);
   // Dados do cliente só abrem quando o atendente clicar
   const [panelOpen, setPanelOpen] = useState(false);
   const [cannedResponses, setCannedResponses] = useState([]);
