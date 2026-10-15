@@ -272,7 +272,7 @@ export default function App() {
         onAvatarUpdated={handleAvatarUpdated}
       />
 
-      <FooterBar note={footerNote} canEdit={canEditFooter} onUpdated={setFooterNote} />
+      {/* Aviso de rodapé ("versão / atualização") escondido: estava poluindo a tela. */}
 
       {showSupport && !isHeloraPanel && <SupportChat onClose={() => setShowSupport(false)} />}
 

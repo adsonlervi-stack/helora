@@ -428,3 +428,22 @@ input, select, textarea { font-family: var(--font-body); }
   .fe-canvas { min-height: 460px; }
   .fe-inspector { width: 100%; max-height: 520px; }
 }
+
+/* Corrige ícones invisíveis na barra de mensagem (regra antiga .composer button dava padding de 20px) */
+.composer .composer-icon-btn,
+.composer .composer-send {
+  padding: 0 !important;
+  box-shadow: none !important;
+  min-width: 36px;
+}
+.composer .composer-icon-btn { background: transparent !important; color: #6e6e73 !important; border: 0 !important; }
+.composer .composer-icon-btn:hover { background: rgba(118, 118, 128, 0.12) !important; }
+.composer .composer-icon-btn.sign-btn.on { color: #0071e3 !important; background: rgba(0, 113, 227, 0.1) !important; }
+.composer .composer-icon-btn.recording { background: #ff3b30 !important; color: #fff !important; }
+.composer .composer-icon-btn svg, .composer .composer-send svg { flex-shrink: 0; }
+.composer .composer-send:hover { background: #0077ed !important; }
+
+/* Menu do usuário (rodapé da barra lateral) */
+.nav-sidebar-footer-menu button { display: flex; align-items: center; gap: 6px; width: 100%; }
+.nav-sidebar-footer-menu-photo { border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-main); text-align: left; }
+.nav-sidebar-footer-menu-photo:hover { background: rgba(0, 0, 0, 0.05); }
