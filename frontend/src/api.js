@@ -194,3 +194,19 @@ export const getInvoices = (params = {}) => api.get("/admin/invoices", { params 
 export const generateInvoicesApi = (reference) => api.post("/admin/invoices/generate", { reference }).then((r) => r.data);
 export const createInvoiceApi = (data) => api.post("/admin/invoices", data).then((r) => r.data);
 export const updateInvoiceApi = (id, patch) => api.patch(`/admin/invoices/${id}`, patch).then((r) => r.data);
+
+// ---- Contatos e nova conversa ----
+export const getContacts = (search = "") => api.get("/contacts", { params: { search } }).then((r) => r.data);
+export const createContactApi = (data) => api.post("/contacts", data).then((r) => r.data);
+export const updateContactApi = (id, data) => api.patch(`/contacts/${id}`, data).then((r) => r.data);
+export const removeContactApi = (id) => api.delete(`/contacts/${id}`);
+export const importContactsApi = () => api.post("/contacts/import").then((r) => r.data);
+export const startConversationApi = (data) => api.post("/conversations/start", data).then((r) => r.data);
+
+// ---- Suporte ----
+export const getSupportChat = () => api.get("/support").then((r) => r.data);
+export const sendSupportMessage = (text) => api.post("/support/messages", { text }).then((r) => r.data);
+export const getSupportThreadsAdmin = () => api.get("/admin/support").then((r) => r.data);
+export const getSupportMessagesAdmin = (id) => api.get(`/admin/support/${id}`).then((r) => r.data);
+export const replySupportAdmin = (id, text) => api.post(`/admin/support/${id}/messages`, { text }).then((r) => r.data);
+export const setSupportStatusAdmin = (id, status) => api.patch(`/admin/support/${id}`, { status });

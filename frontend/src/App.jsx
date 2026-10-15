@@ -13,6 +13,9 @@ import AdminPage from "./components/AdminPage.jsx";
 import ChannelsPage from "./components/ChannelsPage.jsx";
 import WhatsAppConnectModal from "./components/WhatsAppConnectModal.jsx";
 import FooterBar from "./components/FooterBar.jsx";
+import ContactsPage from "./components/ContactsPage.jsx";
+import SupportChat from "./components/SupportChat.jsx";
+import { showNotification } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
 import { NAV_ITEMS, ADMIN_NAV_ITEM } from "./navConfig.js";
@@ -32,6 +35,8 @@ export default function App() {
   const [profileError, setProfileError] = useState(null);
   const [profileRetryKey, setProfileRetryKey] = useState(0);
   const [pendingConversationId, setPendingConversationId] = useState(null);
+  const [newConversationContact, setNewConversationContact] = useState(null);
+  const [showSupport, setShowSupport] = useState(false);
 
   const openConversation = useCallback((conversationId) => {
     setSection("conversations");
@@ -141,9 +146,17 @@ export default function App() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
-        () => {
+        (payload) => {
           refreshConversations();
           setStatsVersion((v) => v + 1);
+          const m = payload.new || {};
+          // Só avisa mensagem de cliente, da empresa que está aberta no painel.
+          if (m.direction === "in" && (!profile.accountId || m.account_id === profile.accountId)) {
+            showNotification("Nova mensagem", m.text || "📎 Arquivo recebido", () => {
+              setSection("conversations");
+              setPendingConversationId(m.conversation_id);
+            });
+          }
         }
       )
       .subscribe();
@@ -198,6 +211,7 @@ export default function App() {
         unreadTotal={unreadTotal}
         profile={profile}
         onAvatarUpdated={handleAvatarUpdated}
+        onHelp={() => (isHeloraPanel ? setSection("admin") : setShowSupport((v) => !v))}
       />
 
       <div className="shell-main">
@@ -209,13 +223,7 @@ export default function App() {
             <button onClick={leaveAccount}>Sair da empresa</button>
           </div>
         )}
-        <TopBar
-          section={activeSection}
-          whatsappStatus={whatsappStatus}
-          onOpenConnect={() => setShowConnectModal(true)}
-          profile={profile}
-          hideWhatsApp={isHeloraPanel}
-        />
+        <TopBar section={activeSection} hideNotifications={isHeloraPanel} />
 
         <div className="shell-content">
           {activeSection === "home" && (
@@ -231,6 +239,9 @@ export default function App() {
               onOpenConnect={() => setShowConnectModal(true)}
               openConversationId={pendingConversationId}
               onOpenConversationHandled={() => setPendingConversationId(null)}
+              currentUserId={session.user.id}
+              newConversationContact={newConversationContact}
+              onNewConversationHandled={() => setNewConversationContact(null)}
             />
           )}
           {activeSection === "deals" && <DealsPage onOpenConversation={openConversation} />}
@@ -238,6 +249,15 @@ export default function App() {
             <SettingsPage onGoToChannels={() => setSection("channels")} canManage={profile.role === "owner" || profile.isSuperAdmin} />
           )}
           {activeSection === "channels" && <ChannelsPage />}
+          {activeSection === "contacts" && (
+            <ContactsPage
+              canDelete={profile.role === "owner" || profile.isSuperAdmin}
+              onStartConversation={(c) => {
+                setNewConversationContact(c);
+                setSection("conversations");
+              }}
+            />
+          )}
           {activeSection === "admin" && profile.isSuperAdmin && <AdminPage />}
         </div>
       </div>
@@ -252,6 +272,8 @@ export default function App() {
       />
 
       <FooterBar note={footerNote} canEdit={canEditFooter} onUpdated={setFooterNote} />
+
+      {showSupport && !isHeloraPanel && <SupportChat onClose={() => setShowSupport(false)} />}
 
       {showConnectModal && (
         <WhatsAppConnectModal

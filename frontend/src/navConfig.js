@@ -6,7 +6,8 @@ import {
   Settings2,
   ShieldCheck,
   KanbanSquare,
-  Smartphone
+  Smartphone,
+  Contact
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -15,6 +16,7 @@ export const NAV_ITEMS = [
   { key: "deals", label: "Negócios", icon: KanbanSquare },
   { key: "agents", label: "Chatbot", icon: Bot },
   { key: "conversations", label: "Conversas", icon: MessageCircle },
+  { key: "contacts", label: "Contatos", icon: Contact },
   { key: "channels", label: "Canais", icon: Smartphone },
   { key: "settings", label: "Config.", icon: Settings2 }
 ];
@@ -28,6 +30,7 @@ export const SECTION_TITLES = {
   deals: "Negócios",
   agents: "Chatbot",
   conversations: "Conversas",
+  contacts: "Contatos",
   channels: "Canais",
   settings: "Configurações",
   admin: "Gestão Helora"
