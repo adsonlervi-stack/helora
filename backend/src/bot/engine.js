@@ -1,4 +1,5 @@
-import { listAutoReplies, updateConversation, addCsatResponse, getBotFlow, getActiveFlow } from "../config/db.js";
+import { listAutoReplies, updateConversation, addCsatResponse, getBotFlow, getActiveFlow, getAccountSettings } from "../config/db.js";
+import { isOpenNow, DEFAULT_OOH_MESSAGE } from "./businessHours.js";
 import { runFlow } from "./flowEngine.js";
 import { runActiveFlow } from "./flowRunner.js";
 
@@ -58,6 +59,24 @@ export async function handleIncoming(accountId, conversation, rawText, send) {
     const reset = { status: "open", mode: "bot", assignedAgentId: null, botNodeId: null, flowVars: {} };
     await updateConversation(accountId, conversation.id, reset).catch(() => {});
     Object.assign(conversation, reset, { isNew: true });
+  }
+
+  // Fora do horário de atendimento (do fluxo do canal ou da empresa): avisa
+  // o cliente uma vez a cada 6h e o bot não segue o fluxo.
+  try {
+    const flowForHours = await getActiveFlow(accountId, conversation.channelId).catch(() => null);
+    const hours = flowForHours?.graph?.hours?.enabled
+      ? flowForHours.graph.hours
+      : (await getAccountSettings(accountId)).businessHours;
+    if (hours?.enabled && !isOpenNow(hours)) {
+      const vars = conversation.flowVars || {};
+      const last = vars.__oohAt ? new Date(vars.__oohAt).getTime() : 0;
+      if (Date.now() - last < 6 * 3600 * 1000) return null;
+      await updateConversation(accountId, conversation.id, { flowVars: { ...vars, __oohAt: new Date().toISOString() } }).catch(() => {});
+      return hours.message || DEFAULT_OOH_MESSAGE;
+    }
+  } catch (err) {
+    console.error("[Horário] erro:", err.message);
   }
 
   if (conversation.mode === "human") {
