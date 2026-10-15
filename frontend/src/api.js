@@ -46,8 +46,8 @@ export function leaveAccount() {
 export const getConversations = () => api.get("/conversations").then((r) => r.data);
 export const getConversationMessages = (id) =>
   api.get(`/conversations/${id}/messages`).then((r) => r.data);
-export const sendMessage = (id, text) =>
-  api.post(`/conversations/${id}/send`, { text }).then((r) => r.data);
+export const sendMessage = (id, text, sign = true) =>
+  api.post(`/conversations/${id}/send`, { text, sign }).then((r) => r.data);
 export const setConversationMode = (id, mode) =>
   api.post(`/conversations/${id}/mode`, { mode }).then((r) => r.data);
 export const setConversationStatus = (id, status) =>
@@ -210,3 +210,12 @@ export const getSupportThreadsAdmin = () => api.get("/admin/support").then((r) =
 export const getSupportMessagesAdmin = (id) => api.get(`/admin/support/${id}`).then((r) => r.data);
 export const replySupportAdmin = (id, text) => api.post(`/admin/support/${id}/messages`, { text }).then((r) => r.data);
 export const setSupportStatusAdmin = (id, status) => api.patch(`/admin/support/${id}`, { status });
+
+// ---- Fluxos (construtor em canvas) ----
+export const getFlows = () => api.get("/flows").then((r) => r.data);
+export const createFlowApi = (data) => api.post("/flows", data).then((r) => r.data);
+export const getFlowApi = (id, days = 7) => api.get(`/flows/${id}`, { params: { days } }).then((r) => r.data);
+export const saveFlowApi = (id, data) => api.put(`/flows/${id}`, data).then((r) => r.data);
+export const setFlowActiveApi = (id, active) => api.post(`/flows/${id}/active`, { active }).then((r) => r.data);
+export const deleteFlowApi = (id) => api.delete(`/flows/${id}`);
+export const simulateFlowApi = (id, data) => api.post(`/flows/${id}/simulate`, data).then((r) => r.data);

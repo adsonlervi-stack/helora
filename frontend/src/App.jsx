@@ -14,6 +14,7 @@ import ChannelsPage from "./components/ChannelsPage.jsx";
 import WhatsAppConnectModal from "./components/WhatsAppConnectModal.jsx";
 import FooterBar from "./components/FooterBar.jsx";
 import ContactsPage from "./components/ContactsPage.jsx";
+import FlowsPage from "./components/FlowsPage.jsx";
 import SupportChat from "./components/SupportChat.jsx";
 import { showNotification } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
@@ -230,7 +231,7 @@ export default function App() {
             <HomePage profile={profile} conversations={conversations} onNavigate={setSection} />
           )}
           {activeSection === "overview" && <OverviewPage refreshKey={statsVersion} />}
-          {activeSection === "agents" && <AgentsPage onGoToSettings={() => setSection("settings")} />}
+          {activeSection === "agents" && <FlowsPage canEdit={profile.role === "owner" || profile.isSuperAdmin} />}
           {activeSection === "conversations" && (
             <ConversationsPage
               conversations={conversations}
