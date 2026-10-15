@@ -361,7 +361,17 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       // O bot só reage a mensagens de texto (com ou sem legenda) — mídia
       // pura sem legenda não aciona o menu, só fica salva na conversa.
       if (text) {
-        const reply = await handleIncoming(accountId, conversation, text);
+        // O fluxo novo manda as mensagens uma a uma (com esperas) por aqui.
+        const sendBot = async (t) => {
+          const id = await sendWhatsAppMessage(channelId, jid, t);
+          await addMessage({ accountId, conversationId: conversation.id, direction: "out", author: "bot", text: t, whatsappMessageId: id });
+        };
+        let reply = null;
+        try {
+          reply = await handleIncoming(accountId, conversation, text, sendBot);
+        } catch (err) {
+          console.error(`[Bot] Erro ao processar mensagem (${conversation.id}):`, err.message);
+        }
 
         if (conversation.isNew && !conversation.avatarUrl) {
           sock
