@@ -67,6 +67,14 @@ function mapMessage(row) {
     whatsappMessageId: row.whatsapp_message_id,
     reactions: row.reactions || [],
     senderName: row.sender_name,
+    status: row.status || null,
+    quotedId: row.quoted_id || null,
+    quotedText: row.quoted_text || null,
+    quotedAuthor: row.quoted_author || null,
+    deletedAt: row.deleted_at || null,
+    deletedBy: row.deleted_by || null,
+    forwarded: !!row.forwarded,
+    extra: row.extra || null,
     timestamp: row.timestamp
   };
 }
@@ -245,6 +253,7 @@ function mapAnnouncement(row) {
     title: row.title,
     message: row.message,
     link: row.link,
+    buttonText: row.button_text || null,
     scope: row.scope,
     accountId: row.account_id,
     accountName: row.accounts?.name,
@@ -280,13 +289,14 @@ export async function listAnnouncementsFor({ accountId, userId }) {
   return data.map(mapAnnouncement);
 }
 
-export async function createAnnouncement({ title, message, link, scope, accountId, userId, createdBy }) {
+export async function createAnnouncement({ title, message, link, buttonText, scope, accountId, userId, createdBy }) {
   const { data, error } = await supabase
     .from("announcements")
     .insert({
       title,
       message,
       link: link || null,
+      ...(buttonText ? { button_text: buttonText } : {}),
       scope,
       account_id: scope === "account" ? accountId : null,
       user_id: scope === "user" ? userId : null,
@@ -500,6 +510,7 @@ function mapChannel(row) {
     name: row.name,
     departmentId: row.department_id,
     departmentName: row.departments?.name,
+    flowId: row.flow_id || null,
     createdAt: row.created_at
   };
 }
@@ -539,6 +550,7 @@ export async function updateChannel(accountId, id, patch) {
   const dbPatch = {};
   if (patch.name !== undefined) dbPatch.name = patch.name;
   if (patch.departmentId !== undefined) dbPatch.department_id = patch.departmentId;
+  if (patch.flowId !== undefined) dbPatch.flow_id = patch.flowId || null;
   const { data, error } = await supabase
     .from("channels")
     .update(dbPatch)
@@ -649,6 +661,12 @@ export async function findOrCreateConversation({ accountId, platform, externalId
   if (findError) throw findError;
   if (existing) return mapConversation(existing);
 
+  // Conversa nova entra no setor configurado no canal.
+  let departmentId = null;
+  if (channelId) {
+    const { data: ch } = await supabase.from("channels").select("department_id").eq("id", channelId).maybeSingle();
+    departmentId = ch?.department_id || null;
+  }
   const { data, error } = await supabase
     .from("conversations")
     .insert({
@@ -656,7 +674,8 @@ export async function findOrCreateConversation({ accountId, platform, externalId
       platform,
       external_id: externalId,
       name: name || externalId,
-      channel_id: channelId || null
+      channel_id: channelId || null,
+      ...(departmentId ? { department_id: departmentId } : {})
     })
     .select(CONVERSATION_SELECT)
     .single();
@@ -763,29 +782,44 @@ export async function addMessage({
   mediaUrl,
   mediaType,
   whatsappMessageId,
-  senderName
+  senderName,
+  status,
+  quotedId,
+  quotedText,
+  quotedAuthor,
+  forwarded,
+  extra
 }) {
-  const { data: msgRow, error } = await supabase
-    .from("messages")
-    .insert({
-      account_id: accountId,
-      conversation_id: conversationId,
-      direction,
-      author,
-      text: text || "",
-      media_url: mediaUrl || null,
-      media_type: mediaType || null,
-      whatsapp_message_id: whatsappMessageId || null,
-      sender_name: senderName || null
-    })
-    .select()
-    .single();
+  const row = {
+    account_id: accountId,
+    conversation_id: conversationId,
+    direction,
+    author,
+    text: text || "",
+    media_url: mediaUrl || null,
+    media_type: mediaType || null,
+    whatsapp_message_id: whatsappMessageId || null,
+    sender_name: senderName || null
+  };
+  // Campos da migration 016 — só entram quando usados (tolera banco sem a migration).
+  if (status) row.status = status;
+  if (quotedId) row.quoted_id = quotedId;
+  if (quotedText) row.quoted_text = String(quotedText).slice(0, 300);
+  if (quotedAuthor) row.quoted_author = quotedAuthor;
+  if (forwarded) row.forwarded = true;
+  if (extra) row.extra = extra;
+  let { data: msgRow, error } = await supabase.from("messages").insert(row).select().single();
+  if (error && /column .* does not exist|schema cache/i.test(error.message)) {
+    for (const k of ["status", "quoted_id", "quoted_text", "quoted_author", "forwarded", "extra"]) delete row[k];
+    ({ data: msgRow, error } = await supabase.from("messages").insert(row).select().single());
+  }
 
   if (error) throw error;
 
   const preview =
     (text || "").trim().slice(0, 120) ||
     { image: "📷 Foto", video: "🎥 Vídeo", audio: "🎤 Áudio", document: "📄 Documento" }[mediaType] ||
+    (extra?.type === "contact" ? "👤 Contato" : extra?.type === "location" ? "📍 Localização" : "") ||
     "";
   const patch = { last_message_at: msgRow.timestamp, last_message_preview: preview };
   if (direction === "in") {
@@ -1707,7 +1741,15 @@ export async function getFlow(accountId, id) {
   return data ? mapFlow(data) : null;
 }
 
-export async function getActiveFlow(accountId) {
+export async function getActiveFlow(accountId, channelId = null) {
+  // Canal com fluxo próprio escolhido: usa ele.
+  if (channelId) {
+    const { data: ch, error: chErr } = await supabase.from("channels").select("flow_id").eq("id", channelId).maybeSingle();
+    if (!chErr && ch?.flow_id) {
+      const { data: f } = await supabase.from("flows").select("*").eq("account_id", accountId).eq("id", ch.flow_id).maybeSingle();
+      if (f) return mapFlow(f);
+    }
+  }
   const { data, error } = await supabase
     .from("flows")
     .select("*")
@@ -2014,6 +2056,7 @@ function mapCampaign(r) {
     id: r.id, name: r.name, message: r.message, mediaUrl: r.media_url, mediaType: r.media_type,
     status: r.status, scheduledAt: r.scheduled_at, minDelay: r.min_delay, maxDelay: r.max_delay,
     hourlyLimit: r.hourly_limit, total: r.total, sent: r.sent, failed: r.failed, pauseReason: r.pause_reason,
+    variants: Array.isArray(r.variants) ? r.variants : [], labelIds: r.label_ids || [],
     createdAt: r.created_at, startedAt: r.started_at, finishedAt: r.finished_at
   };
 }
@@ -2028,6 +2071,10 @@ export async function getCampaign(accountId, id) {
   const { data, error } = await supabase.from("campaigns").select("*").eq("account_id", accountId).eq("id", id).maybeSingle();
   if (error) throw error;
   return data ? mapCampaign(data) : null;
+}
+
+function variantsOf(body) {
+  return (Array.isArray(body.variants) ? body.variants : []).map((v) => String(v || "").trim()).filter(Boolean).slice(0, 2);
 }
 
 export async function createCampaign(accountId, userId, body, recipients) {
@@ -2045,6 +2092,8 @@ export async function createCampaign(accountId, userId, body, recipients) {
       account_id: accountId,
       name: body.name || "Campanha",
       message: body.message,
+      ...(variantsOf(body).length ? { variants: variantsOf(body) } : {}),
+      ...(Array.isArray(body.labelIds) && body.labelIds.length ? { label_ids: body.labelIds } : {}),
       media_url: body.mediaUrl || null,
       media_type: body.mediaType || null,
       status: body.scheduledAt ? "scheduled" : "draft",
@@ -2190,6 +2239,52 @@ export async function listUserEmails({ accountId = null, onlyOwners = false } = 
   for (const p of data || []) {
     const { data: u } = await supabase.auth.admin.getUserById(p.id);
     if (u?.user?.email) out.push({ name: p.name, email: u.user.email });
+  }
+  return out;
+}
+
+
+// ---------- Mensagens: tiques, apagar ----------
+const STATUS_RANK = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
+export async function updateMessageStatusByWaId(whatsappMessageId, status) {
+  if (!whatsappMessageId || !status) return;
+  const { data } = await supabase.from("messages").select("id, status").eq("whatsapp_message_id", whatsappMessageId).limit(5);
+  for (const m of data || []) {
+    if ((STATUS_RANK[m.status] ?? -1) >= STATUS_RANK[status]) continue;
+    await supabase.from("messages").update({ status }).eq("id", m.id);
+  }
+}
+
+export async function updateMessageFields(accountId, id, patch) {
+  const { data, error } = await supabase.from("messages").update(patch).eq("account_id", accountId).eq("id", id).select().maybeSingle();
+  if (error) throw error;
+  return mapMessage(data);
+}
+
+export async function markDeletedByWaId(accountId, whatsappMessageId, by) {
+  if (!whatsappMessageId) return;
+  await supabase
+    .from("messages")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: by || null })
+    .eq("account_id", accountId)
+    .eq("whatsapp_message_id", whatsappMessageId);
+}
+
+/** Conversas (com telefone) que têm alguma das etiquetas — usado em campanhas. */
+export async function listPhonesByLabels(accountId, labelIds) {
+  if (!labelIds?.length) return [];
+  const { data, error } = await supabase
+    .from("conversation_labels")
+    .select("conversations!inner(id, name, external_id, platform, account_id, is_group)")
+    .in("label_id", labelIds)
+    .eq("conversations.account_id", accountId);
+  if (error) throw error;
+  const out = [];
+  for (const r of data || []) {
+    const c = r.conversations;
+    if (!c || c.platform !== "whatsapp" || c.is_group) continue;
+    const phone = String(c.external_id || "").split("@")[0].split(":")[0];
+    if (/^\d{10,15}$/.test(phone)) out.push({ phone, name: c.name });
   }
   return out;
 }
