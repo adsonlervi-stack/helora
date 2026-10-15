@@ -824,3 +824,54 @@ input, select, textarea { font-family: var(--font-body); }
   .acting-banner { font-size: 12px; }
   .sticker-picker, .attach-menu { position: fixed; left: 12px; right: 12px; bottom: 80px; width: auto; }
 }
+
+/* ---------- Login (tela dividida) ---------- */
+.login2 { display: grid; grid-template-columns: minmax(380px, 1fr) 1.15fr; min-height: 100dvh; background: #fff; }
+.login2-left { display: flex; align-items: center; justify-content: center; padding: 40px 24px; background: #fff; }
+.login2-form { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; animation: msgMenuIn .4s ease-out; }
+.login2-logo { height: 38px; width: auto; align-self: flex-start; margin-bottom: 18px; }
+.login2-form h1 { margin: 0; font-size: 30px; letter-spacing: -0.6px; color: #1d1d1f; }
+.login2-sub { margin: 0 0 10px; color: #6e6e73; font-size: 15px; line-height: 1.45; }
+.login2-submit {
+  margin-top: 6px; height: 48px; border: 0; border-radius: 14px; background: #0071e3; color: #fff; font-size: 16px; font-weight: 600;
+  cursor: pointer; box-shadow: 0 10px 24px -12px rgba(0,113,227,.7); transition: background .2s, transform .1s;
+}
+.login2-submit:hover { background: #0077ed; }
+.login2-submit:active { transform: scale(.99); }
+.login2-submit:disabled { opacity: .55; }
+.login2-foot { margin-top: 28px; font-size: 12px; color: #86868b; }
+.login2-right {
+  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 48px;
+  background: linear-gradient(135deg, #0062c4 0%, #0071e3 35%, #3aa8f2 70%, #34c759 130%); color: #fff;
+}
+.login2-glow { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .55; }
+.login2-glow.g1 { width: 420px; height: 420px; background: #5ac8fa; top: -120px; right: -100px; }
+.login2-glow.g2 { width: 360px; height: 360px; background: #34c759; bottom: -140px; left: -80px; opacity: .4; }
+.login2-hero { position: relative; max-width: 520px; display: flex; flex-direction: column; gap: 18px; }
+.login2-pill { align-self: flex-start; padding: 6px 12px; border-radius: 980px; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.3); font-size: 12.5px; font-weight: 600; backdrop-filter: blur(10px); }
+.login2-hero h2 { margin: 0; font-size: clamp(28px, 3vw, 40px); line-height: 1.12; letter-spacing: -0.8px; }
+.login2-hero p { margin: 0; font-size: 16px; line-height: 1.55; opacity: .9; }
+.login2-chat {
+  margin-top: 8px; padding: 14px; border-radius: 22px; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+  backdrop-filter: blur(22px) saturate(160%); -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: 0 30px 60px -30px rgba(0,0,0,.45); display: flex; flex-direction: column; gap: 8px;
+}
+.lc-head { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.2); }
+.lc-head small { display: block; font-size: 12px; color: #c9ffd8; }
+.lc-avatar { width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #0071e3; font-weight: 700; display: grid; place-items: center; }
+.lc-tag { margin-left: auto; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 10px; background: rgba(255,255,255,.22); }
+.lc-msg { max-width: 82%; padding: 8px 12px; border-radius: 16px; font-size: 14px; line-height: 1.35; }
+.lc-msg.in { align-self: flex-start; background: #fff; color: #1d1d1f; border-bottom-left-radius: 5px; }
+.lc-msg.out { align-self: flex-end; background: #0062c4; color: #fff; border-bottom-right-radius: 5px; }
+.lc-msg.out.bot { background: rgba(255,255,255,.9); color: #1d1d1f; }
+.lc-msg b { display: block; font-size: 11.5px; color: #34c759; margin-bottom: 2px; }
+.lc-msg.out:not(.bot) b { display: inline; color: #fff; }
+.lc-ticks { align-self: flex-end; font-size: 11px; color: #9be7ff; }
+.login2-feats { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; font-size: 14px; }
+.login2-feats li { display: flex; align-items: center; gap: 8px; }
+.login2-feats span { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,255,255,.18); }
+@media (max-width: 900px) {
+  .login2 { grid-template-columns: 1fr; }
+  .login2-right { display: none; }
+  .login2-left { min-height: 100dvh; background: linear-gradient(180deg, #fff 70%, #eef6ff); }
+}
