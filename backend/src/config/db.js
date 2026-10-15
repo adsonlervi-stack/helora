@@ -45,6 +45,8 @@ function mapConversation(row) {
     isNew: row.is_new,
     botNodeId: row.bot_node_id,
     lastMessagePreview: row.last_message_preview || null,
+    flowId: row.flow_id || null,
+    flowVars: row.flow_vars || {},
     avatarUrl: row.avatar_url || null,
     ...(labels ? { labels } : {})
   };
@@ -77,7 +79,9 @@ function toSnakeCasePatch(patch) {
     departmentId: "department_id",
     assignedAgentId: "assigned_agent_id",
     channelId: "channel_id",
-    botNodeId: "bot_node_id"
+    botNodeId: "bot_node_id",
+    flowId: "flow_id",
+    flowVars: "flow_vars"
   };
   const out = {};
   for (const [key, value] of Object.entries(patch)) {
@@ -1494,7 +1498,10 @@ export async function upsertContacts(accountId, channelId, list, source = "whats
   }
   if (!clean.size) return { created: 0, updated: 0 };
 
-  const phones = [...clean.keys()];
+  // Brasil: 55 + DDD + 9 + 8 dígitos e 55 + DDD + 8 dígitos são o mesmo número.
+  const brTwin = (p) =>
+    /^55\d{2}9\d{8}$/.test(p) ? p.slice(0, 4) + p.slice(5) : /^55\d{2}\d{8}$/.test(p) ? p.slice(0, 4) + "9" + p.slice(4) : null;
+  const phones = [...new Set([...clean.keys()].flatMap((p) => [p, brTwin(p)].filter(Boolean)))];
   const existing = new Map();
   for (let i = 0; i < phones.length; i += 500) {
     const { data, error } = await supabase
@@ -1503,7 +1510,11 @@ export async function upsertContacts(accountId, channelId, list, source = "whats
       .eq("account_id", accountId)
       .in("phone", phones.slice(i, i + 500));
     if (error) throw error;
-    data.forEach((r) => existing.set(r.phone, r));
+    data.forEach((r) => {
+      existing.set(r.phone, r);
+      const twin = brTwin(r.phone);
+      if (twin && !existing.has(twin)) existing.set(twin, r);
+    });
   }
 
   const inserts = [];
@@ -1621,4 +1632,127 @@ export async function listSupportThreads() {
 export async function setSupportThreadStatus(threadId, status) {
   const { error } = await supabase.from("support_threads").update({ status }).eq("id", threadId);
   if (error) throw error;
+}
+
+
+// ============================================================
+// Fluxos (construtor em canvas)
+// ============================================================
+
+function mapFlow(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    active: r.active,
+    graph: r.graph || { nodes: [], edges: [] },
+    version: r.version,
+    updatedAt: r.updated_at,
+    createdAt: r.created_at
+  };
+}
+
+export async function listFlows(accountId) {
+  const { data, error } = await supabase.from("flows").select("*").eq("account_id", accountId).order("created_at");
+  if (error) throw error;
+  return data.map(mapFlow);
+}
+
+export async function getFlow(accountId, id) {
+  const { data, error } = await supabase.from("flows").select("*").eq("account_id", accountId).eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? mapFlow(data) : null;
+}
+
+export async function getActiveFlow(accountId) {
+  const { data, error } = await supabase
+    .from("flows")
+    .select("*")
+    .eq("account_id", accountId)
+    .eq("active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (/relation .*flows/i.test(error.message)) return null; // migration 014 ainda não rodou
+    throw error;
+  }
+  return data ? mapFlow(data) : null;
+}
+
+export async function createFlow(accountId, { name, description, graph }) {
+  const { data, error } = await supabase
+    .from("flows")
+    .insert({ account_id: accountId, name, description: description || null, graph: graph || { nodes: [], edges: [] } })
+    .select()
+    .single();
+  if (error) throw error;
+  return mapFlow(data);
+}
+
+export async function updateFlow(accountId, id, { name, description, graph }) {
+  const current = await getFlow(accountId, id);
+  if (!current) return null;
+  const patch = { updated_at: new Date().toISOString() };
+  if (name !== undefined) patch.name = name;
+  if (description !== undefined) patch.description = description;
+  if (graph !== undefined) {
+    patch.graph = graph;
+    patch.version = (current.version || 1) + 1;
+  }
+  const { data, error } = await supabase.from("flows").update(patch).eq("account_id", accountId).eq("id", id).select().single();
+  if (error) throw error;
+  return mapFlow(data);
+}
+
+/** Ativa um fluxo e desativa os outros da empresa (só um responde por vez). */
+export async function setFlowActive(accountId, id, active) {
+  if (active) {
+    await supabase.from("flows").update({ active: false }).eq("account_id", accountId).neq("id", id);
+  }
+  const { data, error } = await supabase.from("flows").update({ active }).eq("account_id", accountId).eq("id", id).select().single();
+  if (error) throw error;
+  return mapFlow(data);
+}
+
+export async function deleteFlow(accountId, id) {
+  const { error } = await supabase.from("flows").delete().eq("account_id", accountId).eq("id", id);
+  if (error) throw error;
+}
+
+export async function recordFlowEvent(accountId, flowId, nodeId, kind, port = null) {
+  const { error } = await supabase.from("flow_events").insert({ account_id: accountId, flow_id: flowId, node_id: nodeId, kind, port });
+  if (error) console.error("[Fluxo] Falha ao registrar evento:", error.message);
+}
+
+/** Números por bloco: { nodeId: { sent, reply, invalid, ports: { porta: n } } } */
+export async function getFlowStats(accountId, flowId, days = 7) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  const out = {};
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("flow_events")
+      .select("node_id, kind, port")
+      .eq("account_id", accountId)
+      .eq("flow_id", flowId)
+      .gte("created_at", since)
+      .range(from, from + 999);
+    if (error) throw error;
+    for (const e of data) {
+      const n = (out[e.node_id] = out[e.node_id] || { sent: 0, reply: 0, invalid: 0, ports: {} });
+      n[e.kind] = (n[e.kind] || 0) + 1;
+      if (e.port) n.ports[e.port] = (n.ports[e.port] || 0) + 1;
+    }
+    if (data.length < 1000) break;
+    from += 1000;
+  }
+  return out;
+}
+
+export async function addLabelToConversation(accountId, conversationId, labelId) {
+  const { error } = await supabase
+    .from("conversation_labels")
+    .upsert({ account_id: accountId, conversation_id: conversationId, label_id: labelId }, { onConflict: "conversation_id,label_id", ignoreDuplicates: true });
+  if (error) console.error("[Fluxo] Falha ao etiquetar:", error.message);
 }
