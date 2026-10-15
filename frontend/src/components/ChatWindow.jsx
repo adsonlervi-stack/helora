@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2,
   RotateCcw, Users, Check, CheckCheck, Clock, AlertCircle, Forward, Reply, Copy, Trash2, Ban, UserRound, MapPin, X,
-  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload
+  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
@@ -434,6 +434,8 @@ function SpecialModal({ kind, onClose, onSend }) {
   );
 }
 
+const EMOJIS = "😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 😉 😍 🥰 😘 😋 😜 🤪 🤗 🤭 🤔 🤨 😐 😶 🙄 😏 😬 😌 😴 😎 🤓 🥳 😕 😟 😮 😲 🥺 😢 😭 😱 😡 🤯 👍 👎 👏 🙌 🙏 🤝 💪 👋 ✌️ 🤞 👌 👉 👀 ❤️ 🧡 💛 💚 💙 💜 🖤 💔 💯 ✅ ❌ ⚠️ 🔥 ⭐ ✨ 🎉 🎁 📌 📞 📲 💬 📄 📅 ⏰ 💰 💳 🚗 🏠 🏥 ☀️ 🌙 🌧️ ☕ 🍕 🎂".split(" ");
+
 export default function ChatWindow({
   conversation,
   messages,
@@ -470,6 +472,20 @@ export default function ChatWindow({
   const [departments, setDepartments] = useState([]);
   const [team, setTeam] = useState([]);
   const [recording, setRecording] = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const cancelRecRef = useRef(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  useEffect(() => {
+    if (!recording) return;
+    const t = setInterval(() => setRecSecs((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [recording]);
+  const insertEmoji = (e) => {
+    const el = inputRef.current;
+    const pos = el?.selectionStart ?? text.length;
+    handleTextChange(text.slice(0, pos) + e + text.slice(pos));
+    setTimeout(() => { el?.focus(); el?.setSelectionRange(pos + e.length, pos + e.length); }, 0);
+  };
   const [showTransfer, setShowTransfer] = useState(false);
   const [menuId, setMenuId] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -656,16 +672,24 @@ export default function ChatWindow({
       recorder.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         stream.getTracks().forEach((t) => t.stop());
+        if (cancelRecRef.current) { cancelRecRef.current = false; return; }
         await onSendAudio(blob);
       };
+      cancelRecRef.current = false;
       recorder.start();
       mediaRecorderRef.current = recorder;
+      setRecSecs(0);
       setRecording(true);
     } catch (err) {
       console.error("Não foi possível acessar o microfone:", err);
     }
   };
 
+  const cancelRecording = () => {
+    cancelRecRef.current = true;
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  };
   const stopRecording = () => {
     mediaRecorderRef.current?.stop();
     setRecording(false);
@@ -860,6 +884,23 @@ export default function ChatWindow({
                 <PenLine size={17} />
               </button>
 
+              <div className="attach-wrap">
+                <button type="button" className="composer-icon-btn" title="Emojis" disabled={offline || recording} onClick={() => setEmojiOpen((v) => !v)}>
+                  <Smile size={18} />
+                </button>
+                {emojiOpen && (
+                  <div className="emoji-picker" onMouseLeave={() => setEmojiOpen(false)}>
+                    {EMOJIS.map((e) => <button type="button" key={e} onClick={() => insertEmoji(e)}>{e}</button>)}
+                  </div>
+                )}
+              </div>
+
+              {recording ? (
+                <div className="rec-bar">
+                  <span className="rec-dot" /> Gravando áudio… <strong>{String(Math.floor(recSecs / 60)).padStart(2, "0")}:{String(recSecs % 60).padStart(2, "0")}</strong>
+                  <button type="button" className="rec-cancel" title="Descartar áudio" onClick={cancelRecording}><Trash size={15} /> Descartar</button>
+                </div>
+              ) : (
               <input
                 ref={inputRef}
                 placeholder={offline ? "WhatsApp desconectado" : "Mensagem  ·  / para respostas prontas"}
@@ -867,15 +908,16 @@ export default function ChatWindow({
                 disabled={offline}
                 onChange={(e) => handleTextChange(e.target.value)}
               />
+              )}
 
               <button
                 type="button"
                 className={`composer-icon-btn ${recording ? "recording" : ""}`}
                 disabled={offline}
-                title={recording ? "Parar gravação" : "Gravar áudio"}
+                title={recording ? "Enviar áudio" : "Gravar áudio"}
                 onClick={recording ? stopRecording : startRecording}
               >
-                {recording ? <Square size={16} /> : <Mic size={18} />}
+                {recording ? <Send size={16} /> : <Mic size={18} />}
               </button>
 
               <button type="submit" className="composer-send" disabled={!text.trim() || offline} title="Enviar">
