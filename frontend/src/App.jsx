@@ -254,6 +254,7 @@ export default function App() {
               openConversationId={pendingConversationId}
               onOpenConversationHandled={() => setPendingConversationId(null)}
               currentUserId={session.user.id}
+              currentUserName={profile.name || (session.user.email || "").split("@")[0]}
               canSeeAll={profile.role === "owner" || profile.isSuperAdmin}
               newConversationContact={newConversationContact}
               onNewConversationHandled={() => setNewConversationContact(null)}

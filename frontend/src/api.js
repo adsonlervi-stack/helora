@@ -46,8 +46,13 @@ export function leaveAccount() {
 export const getConversations = () => api.get("/conversations").then((r) => r.data);
 export const getConversationMessages = (id) =>
   api.get(`/conversations/${id}/messages`).then((r) => r.data);
-export const sendMessage = (id, text, sign = true) =>
-  api.post(`/conversations/${id}/send`, { text, sign }).then((r) => r.data);
+export const sendMessage = (id, text, sign = true, quotedId = null) =>
+  api.post(`/conversations/${id}/send`, { text, sign, quotedId }).then((r) => r.data);
+export const sendSpecialApi = (id, payload) => api.post(`/conversations/${id}/send-special`, payload).then((r) => r.data);
+export const getConversationChannelStatus = (id) => api.get(`/conversations/${id}/channel-status`).then((r) => r.data);
+export const deleteMessageApi = (messageId) => api.post(`/messages/${messageId}/delete`).then((r) => r.data);
+export const forwardMessageApi = (messageId, conversationIds) =>
+  api.post(`/messages/${messageId}/forward`, { conversationIds }).then((r) => r.data);
 export const setConversationMode = (id, mode) =>
   api.post(`/conversations/${id}/mode`, { mode }).then((r) => r.data);
 export const setConversationStatus = (id, status) =>
@@ -60,10 +65,11 @@ export const setConversationDepartment = (id, departmentId) =>
   api.post(`/conversations/${id}/department`, { departmentId }).then((r) => r.data);
 export const assignConversation = (id, agentId) =>
   api.post(`/conversations/${id}/assign`, { agentId }).then((r) => r.data);
-export const sendMediaMessage = (id, file, caption) => {
+export const sendMediaMessage = (id, file, caption, quotedId) => {
   const form = new FormData();
   form.append("file", file);
   if (caption) form.append("caption", caption);
+  if (quotedId) form.append("quotedId", quotedId);
   return api.post(`/conversations/${id}/send-media`, form).then((r) => r.data);
 };
 export const sendAudioMessage = (id, blob) => {
@@ -92,8 +98,8 @@ export const setProfileDepartmentsApi = (profileId, departmentIds) =>
 
 // ---- Canais (dispositivos WhatsApp / Messenger / Instagram) ----
 export const getChannels = () => api.get("/channels").then((r) => r.data);
-export const createChannelApi = (platform, name, departmentId) =>
-  api.post("/channels", { platform, name, departmentId }).then((r) => r.data);
+export const createChannelApi = (platform, name, departmentId, flowId) =>
+  api.post("/channels", { platform, name, departmentId, flowId }).then((r) => r.data);
 export const updateChannelApi = (id, patch) => api.post(`/channels/${id}`, patch).then((r) => r.data);
 export const removeChannel = (id) => api.delete(`/channels/${id}`);
 export const getChannelStatusApi = (id) => api.get(`/channels/${id}/status`).then((r) => r.data);
