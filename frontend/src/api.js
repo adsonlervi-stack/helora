@@ -20,6 +20,17 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Empresa bloqueada por falta de pagamento: o backend responde 402 e o app mostra o Financeiro.
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err.response?.status === 402 && err.response.data?.billingBlocked) {
+      window.dispatchEvent(new CustomEvent("helora:billing-blocked"));
+    }
+    return Promise.reject(err);
+  }
+);
+
 // ---- Super admin: entrar numa empresa ----
 const ACTING_KEY = "helora_acting_account";
 export function getActingAccount() {
@@ -276,6 +287,13 @@ export const sendStickerApi = (id, { url, file }) => {
   return api.post(`/conversations/${id}/send-sticker`, { url }).then((r) => r.data);
 };
 export const acceptSupportApi = (id) => api.post(`/admin/support/${id}/accept`);
+
+// ---- v5: cobrança ----
+export const getInvoicePixApi = (id) => api.get(`/billing/invoices/${id}/pix`).then((r) => r.data);
+export const adminBillingStatus = () => api.get("/admin/billing/status").then((r) => r.data);
+export const adminRunBilling = () => api.post("/admin/billing/run").then((r) => r.data);
+export const adminChargeInvoice = (id) => api.post(`/admin/invoices/${id}/charge`).then((r) => r.data);
+export const adminTestEmail = (to) => api.post("/admin/email/test", { to }).then((r) => r.data);
 
 // ---- v4 ----
 export const getBillingApi = () => api.get("/billing").then((r) => r.data);

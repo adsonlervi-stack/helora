@@ -31,7 +31,15 @@ export default function App() {
   const [session, setSession] = useState(undefined); // undefined = ainda não sabemos
   const [profile, setProfile] = useState(null);
 
-  const [section, setSection] = useState("home");
+  const [section, setSection] = useState(() =>
+    new URLSearchParams(window.location.search).get("secao") === "financeiro" ? "finance" : "home"
+  );
+  const [billingBlocked, setBillingBlocked] = useState(false);
+  useEffect(() => {
+    const on = () => { setBillingBlocked(true); setSection("finance"); };
+    window.addEventListener("helora:billing-blocked", on);
+    return () => window.removeEventListener("helora:billing-blocked", on);
+  }, []);
   const [showProfile, setShowProfile] = useState(false);
   // Celular = modo app (só Conversas e Pipeline)
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
@@ -268,6 +276,7 @@ export default function App() {
     ? (section.startsWith("g_") ? section : "g_dashboard")
     : section.startsWith("g_") || section === "admin" ? "home" : section;
   if (mobileApp && !MOBILE_NAV_KEYS.includes(activeSection)) activeSection = "conversations";
+  if (billingBlocked && !isHeloraPanel) activeSection = "finance";
   const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
   const canEditFooter = profile.role === "owner" || profile.isSuperAdmin;
   const handleAvatarUpdated = (avatarUrl) => setProfile((p) => ({ ...p, avatarUrl }));
@@ -324,7 +333,9 @@ export default function App() {
           )}
           {activeSection === "channels" && <ChannelsPage />}
           {activeSection === "reports" && <ReportsPage />}
-          {activeSection === "finance" && isManager && <FinancePage />}
+          {activeSection === "finance" && (isManager ? <FinancePage /> : (
+            <div className="page"><div className="admin-feedback error">O acesso da empresa está pausado por pendência financeira. Fale com o responsável pela conta.</div></div>
+          ))}
           {activeSection === "campaigns" && <CampaignsPage canEdit={profile.role === "owner" || profile.isSuperAdmin} />}
           {activeSection === "contacts" && (
             <ContactsPage
