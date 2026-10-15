@@ -204,6 +204,23 @@ export async function sendWhatsAppReaction(channelId, jid, { id, fromMe }, emoji
   });
 }
 
+/** Marca como lidas no WhatsApp do aparelho (tique azul pro cliente e some o "não lida" no celular). */
+export async function markWhatsAppRead(channelId, jid, ids = []) {
+  if (!channelId || !jid || !ids.length) return;
+  const cloud = await getCloudChannel(channelId).catch(() => null);
+  if (cloud) return;
+  const conn = connections.get(channelId);
+  if (!conn?.sock) return;
+  try {
+    await conn.sock.readMessages(ids.map((id) => ({ remoteJid: jid, id, fromMe: false })));
+    if (conn.sock.chatModify) {
+      await conn.sock.chatModify({ markRead: true, lastMessages: [] }, jid).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("[WhatsApp] Falha ao marcar como lida:", err.message);
+  }
+}
+
 async function publishStatus(channelId) {
   const conn = connections.get(channelId);
   if (!conn) return;
