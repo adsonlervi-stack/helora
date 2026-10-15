@@ -68,7 +68,7 @@ export async function handleIncoming(accountId, conversation, rawText, send) {
   const text = normalize(rawText);
 
   // ---------- Construtor de fluxos (canvas) — tem prioridade quando há um fluxo ativo ----------
-  const activeFlow = await getActiveFlow(accountId);
+  const activeFlow = await getActiveFlow(accountId, conversation.channelId);
   if (activeFlow) {
     const vars = conversation.flowVars || {};
     if (vars.__ended && !conversation.botNodeId) {
