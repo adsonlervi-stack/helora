@@ -14,6 +14,7 @@ import { startAllChannels } from "./whatsapp/baileysClient.js";
 import { startScheduledMessagesDispatcher } from "./scheduler.js";
 import { startCampaignDispatcher } from "./campaignRunner.js";
 import publicRoutes from "./routes/public.js";
+import publicDocs from "./routes/publicDocs.js";
 import { autoMigrateIfNeeded } from "./migrateSupabase.js";
 import { startBillingScheduler, markInvoicePaid } from "./billing.js";
 import { supabase as db } from "./config/db.js";
@@ -56,6 +57,7 @@ app.get("/public/plans", cors(), async (req, res) => {
     res.json([]);
   }
 });
+app.use("/public", cors(), publicDocs);
 app.use("/public/v1", cors(), express.json({ limit: "2mb" }), publicRoutes);
 app.use(
   cors({
