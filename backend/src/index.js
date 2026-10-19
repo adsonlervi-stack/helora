@@ -7,6 +7,7 @@ import adminRoutes from "./routes/admin.js";
 import crmRoutes from "./routes/crm.js";
 import aiRoutes from "./routes/ai.js";
 import { googleRouter, googleCallbackRouter } from "./google.js";
+import { pushRouter } from "./push.js";
 import { startRetentionJob } from "./retention.js";
 import metaWebhookRoutes from "./meta/webhookRoutes.js";
 import { startAllChannels } from "./whatsapp/baileysClient.js";
@@ -68,6 +69,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/crm", crmRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/google", googleRouter);
+app.use("/api/push", pushRouter);
 app.use("/", googleCallbackRouter);
 app.use("/api", apiRoutes);
 app.use("/", metaWebhookRoutes); // expõe GET/POST /webhook/meta
