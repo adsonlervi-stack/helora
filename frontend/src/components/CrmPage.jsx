@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
-  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks
+  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
@@ -24,6 +24,20 @@ function ago(iso) {
   if (s < 86400 * 30) return `${Math.round(s / 86400)} dia(s)`;
   if (s < 86400 * 365) return `${Math.round(s / 86400 / 30)} mês(es)`;
   return `${Math.round(s / 86400 / 365)} ano(s)`;
+}
+const KIND_BY_TEMPLATE = { seguros_renovacao: "Renovação", seguros_vendas: "Venda nova", seguros_sinistros: "Sinistro" };
+const fmtField = (f, v) => {
+  if (v == null || v === "") return "—";
+  if (f.type === "date") return String(v).split("-").reverse().join("/");
+  if (f.type === "currency") return brl(Number(v));
+  return String(v);
+};
+const daysUntil = (d) => { if (!d) return null; const t = new Date(`${d}T12:00:00`); return Math.round((t - new Date()) / 86400000); };
+function DueBadge({ date }) {
+  const n = daysUntil(date);
+  if (n == null || isNaN(n)) return null;
+  const cls = n < 0 ? "late" : n <= 15 ? "soon" : n <= 30 ? "near" : "ok";
+  return <span className={`crm-due ${cls}`}>{n < 0 ? `Venceu há ${-n} dia${n === -1 ? "" : "s"}` : n === 0 ? "Vence hoje" : `Vence em ${n} dia${n === 1 ? "" : "s"}`}</span>;
 }
 const initials = (n) => String(n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 const toLocalInput = (d) => {
@@ -94,6 +108,10 @@ function FunnelView({ ctx }) {
   const [editCol, setEditCol] = useState(null);
   const [newPipe, setNewPipe] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [editFields, setEditFields] = useState(false);
+  const modelFields = pipeline?.fields || [];
+  const cardFields = modelFields.filter((f) => f.card).slice(0, 4);
+  const kindLabel = KIND_BY_TEMPLATE[pipeline?.template];
 
   const load = () => pipelineId && crm.leads({ pipelineId }).then(setLeads).catch(() => setLeads([]));
   useEffect(() => { setLeads(null); load(); }, [pipelineId]);
@@ -153,6 +171,7 @@ function FunnelView({ ctx }) {
           </select>
         </label>
         {isManager && <Button variant="secondary" onClick={() => setEditCol({ name: "", color: COLORS[0] })}><Plus size={15} /> Coluna</Button>}
+        {isManager && pipeline && <Button variant="secondary" onClick={() => setEditFields(true)}><SlidersHorizontal size={15} /> Campos{pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}</Button>}
         <div className="crm-search"><Search size={15} /><input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <select className="crm-filter" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
           <option value="">Todas as tags</option>
@@ -191,6 +210,26 @@ function FunnelView({ ctx }) {
                 {leads === null && <div className="crm-skel" />}
                 {items.map((l) => (
                   <div key={l.id} className="crm-card" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => setOpen(l)}>
+                    {modelFields.length > 0 ? (
+                      <div className="crm-mcard" style={{ "--band": st.color }}>
+                        <div className="crm-mcard-band">
+                          <span><RefreshCw size={13} /> {(l.source && l.source !== "Importação" ? l.source : kindLabel || st.name).toUpperCase()}</span>
+                          <span><Clock size={13} /> Há {ago(l.stageChangedAt)}</span>
+                        </div>
+                        <div className="crm-mcard-grid">
+                          <div className="wide"><small>Cliente</small><strong>{l.name}</strong></div>
+                          {cardFields.map((f) => (
+                            <div key={f.id} className={f.alert ? "wide" : ""}>
+                              <small>{f.label.replace(/\s*\(.*\)$/, "")}</small>
+                              <strong>{fmtField(f, l.custom?.[f.id])}</strong>
+                              {f.alert && l.custom?.[f.id] && <DueBadge date={l.custom[f.id]} />}
+                            </div>
+                          ))}
+                          <div><small>Responsável</small><strong>{l.ownerName || "—"}</strong></div>
+                          {l.value ? <div><small>Valor</small><strong>{brl(l.value)}</strong></div> : null}
+                        </div>
+                      </div>
+                    ) : (
                     <div className="crm-card-top">
                       <span className="crm-avatar">{initials(l.name)}</span>
                       <div className="crm-card-id">
@@ -199,6 +238,7 @@ function FunnelView({ ctx }) {
                       </div>
                       <span className="crm-value">{l.value ? brl(l.value) : "+ Valor"}</span>
                     </div>
+                    )}
                     {l.tagIds.length > 0 && (
                       <div className="crm-tags">
                         {l.tagIds.map((id) => tagById.get(id)).filter(Boolean).map((t) => (
@@ -243,6 +283,7 @@ function FunnelView({ ctx }) {
         </Sheet>
       )}
       {importing && <ImportSheet ctx={ctx} onClose={() => setImporting(false)} onDone={() => { setImporting(false); load(); ctx.loadTags(); }} />}
+      {editFields && <FieldsSheet pipeline={pipeline} onClose={() => setEditFields(false)} onSaved={() => { setEditFields(false); loadPipelines(); }} />}
       {newPipe && <NewPipelineSheet onClose={() => setNewPipe(false)} onCreated={(p) => { setNewPipe(false); loadPipelines().then(() => setPipelineId(p.id)); }} />}
     </>
   );
@@ -314,14 +355,81 @@ function ColorPicker({ value, onChange }) {
 
 function NewPipelineSheet({ onClose, onCreated }) {
   const [name, setName] = useState("");
+  const [templates, setTemplates] = useState([]);
+  const [tpl, setTpl] = useState("blank");
   const [err, setErr] = useState(null);
+  useEffect(() => { crm.templates().then(setTemplates).catch(() => {}); }, []);
+  const cur = templates.find((t) => t.key === tpl);
   const save = async () => {
-    try { onCreated(await crm.createPipeline({ name })); } catch (e) { setErr(errText(e)); }
+    try { onCreated(await crm.createPipeline({ name: name.trim() || cur?.name, template: tpl })); } catch (e) { setErr(errText(e)); }
+  };
+  const groups = [...new Set(templates.map((t) => t.group))];
+  return (
+    <Sheet title="Novo funil" subtitle="Comece de um modelo pronto ou em branco. Tudo pode ser ajustado depois (colunas, campos e automações)." onClose={onClose} width={640}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={save}>Criar funil</Button></>}>
+      {groups.map((g) => (
+        <div key={g} className="crm-tpl-group">
+          <div className="fi-sec-title">{g}</div>
+          <div className="crm-tpl-grid">
+            {templates.filter((t) => t.group === g).map((t) => (
+              <button type="button" key={t.key} className={`crm-tpl ${tpl === t.key ? "on" : ""}`} onClick={() => setTpl(t.key)}>
+                <strong>{t.name}</strong>
+                <span>{t.description}</span>
+                <div className="crm-tpl-stages">{t.stages.map((st) => <i key={st.name} style={{ background: st.color }} title={st.name} />)}</div>
+                {t.fields.length > 0 && <small>{t.fields.slice(0, 4).join(" · ")}{t.fields.length > 4 ? ` +${t.fields.length - 4}` : ""}</small>}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <Group><Row label="Nome do funil"><input value={name} onChange={(e) => setName(e.target.value)} placeholder={cur?.name || "Pré-vendas"} /></Row></Group>
+      {err && <div className="admin-feedback error" style={{ marginTop: 12 }}>{err}</div>}
+    </Sheet>
+  );
+}
+
+const FIELD_TYPE_LABEL = { text: "Texto", textarea: "Texto longo", number: "Número", currency: "Valor (R$)", date: "Data", select: "Lista de opções" };
+function FieldsSheet({ pipeline, onClose, onSaved }) {
+  const [list, setList] = useState(() => (pipeline.fields || []).map((f) => ({ ...f, options: (f.options || []).join("\n") })));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const upd = (i, patch) => setList((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const move = (i, d) => setList((l) => { const a = [...l]; const j = i + d; if (j < 0 || j >= a.length) return a; [a[i], a[j]] = [a[j], a[i]]; return a; });
+  const save = async () => {
+    setBusy(true);
+    try {
+      await crm.updatePipeline(pipeline.id, { fields: list.filter((f) => f.label.trim()).map((f) => ({ ...f, options: f.type === "select" ? String(f.options || "").split("\n") : undefined })) });
+      onSaved();
+    } catch (e) { setErr(errText(e)); }
+    setBusy(false);
   };
   return (
-    <Sheet title="Novo funil" subtitle="Ex.: Pré-vendas, Renovações, Parcerias. Começa com as colunas padrão." onClose={onClose} width={460}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={!name.trim()} onClick={save}>Criar funil</Button></>}>
-      <Group><Row label="Nome"><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Pré-vendas" /></Row></Group>
+    <Sheet title={`Campos · ${pipeline.name}`} subtitle="Campos personalizados dos cards deste funil. Marque “No card” para mostrar na frente do card (até 4)." onClose={onClose} width={640}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar campos"}</Button></>}>
+      <Group>
+        {list.map((f, i) => (
+          <div key={f.id || i} className="crm-field-edit">
+            <div className="crm-field-row">
+              <span className="crm-field-order">
+                <button type="button" className="fi-icon" onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp size={13} /></button>
+                <button type="button" className="fi-icon" onClick={() => move(i, 1)} disabled={i === list.length - 1}><ArrowDown size={13} /></button>
+              </span>
+              <input className="crm-field-label" value={f.label} onChange={(e) => upd(i, { label: e.target.value })} placeholder="Nome do campo (ex.: Apólice)" />
+              <select value={f.type} onChange={(e) => upd(i, { type: e.target.value })}>
+                {Object.entries(FIELD_TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <button type="button" className="fi-icon" onClick={() => setList((l) => l.filter((_, j) => j !== i))} title="Remover"><Trash2 size={14} /></button>
+            </div>
+            {f.type === "select" && <textarea rows={3} value={f.options || ""} onChange={(e) => upd(i, { options: e.target.value })} placeholder={"Uma opção por linha\nAllianz\nPorto Seguro"} />}
+            <div className="crm-field-flags">
+              <label><Switch checked={!!f.card} onChange={(v) => upd(i, { card: v })} /> No card</label>
+              {f.type === "date" && <label><Switch checked={!!f.alert} onChange={(v) => upd(i, { alert: v })} /> Contagem de vencimento</label>}
+            </div>
+          </div>
+        ))}
+        <button type="button" className="fi-add" onClick={() => setList((l) => [...l, { id: "", label: "", type: "text", card: false }])}><Plus size={15} /> Adicionar campo</button>
+      </Group>
+      <p className="cv-muted" style={{ margin: "12px 4px 0", fontSize: 12.5 }}>Dica: use os campos nas mensagens automáticas das colunas, ex.: “Sua apólice {"{apolice}"} vence em {"{vigencia}"}”.</p>
       {err && <div className="admin-feedback error" style={{ marginTop: 12 }}>{err}</div>}
     </Sheet>
   );
@@ -333,6 +441,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
   const isNew = !!lead.isNew;
   const [files, setFiles] = useState(lead.attachments || []);
   const [checklist, setChecklist] = useState(lead.checklist || []);
+  const [custom, setCustom] = useState(lead.custom || {});
   const [newItem, setNewItem] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
@@ -381,7 +490,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
     setBusy(true);
     setErr(null);
     try {
-      const body = { ...f, ownerId: f.ownerId || undefined, checklist };
+      const body = { ...f, ownerId: f.ownerId || undefined, checklist, custom };
       const saved = isNew ? await crm.createLead(body) : await crm.updateLead(lead.id, body);
       const prev = JSON.stringify((lead.products || []).map((p) => [p.productId, p.qty, p.price]));
       const now = JSON.stringify(items.map((i) => [i.productId, Number(i.qty), Number(i.price)]));
@@ -445,6 +554,33 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
         </Row>
         <Row label="Valor (R$)"><input value={items.length ? total.toLocaleString("pt-BR") : f.value} onChange={set("value")} disabled={items.length > 0} inputMode="decimal" placeholder="0" /></Row>
       </Group>
+      {(curPipe?.fields || []).length > 0 && (
+        <Group title={`Dados · ${curPipe.name}`}>
+          {curPipe.fields.map((fd) => {
+            const v = custom[fd.id] ?? "";
+            const setV = (val) => setCustom((c) => ({ ...c, [fd.id]: val }));
+            return (
+              <Row key={fd.id} label={fd.label} stack={fd.type === "textarea"}>
+                {fd.type === "select" ? (
+                  <select value={v} onChange={(e) => setV(e.target.value)}>
+                    <option value="">—</option>
+                    {(fd.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : fd.type === "textarea" ? (
+                  <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
+                ) : fd.type === "date" ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "flex-end" }}>
+                    {fd.alert && v && <DueBadge date={v} />}
+                    <input type="date" value={v} onChange={(e) => setV(e.target.value)} style={{ width: "auto" }} />
+                  </span>
+                ) : (
+                  <input value={v} onChange={(e) => setV(fd.type === "number" || fd.type === "currency" ? e.target.value.replace(/[^\d.,-]/g, "") : e.target.value)} inputMode={fd.type === "number" || fd.type === "currency" ? "decimal" : undefined} placeholder={fd.type === "currency" ? "R$ 0,00" : ""} />
+                )}
+              </Row>
+            );
+          })}
+        </Group>
+      )}
       <Group title={`Checklist${checklist.length ? ` · ${doneCount}/${checklist.length}` : ""}`}>
         {checklist.length > 0 && (
           <div className="crm-progress"><span style={{ width: `${Math.round((doneCount / checklist.length) * 100)}%` }} /></div>
@@ -617,6 +753,39 @@ function ImportSheet({ ctx, onClose, onDone }) {
   const [err, setErr] = useState(null);
   const fileRef = useRef(null);
   const curPipe = pipelines.find((p) => p.id === pipeId);
+  const norm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const customFields = curPipe?.fields || [];
+  // campos do modelo primeiro (ex.: Vigência, Apólice), depois os padrões
+  const allFields = [
+    ...[["name", "Nome"], ["phone", "Telefone"], ["email", "E-mail"], ["company", "Empresa"]],
+    ...customFields.map((f) => [`custom.${f.id}`, f.label]),
+    ...[["value", "Valor"], ["tags", "Tags"], ["source", "Origem"], ["owner", "Responsável (por linha)"], ["notes", "Observações"]],
+    ...(customFields.some((f) => f.type === "date") ? [] : [["due", "Vencimento"]])
+  ];
+  const guessMap = (hs) => {
+    const used = new Set();
+    const guess = {};
+    const take = (field, keys) => {
+      const h = hs.find((x) => !used.has(x) && keys.some((k) => norm(x) === norm(k)))
+        || hs.find((x) => !used.has(x) && keys.some((k) => norm(k).length > 2 && norm(x).includes(norm(k))));
+      if (h) { guess[field] = h; used.add(h); }
+    };
+    for (const f of customFields) take(`custom.${f.id}`, [f.label, f.label.replace(/\s*\(.*\)$/, ""), f.id.replace(/_/g, " "), ...(f.type === "date" && f.alert ? ["vencimento", "vigencia", "fim vigencia"] : [])]);
+    for (const [field, keys] of Object.entries(FIELD_GUESS)) if (allFields.some(([k]) => k === field)) take(field, keys);
+    return guess;
+  };
+  useEffect(() => { if (headers.length) setMap(guessMap(headers)); }, [pipeId]);
+  const downloadModel = async () => {
+    const XLSX = await import("xlsx");
+    const cols = allFields.filter(([k]) => !["tags", "source", "due"].includes(k)).map(([, label]) => label.replace(" (por linha)", ""));
+    const sample = { Nome: "Maria Souza", Telefone: "5561999998888", "E-mail": "maria@email.com", Empresa: "", Valor: "", Responsável: team[0]?.name || "", Observações: "" };
+    for (const f of customFields) sample[f.label] = f.type === "date" ? "21/11/2026" : f.type === "select" ? (f.options?.[0] || "") : f.type === "currency" ? "1500,00" : "";
+    const ws = XLSX.utils.json_to_sheet([Object.fromEntries(cols.map((c) => [c, sample[c] ?? ""]))], { header: cols });
+    ws["!cols"] = cols.map((c) => ({ wch: Math.max(14, c.length + 2) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Leads");
+    XLSX.writeFile(wb, `modelo-${norm(curPipe?.name || "crm").replace(/[^a-z0-9]+/g, "-")}.xlsx`);
+  };
 
   const readFile = async (file) => {
     setErr(null);
@@ -626,13 +795,8 @@ function ImportSheet({ ctx, onClose, onDone }) {
       const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "", raw: false });
       if (!data.length) throw new Error("A planilha está vazia.");
       const hs = Object.keys(data[0]);
-      const guess = {};
-      for (const [field, keys] of Object.entries(FIELD_GUESS)) {
-        const h = hs.find((x) => keys.some((k) => x.toLowerCase().trim().includes(k)));
-        if (h) guess[field] = h;
-      }
       setHeaders(hs);
-      setMap(guess);
+      setMap(guessMap(hs));
       setRows(data);
     } catch (e) { setErr(e.message || "Não consegui ler o arquivo."); }
   };
@@ -657,12 +821,13 @@ function ImportSheet({ ctx, onClose, onDone }) {
           <span className="cv-muted">{rows ? `${rows.length} linha(s) encontradas` : "Nenhum arquivo selecionado"}</span>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />
         </div>
+        <button type="button" className="fi-add" onClick={downloadModel}><Download size={15} /> Baixar planilha-modelo do funil “{curPipe?.name}”</button>
       </Group>
       {rows && (
         <>
           <Group title="Colunas da planilha" hint="Confira qual coluna vai para cada campo. Tags separadas por vírgula viram tags do CRM.">
-            {Object.keys(FIELD_GUESS).map((field) => (
-              <Row key={field} label={FIELD_LABEL[field]}>
+            {allFields.map(([field, label]) => (
+              <Row key={field} label={label}>
                 <select value={map[field] || ""} onChange={(e) => setMap((m) => ({ ...m, [field]: e.target.value }))}>
                   <option value="">— não importar —</option>
                   {headers.map((h) => <option key={h} value={h}>{h}</option>)}
