@@ -299,7 +299,12 @@ router.post("/leads/import", async (req, res) => {
       return t?.id || null;
     };
     const defaultOwner = ownerId && (team || []).some((u) => u.id === ownerId) ? ownerId : req.userId;
-    if (kind) rows.forEach((r) => { r.tags = [r.tags, kind].filter(Boolean).join(","); });
+    const { data: pipeRow } = await supabase.from("crm_pipelines").select("fields").eq("account_id", req.accountId).eq("id", pipelineId).maybeSingle();
+    const kindField = (pipeRow?.fields || []).find((f) => f.kind);
+    if (kind) rows.forEach((r) => {
+      if (kindField) { if (!r[`custom.${kindField.id}`]) r[`custom.${kindField.id}`] = kind; }
+      else r.tags = [r.tags, kind].filter(Boolean).join(",");
+    });
     const newTags = new Set();
     for (const r of rows) String(r.tags || "").split(/[,;|]/).map((t) => t.trim()).filter(Boolean).forEach((t) => !tagMap.has(t.toLowerCase()) && newTags.add(t));
     if (newTags.size) {
