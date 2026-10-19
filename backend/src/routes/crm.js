@@ -4,6 +4,14 @@ import { requireAuth } from "../middleware/auth.js";
 import { enforceTabs } from "../governance.js";
 import { createGoogleEvent, deleteGoogleEvent } from "../google.js";
 import { emitEvent } from "../webhooks.js";
+import multer from "multer";
+import { randomUUID } from "crypto";
+import { uploadCrmFile, removeCrmFile } from "../storage.js";
+import { getPrimaryWhatsAppChannel, findOrCreateConversation, updateConversation, createTask } from "../config/db.js";
+import { sendTextToConversation } from "../messaging.js";
+import { resolveWhatsAppNumber } from "../whatsapp/baileysClient.js";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 /**
  * CRM (prospecção e qualificação), separado do Pipeline de atendimento.
@@ -16,7 +24,7 @@ router.use(enforceTabs);
 const isManager = (req) => req.role === "owner" || req.isSuperAdmin;
 const fail = (res, err) => {
   const msg = err?.message || String(err);
-  res.status(500).json({ error: /crm_/.test(msg) && /does not exist|schema cache/.test(msg) ? "Rode a migration 022 (CRM) no Supabase." : msg });
+  res.status(500).json({ error: /crm_/.test(msg) && /does not exist|schema cache/.test(msg) ? (/attachments|checklist/.test(msg) ? "Rode a migration 030 no Supabase." : "Rode a migration 022 (CRM) no Supabase.") : msg });
 };
 const DEFAULT_STAGES = [
   { id: "novos", name: "Leads novos", color: "#0a84ff" },
@@ -27,6 +35,65 @@ const DEFAULT_STAGES = [
   { id: "perdido", name: "Perdido", color: "#ff453a" }
 ];
 const onlyDigits = (v) => String(v || "").replace(/\D/g, "");
+
+// ---------------------------------------------------------------- Automações por coluna
+// Rodam quando um lead ENTRA na coluna: mensagem no WhatsApp, tarefa, follow-up na agenda, trocar responsável.
+const AUTO_TYPES = ["message", "task", "followup", "owner"];
+function cleanAutomations(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter((a) => AUTO_TYPES.includes(a?.type)).slice(0, 10).map((a) => ({
+    id: String(a.id || randomUUID()).slice(0, 40), type: a.type, active: a.active !== false,
+    text: a.text ? String(a.text).slice(0, 2000) : undefined, title: a.title ? String(a.title).slice(0, 160) : undefined,
+    days: a.days != null ? Math.min(365, Math.max(0, parseInt(a.days, 10) || 0)) : undefined,
+    departmentId: a.departmentId || undefined, ownerId: a.ownerId || undefined
+  }));
+}
+const fill = (t, lead) => String(t || "").replace(/\{nome\}/g, String(lead.name || "").split(" ")[0]).replace(/\{nome_completo\}/g, lead.name || "").replace(/\{empresa\}/g, lead.company || "");
+
+/** Abre (ou reaproveita) a conversa de WhatsApp do lead e devolve a conversa. */
+export async function leadConversation(accountId, lead, { departmentId, agentId } = {}) {
+  const phone = onlyDigits(lead.phone);
+  if (phone.length < 10) throw new Error("O lead não tem WhatsApp válido.");
+  const channelId = await getPrimaryWhatsAppChannel(accountId);
+  if (!channelId) throw new Error("Nenhum WhatsApp conectado nesta empresa.");
+  const jid = await resolveWhatsAppNumber(channelId, phone);
+  let conv = await findOrCreateConversation({ accountId, platform: "whatsapp", externalId: jid, phone: jid.split("@")[0], name: lead.name || phone, channelId });
+  conv = await updateConversation(accountId, conv.id, { status: "open", mode: "human", isNew: false, ...(agentId ? { assignedAgentId: agentId } : {}), ...(departmentId ? { departmentId } : {}) });
+  if (lead.conversation_id !== conv.id) await supabase.from("crm_leads").update({ conversation_id: conv.id }).eq("id", lead.id);
+  return conv;
+}
+
+async function runStageAutomations(accountId, lead, byName) {
+  try {
+    const { data: pipe } = await supabase.from("crm_pipelines").select("stages").eq("id", lead.pipeline_id).maybeSingle();
+    const stage = (pipe?.stages || []).find((s) => s.id === lead.stage);
+    for (const a of (stage?.automations || []).filter((x) => x.active !== false)) {
+      try {
+        if (a.type === "owner" && a.ownerId) {
+          await supabase.from("crm_leads").update({ owner_id: a.ownerId }).eq("id", lead.id);
+          lead.owner_id = a.ownerId;
+        } else if (a.type === "message" && a.text) {
+          const conv = await leadConversation(accountId, lead, { departmentId: a.departmentId, agentId: lead.owner_id });
+          await sendTextToConversation(accountId, conv, fill(a.text, lead), { senderName: byName || null, sign: false });
+        } else if (a.type === "task") {
+          await createTask(accountId, {
+            title: fill(a.title || `Falar com {nome_completo}`, lead), description: `Lead do CRM: ${lead.name}${lead.phone ? ` · ${lead.phone}` : ""}`,
+            assigneeId: lead.owner_id || null, dueAt: new Date(Date.now() + (a.days ?? 1) * 86400000).toISOString(), kind: "manual",
+            conversationId: lead.conversation_id || null
+          });
+        } else if (a.type === "followup") {
+          const at = new Date(Date.now() + (a.days ?? 2) * 86400000);
+          at.setHours(10, 0, 0, 0);
+          await supabase.from("crm_events").insert({ account_id: accountId, lead_id: lead.id, title: fill(a.title || "Follow-up {nome}", lead), kind: "followup", starts_at: at.toISOString(), owner_id: lead.owner_id || null });
+        }
+      } catch (e) {
+        console.warn("[CRM] automação falhou:", a.type, e.message);
+      }
+    }
+  } catch (e) {
+    console.warn("[CRM] automações:", e.message);
+  }
+}
 
 // ---------------------------------------------------------------- Funis
 router.get("/pipelines", async (req, res) => {
@@ -55,7 +122,7 @@ router.patch("/pipelines/:id", async (req, res) => {
     if (!isManager(req)) return res.status(403).json({ error: "Só o gestor edita funis." });
     const patch = {};
     if (req.body?.name !== undefined) patch.name = String(req.body.name).slice(0, 60);
-    if (Array.isArray(req.body?.stages)) patch.stages = req.body.stages.filter((s) => s?.id && s?.name).map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff" }));
+    if (Array.isArray(req.body?.stages)) patch.stages = req.body.stages.filter((s) => s?.id && s?.name).map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff", automations: cleanAutomations(s.automations) }));
     const { data, error } = await supabase.from("crm_pipelines").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
     res.json(data);
@@ -80,6 +147,7 @@ function mapLead(l) {
     value: l.value != null ? Number(l.value) : null, ownerId: l.owner_id, ownerName: l.owner?.name || null, ownerAvatar: l.owner?.avatar_url || null,
     tagIds: l.tag_ids || [], source: l.source, notes: l.notes, stageChangedAt: l.stage_changed_at, lastInteractionAt: l.last_interaction_at,
     createdAt: l.created_at, conversationId: l.conversation_id,
+    attachments: l.attachments || [], checklist: l.checklist || [],
     products: (l.crm_lead_products || []).map((p) => ({ id: p.id, productId: p.product_id, name: p.crm_products?.name || "Produto", qty: Number(p.qty), price: Number(p.price) }))
   };
 }
@@ -92,6 +160,8 @@ function leadRow(b) {
   if (b.value !== undefined) row.value = b.value === "" || b.value === null ? null : Number(String(b.value).replace(/\./g, "").replace(",", ".")) || 0;
   if (b.ownerId !== undefined) row.owner_id = b.ownerId || null;
   if (b.tagIds !== undefined) row.tag_ids = Array.isArray(b.tagIds) ? b.tagIds : [];
+  if (b.conversationId !== undefined) row.conversation_id = b.conversationId || null;
+  if (Array.isArray(b.checklist)) row.checklist = b.checklist.slice(0, 50).map((c) => ({ id: String(c.id || randomUUID()).slice(0, 40), text: String(c.text || "").slice(0, 200), done: !!c.done })).filter((c) => c.text);
   return row;
 }
 
@@ -117,19 +187,26 @@ router.post("/leads", async (req, res) => {
     const { data, error } = await supabase.from("crm_leads").insert(row).select(LEAD_SELECT).single();
     if (error) throw error;
     emitEvent(req.accountId, "lead.criado", mapLead(data));
+    runStageAutomations(req.accountId, data, req.userName);
     res.status(201).json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
 router.patch("/leads/:id", async (req, res) => {
   try {
     const row = leadRow(req.body || {});
-    if (row.stage) row.stage_changed_at = new Date().toISOString();
+    let before = null;
+    if (row.stage) {
+      ({ data: before } = await supabase.from("crm_leads").select("stage, pipeline_id").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle());
+      if (before && before.stage === row.stage && (!row.pipeline_id || row.pipeline_id === before.pipeline_id)) delete row.stage;
+      else row.stage_changed_at = new Date().toISOString();
+    }
     row.last_interaction_at = new Date().toISOString();
     let q = supabase.from("crm_leads").update(row).eq("account_id", req.accountId).eq("id", req.params.id);
     if (!isManager(req)) q = q.eq("owner_id", req.userId);
     const { data, error } = await q.select(LEAD_SELECT).single();
     if (error) throw error;
     emitEvent(req.accountId, "lead.atualizado", mapLead(data));
+    if (row.stage) runStageAutomations(req.accountId, data, req.userName);
     res.json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
@@ -140,6 +217,44 @@ router.delete("/leads/:id", async (req, res) => {
     const { error } = await q;
     if (error) throw error;
     res.sendStatus(204);
+  } catch (err) { fail(res, err); }
+});
+
+// Abre a conversa do lead no WhatsApp (sem mandar mensagem)
+router.post("/leads/:id/conversation", async (req, res) => {
+  try {
+    const { data: lead } = await supabase.from("crm_leads").select("*").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
+    const conv = await leadConversation(req.accountId, lead, { departmentId: req.body?.departmentId, agentId: req.userId });
+    res.json({ conversationId: conv.id });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// Anexos do card
+router.post("/leads/:id/files", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "Envie um arquivo." });
+    const { data: lead } = await supabase.from("crm_leads").select("id, attachments").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
+    if ((lead.attachments || []).length >= 30) return res.status(400).json({ error: "Máximo de 30 anexos por card." });
+    const name = Buffer.from(req.file.originalname || "arquivo", "latin1").toString("utf8").slice(0, 120);
+    const ext = (name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
+    const url = await uploadCrmFile({ accountId: req.accountId, buffer: req.file.buffer, extension: ext, contentType: req.file.mimetype || "application/octet-stream" });
+    const file = { id: randomUUID(), name, url, size: req.file.size, type: req.file.mimetype || null, at: new Date().toISOString(), by: req.userName || null };
+    const { data, error } = await supabase.from("crm_leads").update({ attachments: [...(lead.attachments || []), file], last_interaction_at: file.at }).eq("id", lead.id).select(LEAD_SELECT).single();
+    if (error) throw error;
+    res.status(201).json(mapLead(data));
+  } catch (err) { fail(res, err); }
+});
+router.delete("/leads/:id/files/:fileId", async (req, res) => {
+  try {
+    const { data: lead } = await supabase.from("crm_leads").select("id, attachments").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
+    const f = (lead.attachments || []).find((x) => x.id === req.params.fileId);
+    if (f) await removeCrmFile(f.url);
+    const { data, error } = await supabase.from("crm_leads").update({ attachments: (lead.attachments || []).filter((x) => x.id !== req.params.fileId) }).eq("id", lead.id).select(LEAD_SELECT).single();
+    if (error) throw error;
+    res.json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
 
