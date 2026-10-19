@@ -141,8 +141,11 @@ router.get("/users", async (req, res) => {
 // "Entrar" nela e cadastrar os usuários por dentro (Configurações → Equipe).
 // Com senha, o dono já entra direto; sem senha, recebe convite por e-mail.
 router.post("/accounts", async (req, res) => {
-  const { name, ownerEmail, ownerName, ownerPassword } = req.body || {};
+  const { name, ownerEmail, ownerName, ownerPassword, maxUsers, maxWhatsappChannels, allowCloudApi } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: "Informe o nome da empresa." });
+  if (!(parseInt(maxUsers, 10) >= 1)) return res.status(400).json({ error: "Informe a quantidade de usuários da empresa." });
+  if (!(parseInt(maxWhatsappChannels, 10) >= 0) || maxWhatsappChannels === "" || maxWhatsappChannels == null)
+    return res.status(400).json({ error: "Informe a quantidade de canais de WhatsApp da empresa." });
   if (ownerPassword && String(ownerPassword).length < 6) {
     return res.status(400).json({ error: "A senha do gestor precisa ter pelo menos 6 caracteres." });
   }
@@ -160,7 +163,7 @@ router.post("/accounts", async (req, res) => {
     }
   }
 
-  const account = await createAccount({ name: name.trim() });
+  const account = await createAccount({ name: name.trim(), maxUsers, maxWhatsappChannels, allowCloudApi: !!allowCloudApi });
 
   if (ownerUser) {
     await createProfile({

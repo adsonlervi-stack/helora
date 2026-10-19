@@ -114,7 +114,13 @@ import {
   getLegalStatus,
   acceptLegal,
   buildAttendanceReport,
-  listAttendances
+  listAttendances,
+  updateDepartment,
+  updateLabel,
+  getPipelineStages,
+  savePipelineStages,
+  getAccountTabs,
+  setAgentTabs
 } from "../config/db.js";
 import { runGraph } from "../bot/flowRunner.js";
 import {
@@ -332,6 +338,14 @@ router.post("/departments", requireOwner, async (req, res) => {
   res.json(await createDepartment({ accountId: req.accountId, name }));
 });
 
+router.patch("/departments/:id", requireOwner, async (req, res) => {
+  try {
+    res.json(await updateDepartment(req.accountId, req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete("/departments/:id", requireOwner, async (req, res) => {
   await deleteDepartment(req.accountId, req.params.id);
   res.sendStatus(204);
@@ -492,6 +506,11 @@ router.post("/channels", requireOwner, async (req, res) => {
   }
   if (platform !== "whatsapp" && (!externalPageId || !accessToken))
     return res.status(400).json({ error: "Informe o ID da página/conta e o token de acesso." });
+  if (platform === "whatsapp" && provider === "cloud" && !req.isSuperAdmin) {
+    const acc = await getAccount(req.accountId).catch(() => null);
+    if (acc && acc.allow_cloud_api === false)
+      return res.status(403).json({ error: "Sua empresa não tem acesso à API oficial do WhatsApp. Fale com o suporte da Helora." });
+  }
   if (platform === "whatsapp" && provider === "cloud" && (!phoneNumberId || !accessToken))
     return res.status(400).json({ error: "Informe o Phone Number ID e o token de acesso da API oficial." });
   let channel;
@@ -1579,6 +1598,46 @@ router.post("/labels", async (req, res) => {
   const { title, color } = req.body;
   if (!title) return res.status(400).json({ error: "title é obrigatório" });
   res.json(await createLabel({ accountId: req.accountId, title, color }));
+});
+
+router.patch("/labels/:id", async (req, res) => {
+  try {
+    res.json(await updateLabel(req.accountId, req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/account/tabs", async (req, res) => {
+  try {
+    res.json(await getAccountTabs(req.accountId));
+  } catch {
+    res.json({ enabledTabs: null, agentTabs: null });
+  }
+});
+
+router.put("/account/agent-tabs", requireOwner, async (req, res) => {
+  try {
+    res.json({ agentTabs: await setAgentTabs(req.accountId, req.body?.tabs) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/pipeline/stages", async (req, res) => {
+  try {
+    res.json({ stages: await getPipelineStages(req.accountId) });
+  } catch {
+    res.json({ stages: null });
+  }
+});
+
+router.put("/pipeline/stages", requireOwner, async (req, res) => {
+  try {
+    res.json({ stages: await savePipelineStages(req.accountId, req.body?.stages) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.delete("/labels/:id", async (req, res) => {
