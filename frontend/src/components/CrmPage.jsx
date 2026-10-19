@@ -93,6 +93,7 @@ function FunnelView({ ctx }) {
   const [over, setOver] = useState(null);
   const [editCol, setEditCol] = useState(null);
   const [newPipe, setNewPipe] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const load = () => pipelineId && crm.leads({ pipelineId }).then(setLeads).catch(() => setLeads([]));
   useEffect(() => { setLeads(null); load(); }, [pipelineId]);
@@ -158,6 +159,7 @@ function FunnelView({ ctx }) {
           {tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
         <div style={{ flex: 1 }} />
+        <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar planilha</Button>
         <Button onClick={() => setOpen({ isNew: true, stage: stages[0]?.id })}><Plus size={15} /> Novo lead</Button>
       </div>
 
@@ -240,6 +242,7 @@ function FunnelView({ ctx }) {
           <AutomationsEditor ctx={ctx} list={editCol.automations || []} onChange={(automations) => setEditCol((x) => ({ ...x, automations }))} />
         </Sheet>
       )}
+      {importing && <ImportSheet ctx={ctx} onClose={() => setImporting(false)} onDone={() => { setImporting(false); load(); ctx.loadTags(); }} />}
       {newPipe && <NewPipelineSheet onClose={() => setNewPipe(false)} onCreated={(p) => { setNewPipe(false); loadPipelines().then(() => setPipelineId(p.id)); }} />}
     </>
   );
@@ -560,7 +563,7 @@ function ContactsView({ ctx }) {
         <div className="crm-search" style={{ flex: 1, maxWidth: 360 }}><Search size={15} /><input placeholder="Buscar por nome, empresa, telefone ou e-mail" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <div style={{ flex: 1 }} />
         <Button variant="secondary" onClick={exportCsv} disabled={!leads?.length}><Download size={15} /> Exportar</Button>
-        <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar Excel</Button>
+        <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar planilha</Button>
         <Button onClick={() => setOpen({ isNew: true })}><Plus size={15} /> Novo lead</Button>
       </div>
       <div className="ap-list">
