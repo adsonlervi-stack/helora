@@ -79,7 +79,7 @@ export function DashboardTab() {
 
 const COMPANY_TABS = [
   ["overview", "Painel"], ["deals", "Pipeline"], ["crm", "CRM"], ["tasks", "Tarefas"], ["agents", "Fluxos/Robô"],
-  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"], ["channels", "Canais"]
+  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"], ["channels", "Canais"], ["ai", "IA"]
 ];
 
 // ------------------------------------------------- Dados comerciais da empresa

@@ -2,14 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2,
   RotateCcw, Users, Check, CheckCheck, Clock, AlertCircle, Forward, Reply, Copy, Trash2, Ban, UserRound, MapPin, X,
-  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash
+  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
 import TransferModal from "./TransferModal.jsx";
 import {
   getCannedResponses, getDepartments, getTeam, getConversationChannelStatus, sendTypingApi, getPresenceApi,
-  getStickersApi, sendStickerApi, createScheduledMessageApi, getScheduledMessages, cancelScheduledMessageApi, getContactsPage
+  getStickersApi, sendStickerApi, createScheduledMessageApi, getScheduledMessages, cancelScheduledMessageApi, getContactsPage, aiStatusApi, aiSuggestApi, aiRewriteApi, aiSummaryApi
 } from "../api.js";
 
 // Cor fixa por pessoa no grupo (igual WhatsApp)
@@ -529,6 +529,27 @@ export default function ChatWindow({
   const cancelRecRef = useRef(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
+  const [ai, setAi] = useState({ enabled: false });
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiSummary, setAiSummary] = useState(null);
+  useEffect(() => { aiStatusApi().then(setAi); }, []);
+  const runAi = async (kind) => {
+    setAiOpen(false);
+    setAiBusy(true);
+    try {
+      if (kind === "suggest") handleTextChange(await aiSuggestApi(conversation.id, text.trim() || undefined));
+      else if (kind === "summary") setAiSummary(await aiSummaryApi(conversation.id));
+      else {
+        if (!text.trim()) throw new Error("Digite um texto no campo de mensagem primeiro.");
+        handleTextChange(await aiRewriteApi(text, kind));
+      }
+      setTimeout(() => inputRef.current?.focus(), 0);
+    } catch (e) {
+      alert(e.response?.data?.error || e.message);
+    }
+    setAiBusy(false);
+  };
   // Começou a digitar no teclado com a conversa aberta → o texto vai direto para o campo
   useEffect(() => {
     const onKey = (e) => {
@@ -921,6 +942,18 @@ export default function ChatWindow({
                 ))}
               </div>
             )}
+            {aiSummary && (
+              <div className="modal-backdrop" onClick={() => setAiSummary(null)}>
+                <div className="modal lg-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+                  <div className="modal-header"><h3>Resumo da conversa</h3><button type="button" className="icon-btn" onClick={() => setAiSummary(null)}><X size={16} /></button></div>
+                  <div style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.55, color: "#1d1d1f" }}>{aiSummary}</div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+                    <button type="button" className="pill-btn" onClick={() => navigator.clipboard.writeText(aiSummary)}>Copiar</button>
+                    <button type="button" className="pill-btn primary" onClick={() => setAiSummary(null)}>Fechar</button>
+                  </div>
+                </div>
+              </div>
+            )}
             {pendingFile && (
               <div className="modal-backdrop" onClick={() => setPendingFile(null)}>
                 <div className="modal lg-modal media-preview" onClick={(e) => e.stopPropagation()}>
@@ -994,6 +1027,24 @@ export default function ChatWindow({
                   </div>
                 )}
               </div>
+
+              {ai.enabled && (
+                <div className="attach-wrap">
+                  <button type="button" className={`composer-icon-btn ai-btn ${aiBusy ? "busy" : ""}`} title="IA: sugerir, corrigir, resumir" disabled={offline || recording || aiBusy} onClick={() => setAiOpen((v) => !v)}>
+                    <Sparkles size={17} />
+                  </button>
+                  {aiOpen && (
+                    <div className="attach-menu ai-menu" onMouseLeave={() => setAiOpen(false)}>
+                      <button type="button" onClick={() => runAi("suggest")}>✨ Sugerir resposta{text.trim() ? " (usando o que digitei)" : ""}</button>
+                      <button type="button" onClick={() => runAi("fix")}>✍️ Corrigir texto</button>
+                      <button type="button" onClick={() => runAi("formal")}>👔 Mais formal</button>
+                      <button type="button" onClick={() => runAi("friendly")}>😊 Mais simpático</button>
+                      <button type="button" onClick={() => runAi("short")}>✂️ Mais curto</button>
+                      <button type="button" onClick={() => runAi("summary")}>📋 Resumir conversa</button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {recording ? (
                 <div className="rec-bar">
