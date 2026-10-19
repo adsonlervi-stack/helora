@@ -14,6 +14,7 @@ import {
   Copy
 , Bell } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
+import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook } from "../api.js";
 import { AccessLogList } from "./AdminPage.jsx";
 import {
   getAutoReplies,
@@ -864,6 +865,9 @@ function ApiTab() {
   const exMsg = `curl -X POST ${base}/messages \\
   -H "X-API-Key: ${key}" -H "Content-Type: application/json" \\
   -d '{"phone":"5584999998888","text":"Sua apólice foi emitida!"}'`;
+  const exAtend = `curl -X POST ${base}/atendimentos \\
+  -H "X-API-Key: ${key}" -H "Content-Type: application/json" \\
+  -d '{"telefone":"5584999998888","nome":"Maria","departamentoId":"ID_DO_SETOR","mensagem":"Olá! Vamos continuar seu atendimento."}'`;
   const exCamp = `curl -X POST ${base}/campaigns \\
   -H "X-API-Key: ${key}" -H "Content-Type: application/json" \\
   -d '{"name":"Black Friday","message":"Olá {nome}! ...","recipients":[{"phone":"5584999998888","name":"Maria"}]}'`;
@@ -921,7 +925,8 @@ document.getElementById("lead").onsubmit = async (e) => {
       <div className="card">
         <div className="card-title">Como usar</div>
         <div className="card-subtitle">Endereço base: <code>{base}</code> · cabeçalho <code>X-API-Key</code></div>
-        {[["Criar lead no pipeline (e mandar boas-vindas no WhatsApp)", exLead], ["Enviar mensagem", exMsg], ["Disparar campanha", exCamp], ["Formulário de landing page (HTML)", exForm]].map(([t, code]) => (
+        <a className="connect-btn" style={{ display: "inline-flex", margin: "8px 0 12px", textDecoration: "none" }} href={API_BASE.replace(/\/$/, "") + "/public/docs"} target="_blank" rel="noreferrer">Abrir documentação completa (testar ao vivo)</a>
+        {[["Abrir atendimento num setor", exAtend], ["Criar lead no pipeline (e mandar boas-vindas no WhatsApp)", exLead], ["Enviar mensagem", exMsg], ["Disparar campanha", exCamp], ["Formulário de landing page (HTML)", exForm]].map(([t, code]) => (
           <div key={t} className="api-example">
             <div className="api-example-head"><strong>{t}</strong><button className="pill-btn" onClick={() => copy(code)}><Copy size={13} /> Copiar</button></div>
             <pre>{code}</pre>
@@ -940,6 +945,7 @@ document.getElementById("lead").onsubmit = async (e) => {
         ))}
         <p className="cv-muted">Etapas aceitas em "stage": novo_lead, contato, negociacao, proposta, fechado, perdido. Respostas de erro: 401 chave inválida, 402 sem créditos, 429 muitas chamadas.</p>
       </div>
+      <WebhooksCard />
     </>
   );
 }
@@ -995,5 +1001,49 @@ function AccessTab() {
       {err && <div className="admin-feedback error" style={{ marginBottom: 12 }}>{err}</div>}
       <AccessLogList logs={logs} />
     </>
+  );
+}
+
+function WebhooksCard() {
+  const [data, setData] = useState({ events: [], items: [] });
+  const [url, setUrl] = useState("");
+  const [events, setEvents] = useState([]);
+  const [msg, setMsg] = useState(null);
+  const load = () => getWebhooks().then(setData).catch((e) => setMsg(e.response?.data?.error || e.message));
+  useEffect(() => { load(); }, []);
+  const toggle = (list, ev) => (list.includes(ev) ? list.filter((x) => x !== ev) : [...list, ev]);
+  const add = async (e) => {
+    e.preventDefault();
+    try { await createWebhook({ url: url.trim(), events }); setUrl(""); setEvents([]); setMsg(null); load(); } catch (err) { setMsg(err.response?.data?.error || err.message); }
+  };
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-title">Webhooks</div>
+      <div className="card-subtitle">A Helora avisa seu sistema (POST JSON) quando algo acontece. Sem eventos marcados = recebe todos. Valide com o header <code>X-Helora-Signature</code> (HMAC-SHA256 do corpo com o segredo).</div>
+      <form className="admin-create-grid" onSubmit={add}>
+        <input className="response" placeholder="https://seusistema.com/webhook/helora" value={url} onChange={(e) => setUrl(e.target.value)} />
+        <button className="connect-btn">Adicionar</button>
+      </form>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0" }}>
+        {data.events.map((ev) => (
+          <button type="button" key={ev} className={`pill-btn ${events.includes(ev) ? "active" : ""}`} style={events.includes(ev) ? { background: "#0071e3", color: "#fff" } : undefined} onClick={() => setEvents((l) => toggle(l, ev))}>{ev}</button>
+        ))}
+      </div>
+      {msg && <div className="admin-feedback error">{msg}</div>}
+      {data.items.map((w) => (
+        <div key={w.id} className="reply-item" style={{ flexWrap: "wrap", gap: 8 }}>
+          <span className="reply-response" style={{ minWidth: 0, flex: 1 }}>
+            <strong style={{ wordBreak: "break-all" }}>{w.url}</strong>
+            <small className="cv-muted" style={{ display: "block" }}>
+              {w.events.length ? w.events.join(", ") : "todos os eventos"} · segredo <code>{w.secret}</code>
+              {w.lastAt ? ` · último envio ${new Date(w.lastAt).toLocaleString("pt-BR")} (${w.lastStatus || "erro"}${w.lastError ? `: ${w.lastError}` : ""})` : ""}
+            </small>
+          </span>
+          <button className="pill-btn" onClick={() => updateWebhook(w.id, { active: !w.active }).then(load)}>{w.active ? "Pausar" : "Ativar"}</button>
+          <button className="pill-btn" onClick={() => testWebhook(w.id).then(() => { setMsg(null); setTimeout(load, 1500); })}>Testar</button>
+          <button className="pill-btn" onClick={() => deleteWebhook(w.id).then(load)}>Remover</button>
+        </div>
+      ))}
+    </div>
   );
 }
