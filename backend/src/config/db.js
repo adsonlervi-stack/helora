@@ -180,6 +180,14 @@ function mapScheduledMessage(row) {
     text: row.text,
     sendAt: row.send_at,
     status: row.status,
+    sign: !!row.sign,
+    recurrence: row.recurrence || "none",
+    recurDay: row.recur_day ?? null,
+    recurEveryDays: row.recur_every_days ?? null,
+    needsAttachment: !!row.needs_attachment,
+    mediaUrl: row.media_url || null,
+    mediaType: row.media_type || null,
+    fileName: row.file_name || null,
     error: row.error,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -197,16 +205,26 @@ export async function listScheduledMessages(accountId) {
   return data.map(mapScheduledMessage);
 }
 
-export async function createScheduledMessage({ accountId, conversationId, text, sendAt, createdBy }) {
+export async function createScheduledMessage({ accountId, conversationId, text, sendAt, createdBy, createdById, sign, recurrence, recurDay, recurEveryDays, needsAttachment, mediaUrl, mediaType, fileName }) {
+  const row = {
+    account_id: accountId,
+    conversation_id: conversationId,
+    text: text || "",
+    send_at: sendAt,
+    created_by: createdBy || null
+  };
+  if (createdById) row.created_by_id = createdById;
+  if (sign !== undefined) row.sign = !!sign;
+  if (recurrence && recurrence !== "none") {
+    row.recurrence = recurrence;
+    if (recurrence === "monthly") row.recur_day = Math.min(28, Math.max(1, parseInt(recurDay, 10) || new Date(sendAt).getDate()));
+    if (recurrence === "interval") row.recur_every_days = Math.max(1, parseInt(recurEveryDays, 10) || 15);
+  }
+  if (needsAttachment) row.needs_attachment = true;
+  if (mediaUrl) { row.media_url = mediaUrl; row.media_type = mediaType || "document"; row.file_name = fileName || null; }
   const { data, error } = await supabase
     .from("scheduled_messages")
-    .insert({
-      account_id: accountId,
-      conversation_id: conversationId,
-      text,
-      send_at: sendAt,
-      created_by: createdBy || null
-    })
+    .insert(row)
     .select("*, conversations(name, platform)")
     .single();
   if (error) throw error;
@@ -219,7 +237,7 @@ export async function cancelScheduledMessage(accountId, id) {
     .update({ status: "canceled" })
     .eq("account_id", accountId)
     .eq("id", id)
-    .eq("status", "pending");
+    .in("status", ["pending", "waiting_attachment"]);
   if (error) throw error;
 }
 
@@ -2786,4 +2804,66 @@ export async function setAgentTabs(accountId, tabs) {
   const { error } = await supabase.from("accounts").update({ agent_tabs: clean }).eq("id", accountId);
   if (error) throw error;
   return clean;
+}
+
+
+// ---------- Agendadas: recorrência e anexo variável ----------
+export async function getScheduledMessage(accountId, id) {
+  const { data } = await supabase.from("scheduled_messages").select("*, conversations(name, platform)").eq("account_id", accountId).eq("id", id).maybeSingle();
+  return data;
+}
+export async function updateScheduledRaw(id, patch) {
+  const { error } = await supabase.from("scheduled_messages").update(patch).eq("id", id);
+  if (error) throw error;
+}
+export async function insertScheduledRaw(row) {
+  const { data, error } = await supabase.from("scheduled_messages").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
+// ---------- Tarefas ----------
+function mapTask(t) {
+  return {
+    id: t.id, title: t.title, description: t.description || "", assigneeId: t.assignee_id, assigneeName: t.assignee?.name || null,
+    createdById: t.created_by, createdByName: t.creator?.name || null, dueAt: t.due_at, status: t.status, kind: t.kind,
+    scheduledMessageId: t.scheduled_message_id, conversationId: t.conversation_id, conversationName: t.conversations?.name || null,
+    createdAt: t.created_at, doneAt: t.done_at
+  };
+}
+const TASK_SELECT = "*, assignee:profiles!tasks_assignee_id_fkey(name), creator:profiles!tasks_created_by_fkey(name), conversations(name)";
+export async function listTasks(accountId, { userId, all } = {}) {
+  let q = supabase.from("tasks").select(TASK_SELECT).eq("account_id", accountId).order("status").order("due_at", { ascending: true, nullsFirst: false }).limit(500);
+  if (!all) q = q.or(`assignee_id.eq.${userId},created_by.eq.${userId}`);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map(mapTask);
+}
+export async function createTask(accountId, t) {
+  const row = {
+    account_id: accountId, title: String(t.title || "").slice(0, 200), description: t.description || null,
+    assignee_id: t.assigneeId || null, created_by: t.createdById || null, due_at: t.dueAt || null,
+    kind: t.kind || "manual", scheduled_message_id: t.scheduledMessageId || null, conversation_id: t.conversationId || null
+  };
+  const { data, error } = await supabase.from("tasks").insert(row).select(TASK_SELECT).single();
+  if (error) throw error;
+  return mapTask(data);
+}
+export async function updateTask(accountId, id, b) {
+  const patch = {};
+  if (b.title !== undefined) patch.title = String(b.title).slice(0, 200);
+  if (b.description !== undefined) patch.description = b.description;
+  if (b.assigneeId !== undefined) patch.assignee_id = b.assigneeId || null;
+  if (b.dueAt !== undefined) patch.due_at = b.dueAt || null;
+  if (b.status !== undefined) { patch.status = b.status === "done" ? "done" : "open"; patch.done_at = b.status === "done" ? new Date().toISOString() : null; }
+  const { data, error } = await supabase.from("tasks").update(patch).eq("account_id", accountId).eq("id", id).select(TASK_SELECT).single();
+  if (error) throw error;
+  return mapTask(data);
+}
+export async function deleteTask(accountId, id) {
+  const { error } = await supabase.from("tasks").delete().eq("account_id", accountId).eq("id", id);
+  if (error) throw error;
+}
+export async function closeTasksForScheduled(scheduledId) {
+  await supabase.from("tasks").update({ status: "done", done_at: new Date().toISOString() }).eq("scheduled_message_id", scheduledId).eq("status", "open");
 }
