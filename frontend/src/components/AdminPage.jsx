@@ -10,7 +10,12 @@ import {
   getAdminUsers,
   getAdminAnnouncements,
   createAdminAnnouncement,
-  removeAdminAnnouncement
+  removeAdminAnnouncement,
+  adminAccessLogs,
+  adminMasters,
+  adminCreateMaster,
+  adminUpdateMaster,
+  adminDeleteMaster
 } from "../api.js";
 
 function formatDate(iso) {
@@ -191,6 +196,7 @@ function UsersTab() {
 
   return (
     <>
+      <MastersCard />
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">Usuários do Helora ({users.length})</div>
         <div className="card-subtitle">Todo mundo com login, em todas as contas.</div>
@@ -487,7 +493,108 @@ export default function AdminPage({ tab = "dashboard" }) {
       {tab === "credits" && <CreditsTab />}
       {tab === "plans" && <PlansTab />}
       {tab === "users" && <UsersTab />}
+      {tab === "logs" && <LogsTab />}
       {tab === "announcements" && <AnnouncementsTab />}
+    </div>
+  );
+}
+
+
+// ---------------------------------------------------------------- Equipe da Gestora
+function MastersCard() {
+  const [list, setList] = useState([]);
+  const [edit, setEdit] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const load = () => adminMasters().then(setList).catch((e) => setMsg({ type: "error", text: e.response?.data?.error || e.message }));
+  useEffect(() => { load(); }, []);
+  const save = async () => {
+    try {
+      const r = await adminCreateMaster(edit);
+      setMsg({ type: "success", text: r.invited ? "Usuário criado. Convite enviado por e-mail." : "Usuário criado. Já pode entrar." });
+      setEdit(null);
+      load();
+    } catch (e) { setMsg({ type: "error", text: e.response?.data?.error || e.message }); }
+  };
+  const LEVEL = { master: "Master", support: "Suporte" };
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div className="ap-page-head">
+        <div><p style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>Equipe Helora</p><p>Master: acesso total. Suporte: empresas e chamados, sem financeiro, planos e créditos.</p></div>
+        <Button onClick={() => setEdit({ name: "", email: "", password: "", level: "master" })}><Plus size={16} /> Novo usuário</Button>
+      </div>
+      {msg && <div className={`admin-feedback ${msg.type}`} style={{ marginBottom: 12 }}>{msg.text}</div>}
+      <div className="ap-list">
+        {list.map((m) => (
+          <div key={m.id} className="ap-list-row">
+            <span className="ap-avatar">{(m.name || "?").slice(0, 1).toUpperCase()}</span>
+            <div className="ap-list-main"><strong>{m.name}{m.me ? " (você)" : ""}</strong><span>{m.email || "—"}</span></div>
+            {m.me ? <span className="ap-pill">{LEVEL[m.level]}</span> : (
+              <select className="ap-search" style={{ minWidth: 0, width: 120 }} value={m.level} onChange={async (e) => { await adminUpdateMaster(m.id, { level: e.target.value }); load(); }}>
+                <option value="master">Master</option><option value="support">Suporte</option>
+              </select>
+            )}
+            {!m.me && <Button variant="danger" onClick={async () => { if (confirm(`Remover o acesso de ${m.name}?`)) { await adminDeleteMaster(m.id); load(); } }}><Trash2 size={14} /></Button>}
+          </div>
+        ))}
+        {!list.length && <div className="ap-empty">Carregando…</div>}
+      </div>
+      {edit && (
+        <Sheet title="Novo usuário da Helora" subtitle="Acessa o Painel Helora (gestão de todas as empresas)." onClose={() => setEdit(null)} width={480}
+          footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button disabled={!edit.name.trim() || !edit.email.trim()} onClick={save}>Criar usuário</Button></>}>
+          <Group>
+            <Row label="Nome"><input autoFocus value={edit.name} onChange={(e) => setEdit((c) => ({ ...c, name: e.target.value }))} placeholder="Nome" /></Row>
+            <Row label="E-mail"><input type="email" value={edit.email} onChange={(e) => setEdit((c) => ({ ...c, email: e.target.value }))} placeholder="nome@helora.com" /></Row>
+            <Row label="Senha"><input type="password" value={edit.password} onChange={(e) => setEdit((c) => ({ ...c, password: e.target.value }))} placeholder="Vazio = convite por e-mail" autoComplete="new-password" /></Row>
+            <Row label="Nível">
+              <select value={edit.level} onChange={(e) => setEdit((c) => ({ ...c, level: e.target.value }))}>
+                <option value="master">Master (tudo)</option><option value="support">Suporte</option>
+              </select>
+            </Row>
+          </Group>
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Logs de acesso
+function LogsTab() {
+  const [accounts, setAccounts] = useState([]);
+  const [accountId, setAccountId] = useState("");
+  const [logs, setLogs] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { getAdminAccounts().then(setAccounts).catch(() => {}); }, []);
+  useEffect(() => { setLogs(null); adminAccessLogs(accountId || undefined).then(setLogs).catch((e) => { setErr(e.response?.data?.error || e.message); setLogs([]); }); }, [accountId]);
+  return (
+    <>
+      <div className="ap-page-head">
+        <div><p style={{ fontSize: 15 }}>Registro de logins: usuário, empresa, horário e IP.</p></div>
+        <select className="ap-search" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+          <option value="">Todas as empresas</option>
+          {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
+      {err && <div className="admin-feedback error" style={{ marginBottom: 12 }}>{err}</div>}
+      <AccessLogList logs={logs} showAccount />
+    </>
+  );
+}
+
+export function AccessLogList({ logs, showAccount }) {
+  const device = (ua = "") => /iphone|ipad/i.test(ua) ? "iPhone/iPad" : /android/i.test(ua) ? "Android" : /mac/i.test(ua) ? "Mac" : /windows/i.test(ua) ? "Windows" : "Navegador";
+  return (
+    <div className="ap-list">
+      {logs === null && <div className="ap-empty">Carregando…</div>}
+      {logs?.map((l) => (
+        <div key={l.id} className="ap-list-row">
+          <span className="ap-avatar" style={{ background: "linear-gradient(135deg,#5e5ce6,#64d2ff)" }}>{(l.userName || "?").slice(0, 1).toUpperCase()}</span>
+          <div className="ap-list-main">
+            <strong>{l.userName || "Usuário"}{showAccount && l.accountName ? ` · ${l.accountName}` : ""}</strong>
+            <span>{new Date(l.createdAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" })} · IP {l.ip || "—"} · {device(l.userAgent)}</span>
+          </div>
+        </div>
+      ))}
+      {logs && !logs.length && <div className="ap-empty">Nenhum acesso registrado ainda.</div>}
     </div>
   );
 }

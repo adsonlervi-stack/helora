@@ -23,6 +23,7 @@ import {
   adminRunBilling,
   adminChargeInvoice,
   adminTestEmail,
+  adminUploadBoleto,
   getAdminCredits,
   getAdminCreditLedger,
   setAdminMonthlyCredits,
@@ -330,6 +331,19 @@ export function InvoicesTab() {
                   >
                     PIX
                   </button>
+                  <label className="pill-btn" style={{ cursor: "pointer" }} title="Anexar o boleto (vai para o Financeiro da empresa e por e-mail)">
+                    {i.boleto_url ? "Boleto ✓" : "Boleto"}
+                    <input type="file" accept=".pdf,image/*" style={{ display: "none" }} onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!f) return;
+                      try {
+                        const r = await adminUploadBoleto(i.id, f);
+                        setMsg({ type: "success", text: r.emailed ? "Boleto anexado e enviado por e-mail para a empresa." : "Boleto anexado (aparece no Financeiro da empresa)." });
+                        load();
+                      } catch (err2) { setMsg({ type: "error", text: errText(err2) }); }
+                    }} />
+                  </label>
                   <button className="resolve-btn" onClick={() => setStatus(i, "canceled")}>Cancelar</button>
                 </>
               )}

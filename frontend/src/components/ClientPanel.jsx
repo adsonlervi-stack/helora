@@ -1,4 +1,5 @@
-import { Group, Row } from "./ui.jsx";
+import { Group, Row, Sheet, Button } from "./ui.jsx";
+import { getConversationAuditApi } from "../api.js";
 import React, { useEffect, useState } from "react";
 import { X, User, Briefcase, StickyNote, Plus } from "lucide-react";
 import Avatar from "./Avatar.jsx";
@@ -142,6 +143,7 @@ export default function ClientPanel({ conversation, departments = [], team = [],
                 </select>
               </Row>
             </Group>
+            <AuditButton conversationId={conversation.id} />
             <div className="ap-group-title" style={{ marginTop: 18 }}>Etiquetas</div>
             <div className="panel-labels">
               {(conversation.labels || []).map((l) => (
@@ -191,5 +193,42 @@ export default function ClientPanel({ conversation, departments = [], team = [],
         {tab === "notes" && <NotesSection conversationId={conversation.id} />}
       </div>
     </aside>
+  );
+}
+
+
+const AUDIT_LABEL = { create: "Enviada", update: "Editada (texto anterior)", delete: "Excluída do banco", apagada: "Apagada no WhatsApp" };
+/** Histórico inalterável da conversa (só gestor). */
+function AuditButton({ conversationId }) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState(null);
+  const show = () => {
+    setOpen(true);
+    setRows(null);
+    getConversationAuditApi(conversationId).then(setRows).catch((e) => { setErr(e.response?.status === 403 ? "Só o gestor vê a auditoria." : e.response?.data?.error || e.message); setRows([]); });
+  };
+  return (
+    <>
+      <div style={{ marginTop: 12 }}><Button variant="secondary" onClick={show}>Auditoria da conversa</Button></div>
+      {open && (
+        <Sheet title="Auditoria da conversa" subtitle="Registro inalterável de tudo que foi enviado, editado ou apagado (guardado por 120 dias)." onClose={() => setOpen(false)} width={640}>
+          {err && <div className="admin-feedback error">{err}</div>}
+          <div className="ap-group-box" style={{ marginTop: 12 }}>
+            {rows === null && <div className="ap-empty">Carregando…</div>}
+            {rows?.map((r) => (
+              <div key={r.id} className="audit-row">
+                <div className="audit-meta">
+                  <strong>{r.author === "user" ? "Cliente" : r.author === "bot" ? "Robô" : r.author === "system" ? "Sistema" : r.senderName || "Atendente"}</strong>
+                  <span>{new Date(r.at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" })} · {AUDIT_LABEL[r.action] || r.action}</span>
+                </div>
+                <div className="audit-text">{r.text || (r.mediaType ? `📎 ${r.mediaType}` : "—")}</div>
+              </div>
+            ))}
+            {rows && !rows.length && !err && <div className="ap-empty">Sem registros ainda (a auditoria começa a contar a partir da atualização).</div>}
+          </div>
+        </Sheet>
+      )}
+    </>
   );
 }

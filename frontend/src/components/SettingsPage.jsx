@@ -14,6 +14,7 @@ import {
   Copy
 , Bell } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
+import { AccessLogList } from "./AdminPage.jsx";
 import {
   getAutoReplies,
   createAutoReply,
@@ -46,6 +47,7 @@ import {
   getAccountSettingsApi,
   updateAccountSettingsApi,
   getAccountTabsApi,
+  getAccessLogsApi,
   setAgentTabsApi
 } from "../api.js";
 import BusinessHoursEditor from "./BusinessHoursEditor.jsx";
@@ -78,6 +80,7 @@ const CARDS = [
     icon: MessagesSquare
   },
   { key: "perms", label: "Abas do atendente", desc: "O que o atendente pode ver no menu", icon: KeyRound },
+  { key: "access", label: "Log de acessos", desc: "Quem entrou no sistema, quando e de onde (IP)", icon: Users },
   { key: "labels", label: "Etiquetas", desc: "Categorize as conversas por cor", icon: Tag },
   { key: "departments", label: "Setores", desc: "Times/filas de atendimento", icon: Building2 },
   {
@@ -145,6 +148,7 @@ export default function SettingsPage({ onGoToChannels, canManage = false }) {
       {tab === "notify" && <NotifyTab />}
       {tab === "labels" && <LabelsTab />}
       {tab === "perms" && canManage && <AgentTabsTab />}
+      {tab === "access" && canManage && <AccessTab />}
       {tab === "departments" && <DepartmentsTab />}
       {tab === "team" && <TeamTab canManage={canManage} />}
       {tab === "scheduled" && <ScheduledMessagesTab />}
@@ -978,5 +982,18 @@ function AgentTabsTab() {
       <button className="pill-btn primary" onClick={save}>Salvar</button>
       {msg && <div className={`admin-feedback ${msg.type}`} style={{ marginTop: 10 }}>{msg.text}</div>}
     </div>
+  );
+}
+
+
+function AccessTab() {
+  const [logs, setLogs] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { getAccessLogsApi().then(setLogs).catch((e) => { setErr(e.response?.data?.error || e.message); setLogs([]); }); }, []);
+  return (
+    <>
+      {err && <div className="admin-feedback error" style={{ marginBottom: 12 }}>{err}</div>}
+      <AccessLogList logs={logs} />
+    </>
   );
 }
