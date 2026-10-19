@@ -669,14 +669,14 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 export async function startAllChannels() {
   let channels = await listWhatsAppChannels();
   // Vários servidores: cada um só conecta os WhatsApps das empresas dele (SERVER_ID; padrão "main").
-  const serverId = process.env.SERVER_ID || "main";
+  const serverId = String(process.env.SERVER_ID || "1").replace(/^main$/, "1");
   try {
     const ids = [...new Set(channels.map((c) => c.accountId))];
     if (ids.length) {
       const { supabase } = await import("../config/db.js");
       const { data, error } = await supabase.from("accounts").select("id, server_id").in("id", ids);
       if (!error && data) {
-        const mine = new Set(data.filter((a) => (a.server_id || "main") === serverId).map((a) => a.id));
+        const mine = new Set(data.filter((a) => String(a.server_id || "1").replace(/^main$/, "1") === serverId).map((a) => a.id));
         channels = channels.filter((c) => mine.has(c.accountId));
       }
     }
