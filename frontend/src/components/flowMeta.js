@@ -90,7 +90,7 @@ export function summary(node, ctx = {}) {
       return extra ? `${base}: ${extra}` : base;
     }
     case "end": return d.text || "Encerra sem mensagem";
-    case "ai": return d.instructions ? d.instructions.slice(0, 90) : "Escreva as instruções da IA…";
+    case "ai": return ctx.prompts?.find((p) => p.id === d.promptId)?.name ? `Prompt: ${ctx.prompts.find((p) => p.id === d.promptId).name}` : "Escolha o prompt de IA…";
     default: return "";
   }
 }
@@ -107,6 +107,6 @@ export function newNode(type, x, y) {
   if (type === "wait") base.data = { seconds: 5 };
   if (type === "action") base.data = { action: "transfer", text: "" };
   if (type === "end") base.data = { text: "" };
-  if (type === "ai") base.data = { instructions: "", knowledge: "", maxTurns: 12 };
+  if (type === "ai") base.data = { promptId: "", maxTurns: 20 };
   return base;
 }

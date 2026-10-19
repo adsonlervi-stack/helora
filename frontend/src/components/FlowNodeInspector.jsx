@@ -126,16 +126,16 @@ export default function NodeInspector({ node, ctx, onChange, disabled, stats }) 
       {node.type === "ai" && (
         <>
           <p className="cv-muted" style={{ marginTop: 0 }}>
-            A IA responde o cliente sozinha, seguindo estas instruções, até resolver (saída <strong>Resolveu</strong>) ou perceber que precisa de uma pessoa (saída <strong>Precisa de humano</strong> — ligue a uma Ação de transferir). Só funciona enquanto o robô está atendendo; conversa assumida por humano nunca recebe resposta da IA.
+            A IA responde o cliente seguindo o prompt escolhido, até resolver (saída <strong>Resolveu</strong>) ou precisar de uma pessoa (saída <strong>Precisa de humano</strong>). Conversa assumida por humano nunca recebe resposta da IA.
           </p>
-          <Field label="Quem é a IA e como deve atender" hint="Ex.: Você é a Ana, da corretora X. Descubra o tipo de seguro que o cliente quer, peça nome e cidade e ofereça agendar uma ligação.">
-            <textarea rows={6} value={d.instructions || ""} onChange={set("instructions")} disabled={disabled} />
+          <Field label="Prompt de IA" hint="Crie e edite os prompts em Fluxos → ✨ Prompts de IA.">
+            <select className="deal-stage-select" value={d.promptId || ""} onChange={set("promptId")} disabled={disabled}>
+              <option value="">Escolha um prompt…</option>
+              {(ctx.prompts || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
           </Field>
-          <Field label="Base de conhecimento" hint="Cole aqui informações da empresa: serviços, horários, endereço, perguntas frequentes. A IA não inventa nada fora disto.">
-            <textarea rows={8} value={d.knowledge || ""} onChange={set("knowledge")} disabled={disabled} />
-          </Field>
-          <Field label="Máximo de respostas da IA" hint="Passando disso, a conversa vai para humano.">
-            <input type="number" min="1" max="50" value={d.maxTurns || 12} onChange={(e) => onChange({ maxTurns: parseInt(e.target.value, 10) || 12 })} disabled={disabled} />
+          <Field label="Máximo de respostas da IA nesta etapa" hint="Passando disso, a conversa vai para humano.">
+            <input type="number" min="1" max="100" value={d.maxTurns || 20} onChange={(e) => onChange({ maxTurns: parseInt(e.target.value, 10) || 20 })} disabled={disabled} />
           </Field>
         </>
       )}

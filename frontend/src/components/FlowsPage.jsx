@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Workflow, Plus, Pencil, Copy, Trash2, Search } from "lucide-react";
 import { getFlows, createFlowApi, setFlowActiveApi, deleteFlowApi } from "../api.js";
+import PromptsPage from "./PromptsPage.jsx";
 import FlowEditor from "./FlowEditor.jsx";
 
 const when = (iso) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
 export default function FlowsPage({ canEdit }) {
+  const [view, setView] = useState("flows");
   const [flows, setFlows] = useState([]);
   const [openId, setOpenId] = useState(null);
   const [search, setSearch] = useState("");
@@ -19,6 +21,13 @@ export default function FlowsPage({ canEdit }) {
   }, [openId]);
 
   if (openId) return <FlowEditor flowId={openId} canEdit={canEdit} onBack={() => setOpenId(null)} />;
+  const switcher = (
+    <div className="crm-tabs" style={{ marginBottom: 16 }}>
+      <button className={view === "flows" ? "active" : ""} onClick={() => setView("flows")}>Fluxos</button>
+      <button className={view === "prompts" ? "active" : ""} onClick={() => setView("prompts")}>✨ Prompts de IA</button>
+    </div>
+  );
+  if (view === "prompts") return <div className="page">{switcher}<PromptsPage canEdit={canEdit} /></div>;
 
   const create = async (duplicateFrom) => {
     try {
