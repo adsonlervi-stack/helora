@@ -54,7 +54,7 @@ export const spec = {
     "/crm/funis": { get: op("CRM", "Funis e etapas") },
     "/crm/leads": {
       get: op("CRM", "Lista leads", { parameters: [P("funilId", ""), P("etapa", ""), P("telefone", ""), P("busca", ""), ...pag] }),
-      post: op("CRM", "Cria lead (sem funilId usa o primeiro funil)", { requestBody: body({ nome: "", telefone: "", email: "", empresa: "", valor: { type: "number" }, funilId: "", etapa: "", responsavelId: "", origem: "", observacoes: "" }, ["nome"]) })
+      post: op("CRM", "Cria lead. Use 'produto' para identificar o formulário/produto e 'campos' para os campos do funil", { requestBody: body({ nome: "Maria Souza", telefone: "5561999998888", email: "", empresa: "", produto: "Seguro Auto (ou lista: [\"Auto\", \"Vida\"])", formulario: "Cotação auto - home do site", funil: "Corretora de seguros (nome) — ou funilId", etapa: "A tratar (nome ou id)", campos: { type: "object", description: "Campos do funil pelo nome ou id. Ex.: {\"Tipo de negócio\": \"Venda nova\", \"Seguradora\": \"Porto Seguro\", \"Vigência\": \"21/11/2026\"}" }, valor: { type: "number" }, responsavelId: "", origem: "", observacoes: "" }, ["nome"]) })
     },
     "/crm/leads/{id}": {
       patch: op("CRM", "Atualiza lead / muda de etapa", { parameters: [id], requestBody: body({ etapa: "", valor: { type: "number" }, nome: "", responsavelId: "" }) }),

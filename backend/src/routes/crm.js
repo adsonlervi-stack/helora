@@ -69,7 +69,7 @@ export async function leadConversation(accountId, lead, { departmentId, agentId 
   return conv;
 }
 
-async function runStageAutomations(accountId, lead, byName) {
+export async function runStageAutomations(accountId, lead, byName) {
   try {
     const { data: pipe } = await supabase.from("crm_pipelines").select("stages").eq("id", lead.pipeline_id).maybeSingle();
     const stage = (pipe?.stages || []).find((s) => s.id === lead.stage);

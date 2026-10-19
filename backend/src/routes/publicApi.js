@@ -6,6 +6,7 @@ import {
 import { sendTextToConversation, sendMediaUrlToConversation } from "../messaging.js";
 import { resolveWhatsAppNumber } from "../whatsapp/baileysClient.js";
 import { emitEvent } from "../webhooks.js";
+import { runStageAutomations } from "./crm.js";
 
 /**
  * API Pública v1 (estilo SunChat, mais simples). Já autenticada pela chave (X-API-Key) em public.js.
@@ -210,7 +211,7 @@ r.delete("/atendimentos/:id/etiquetas/:etiquetaId", wrap(async (req, res) => {
 const lead = (l) => ({
   id: l.id, funilId: l.pipeline_id, etapa: l.stage, nome: l.name, telefone: l.phone, email: l.email, empresa: l.company,
   valor: l.value != null ? Number(l.value) : null, responsavelId: l.owner_id, tagIds: l.tag_ids || [], origem: l.source,
-  observacoes: l.notes, criadoEm: l.created_at, etapaDesde: l.stage_changed_at
+  observacoes: l.notes, campos: l.custom || {}, criadoEm: l.created_at, etapaDesde: l.stage_changed_at
 });
 r.get("/crm/funis", wrap(async (req, res) => {
   const { data } = await supabase.from("crm_pipelines").select("*").eq("account_id", req.accountId).order("created_at");
@@ -227,25 +228,55 @@ r.get("/crm/leads", wrap(async (req, res) => {
   if (error) throw error;
   res.json({ itens: data.map(lead), pagina: p.pagina, porPagina: p.porPagina, total: count || 0 });
 }));
+// Cria lead no CRM. Aceita: funil (nome) ou funilId, etapa, produto (nome ou lista de nomes), campos {apolice: "...", ...},
+// formulario (identifica de qual formulário do site veio). Produto que não existe é cadastrado na hora.
 r.post("/crm/leads", wrap(async (req, res) => {
   const b = req.body || {};
   if (!b.nome) throw new Error("nome é obrigatório.");
-  let funilId = b.funilId;
-  let etapa = b.etapa;
-  if (!funilId) {
-    const { data } = await supabase.from("crm_pipelines").select("id, stages").eq("account_id", req.accountId).order("created_at").limit(1).maybeSingle();
-    if (!data) throw new Error("Crie um funil no CRM antes.");
-    funilId = data.id;
-    etapa = etapa || data.stages?.[0]?.id;
+  const { data: pipes } = await supabase.from("crm_pipelines").select("id, name, stages, fields").eq("account_id", req.accountId).order("created_at");
+  if (!pipes?.length) throw new Error("Crie um funil no CRM antes.");
+  const norm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const pipe = (b.funilId && pipes.find((p) => p.id === b.funilId)) || (b.funil && pipes.find((p) => norm(p.name) === norm(b.funil))) || pipes[0];
+  const stage = (b.etapa && (pipe.stages || []).find((st) => st.id === b.etapa || norm(st.name) === norm(b.etapa))) || pipe.stages?.[0];
+  // campos personalizados: aceita o id do campo ou o nome dele ("Vigência", "Seguradora"…)
+  const custom = {};
+  for (const [k, v] of Object.entries(b.campos || {})) {
+    const f = (pipe.fields || []).find((x) => x.id === k || norm(x.label) === norm(k) || norm(x.label.replace(/\s*\(.*\)$/, "")) === norm(k));
+    if (f && v !== "" && v != null) custom[f.id] = f.type === "date" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(String(v)) ? String(v).split("/").reverse().map((x) => x.padStart(2, "0")).join("-") : v;
   }
+  // produtos
+  const nomes = (Array.isArray(b.produto) ? b.produto : b.produto ? [b.produto] : []).map((x) => String(x).trim()).filter(Boolean).slice(0, 10);
+  const itens = [];
+  if (nomes.length) {
+    const { data: prods } = await supabase.from("crm_products").select("id, name, price").eq("account_id", req.accountId);
+    for (const n of nomes) {
+      let p = (prods || []).find((x) => norm(x.name) === norm(n));
+      if (!p) {
+        const ins = await supabase.from("crm_products").insert({ account_id: req.accountId, name: n.slice(0, 120), price: 0, active: true }).select("id, name, price").single();
+        if (ins.error) throw ins.error;
+        p = ins.data;
+        prods?.push(p);
+      }
+      itens.push({ productId: p.id, price: Number(p.price) || 0 });
+    }
+  }
+  const valorProdutos = itens.reduce((s, i) => s + i.price, 0);
+  const origem = b.origem || b.formulario || "Site";
   const { data, error } = await supabase.from("crm_leads").insert({
-    account_id: req.accountId, pipeline_id: funilId, stage: etapa || "novos", name: b.nome, phone: onlyDigits(b.telefone) || null,
-    email: b.email || null, company: b.empresa || null, value: b.valor != null ? Number(b.valor) : null, owner_id: b.responsavelId || null,
-    source: b.origem || "API", notes: b.observacoes || null, tag_ids: b.tagIds || []
+    account_id: req.accountId, pipeline_id: pipe.id, stage: stage?.id || "novos", name: String(b.nome).slice(0, 120), phone: onlyDigits(b.telefone) || null,
+    email: b.email || null, company: b.empresa || null, value: b.valor != null && b.valor !== "" ? Number(String(b.valor).replace(",", ".")) || null : valorProdutos || null,
+    owner_id: b.responsavelId || null, source: String(origem).slice(0, 80),
+    notes: [b.formulario ? `Formulário: ${b.formulario}` : null, b.observacoes || null].filter(Boolean).join("\n") || null,
+    tag_ids: b.tagIds || [], custom, stage_changed_at: new Date().toISOString()
   }).select().single();
   if (error) throw error;
-  emitEvent(req.accountId, "lead.criado", lead(data));
-  res.status(201).json(lead(data));
+  if (itens.length) {
+    await supabase.from("crm_lead_products").insert(itens.map((i) => ({ account_id: req.accountId, lead_id: data.id, product_id: i.productId, qty: 1, price: i.price })));
+  }
+  const out = { ...lead(data), funil: pipe.name, produtos: nomes };
+  emitEvent(req.accountId, "lead.criado", out);
+  runStageAutomations(req.accountId, data, null).catch(() => {});
+  res.status(201).json(out);
 }));
 r.patch("/crm/leads/:id", wrap(async (req, res) => {
   const b = req.body || {};
