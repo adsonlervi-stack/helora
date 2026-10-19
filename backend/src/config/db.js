@@ -1492,7 +1492,8 @@ const ACCOUNT_COMMERCIAL_FIELDS = {
   maxWhatsappChannels: "max_whatsapp_channels",
   maxUsers: "max_users",
   allowCloudApi: "allow_cloud_api",
-  enabledTabs: "enabled_tabs"
+  enabledTabs: "enabled_tabs",
+  billingMethod: "billing_method"
 };
 
 export async function updateAccountCommercial(accountId, body) {
@@ -1506,6 +1507,7 @@ export async function updateAccountCommercial(accountId, body) {
     if (key === "maxUsers") v = Math.min(500, Math.max(1, parseInt(v, 10) || 1));
     if (key === "allowCloudApi") v = v === true || v === "true" || v === 1;
     if (key === "enabledTabs") v = Array.isArray(v) ? v.map(String) : null;
+    if (key === "billingMethod") v = v === "asaas" ? "asaas" : "manual";
     if (typeof v === "string") v = v.trim() || null;
     patch[col] = v;
   }
@@ -2629,7 +2631,8 @@ export async function getBilling(accountId) {
       name: acc?.name, status: acc?.status, planName: plan?.name || acc?.plan_name || null,
       monthlyPrice: Number(acc?.monthly_price || 0), dueDay: acc?.due_day, creditsMonthly: acc?.credits_monthly || 0,
       maxWhatsapp: acc?.max_whatsapp_channels ?? 1, maxUsers: acc?.max_users ?? null,
-      blocked: acc?.status === "suspended" && acc?.blocked_reason === "billing"
+      blocked: acc?.status === "suspended" && acc?.blocked_reason === "billing",
+      billingMethod: acc?.billing_method || "manual"
     },
     plan,
     usage: { users: users || 0, numbers: numbers || 0 },
