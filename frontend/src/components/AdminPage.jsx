@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
 import { Building2, Megaphone, Trash2, LogIn, Briefcase, Plus, Pause, Play } from "lucide-react";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
@@ -302,7 +303,7 @@ function AnnouncementsTab() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Excluir este comunicado? Ele some do Início de quem ainda não leu.")) return;
+    if (!await askConfirm("Excluir este comunicado? Ele some do Início de quem ainda não leu.")) return;
     await removeAdminAnnouncement(id);
     loadSent();
   };
@@ -533,7 +534,7 @@ function MastersCard() {
                 <option value="master">Master</option><option value="support">Suporte</option>
               </select>
             )}
-            {!m.me && <Button variant="danger" onClick={async () => { if (confirm(`Remover o acesso de ${m.name}?`)) { await adminDeleteMaster(m.id); load(); } }}><Trash2 size={14} /></Button>}
+            {!m.me && <Button variant="danger" onClick={async () => { if (await askConfirm(`Remover o acesso de ${m.name}?`)) { await adminDeleteMaster(m.id); load(); } }}><Trash2 size={14} /></Button>}
           </div>
         ))}
         {!list.length && <div className="ap-empty">Carregando…</div>}

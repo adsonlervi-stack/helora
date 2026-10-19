@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
 import { Plus, Save, RotateCcw } from "lucide-react";
 import BotFlowNodeCard, { nodeLabel } from "./BotFlowNodeCard.jsx";
@@ -226,8 +227,8 @@ export default function AgentsPage() {
 
         <button
           className="btn-secondary-flow"
-          onClick={() => {
-            if (confirm("Descartar as alterações e recarregar o fluxo salvo?")) {
+          onClick={async () => {
+            if (await askConfirm("Descartar as alterações e recarregar o fluxo salvo?")) {
               getBotFlow().then(setFlow);
               setErrors([]);
               setSavedAt(null);

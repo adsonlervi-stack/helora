@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt, notify } from "../dialogs.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
@@ -64,6 +65,7 @@ export default function CrmPage({ profile, onOpenConversation }) {
   const [team, setTeam] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [error, setError] = useState(null);
+  const [allMode, setAllMode] = useState(false);
 
   const loadPipelines = () =>
     crm.pipelines().then((l) => { setPipelines(l); setPipelineId((cur) => cur && l.some((p) => p.id === cur) ? cur : l[0]?.id); }).catch((e) => setError(errText(e)));
@@ -77,7 +79,7 @@ export default function CrmPage({ profile, onOpenConversation }) {
     getDepartments().then(setDepartments).catch(() => {});
   }, []);
   const pipeline = pipelines.find((p) => p.id === pipelineId);
-  const ctx = { isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, loadPipelines, loadTags, loadProducts, setPipelines };
+  const ctx = { isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, setAllMode, loadPipelines, loadTags, loadProducts, setPipelines };
 
   return (
     <div className="page crm-page">
@@ -87,7 +89,29 @@ export default function CrmPage({ profile, onOpenConversation }) {
         ))}
       </div>
       {error && <div className="admin-feedback error">{error}</div>}
-      {tab === "funnel" && <FunnelView ctx={ctx} />}
+      {tab === "funnel" && !allMode && <FunnelView ctx={ctx} />}
+      {tab === "funnel" && allMode && (
+        <>
+          <div className="crm-toolbar">
+            <label className="crm-select">
+              <span>Funil</span>
+              <select value="__all" onChange={(e) => { if (e.target.value !== "__all") { setPipelineId(e.target.value); setAllMode(false); } }}>
+                <option value="__all">Todos os funis</option>
+                {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>
+          </div>
+          {pipelines.map((p) => (
+            <section key={p.id} className="crm-all-section">
+              <div className="crm-all-title">
+                <strong>{p.name}</strong>
+                <button type="button" onClick={() => { setPipelineId(p.id); setAllMode(false); }}>Abrir este funil</button>
+              </div>
+              <FunnelView ctx={{ ...ctx, pipeline: p, pipelineId: p.id, embedded: true }} />
+            </section>
+          ))}
+        </>
+      )}
       {tab === "contacts" && <ContactsView ctx={ctx} />}
       {tab === "agenda" && <AgendaView ctx={ctx} />}
       {tab === "products" && <ProductsView ctx={ctx} />}
@@ -114,6 +138,17 @@ function FunnelView({ ctx }) {
   const kindField = modelFields.find((f) => f.kind);
 
   const load = () => pipelineId && crm.leads({ pipelineId }).then(setLeads).catch(() => setLeads([]));
+  const deletePipeline = async () => {
+    const n = (leads || []).length;
+    if (!(await askConfirm(`Apagar o funil "${pipeline.name}"?${n ? `\n\n${n} lead(s) deste funil também serão apagados.` : ""}\nEssa ação não pode ser desfeita.`, { okText: "Apagar funil", danger: true }))) return;
+    try {
+      for (const l of leads || []) await crm.deleteLead(l.id);
+      await crm.deletePipeline(pipeline.id);
+      setPipelineId(null);
+      await loadPipelines();
+      notify("Funil apagado.");
+    } catch (e) { notify(errText(e), "error"); }
+  };
   useEffect(() => { setLeads(null); load(); }, [pipelineId]);
 
   const stages = pipeline?.stages || [];
@@ -155,22 +190,24 @@ function FunnelView({ ctx }) {
     [next[i], next[j]] = [next[j], next[i]];
     saveStages(next);
   };
-  const deleteCol = (id) => {
+  const deleteCol = async (id) => {
     if ((leads || []).some((l) => l.stage === id)) return alert("Mova os leads desta coluna antes de excluir.");
-    if (confirm("Excluir esta coluna?")) saveStages(stages.filter((s) => s.id !== id));
+    if (await askConfirm("Excluir esta coluna?")) saveStages(stages.filter((s) => s.id !== id));
   };
 
   return (
     <>
-      <div className="crm-toolbar">
+      {!ctx.embedded && <div className="crm-toolbar">
         <label className="crm-select">
           <span>Funil</span>
-          <select value={pipelineId || ""} onChange={(e) => e.target.value === "__new" ? setNewPipe(true) : setPipelineId(e.target.value)}>
+          <select value={pipelineId || ""} onChange={(e) => e.target.value === "__new" ? setNewPipe(true) : e.target.value === "__all" ? ctx.setAllMode(true) : setPipelineId(e.target.value)}>
             {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {pipelines.length > 1 && <option value="__all">Ver todos os funis</option>}
             {isManager && <option value="__new">+ Novo funil…</option>}
           </select>
         </label>
         {isManager && <Button variant="secondary" onClick={() => setEditCol({ name: "", color: COLORS[0] })}><Plus size={15} /> Coluna</Button>}
+        {isManager && pipeline && pipelines.length > 1 && <Button variant="secondary" title="Apagar este funil" onClick={deletePipeline}><Trash2 size={15} /></Button>}
         {isManager && pipeline && <Button variant="secondary" onClick={() => setEditFields(true)}><SlidersHorizontal size={15} /> Campos{pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}</Button>}
         <div className="crm-search"><Search size={15} /><input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <select className="crm-filter" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
@@ -180,7 +217,7 @@ function FunnelView({ ctx }) {
         <div style={{ flex: 1 }} />
         <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar planilha</Button>
         <Button onClick={() => setOpen({ isNew: true, stage: stages[0]?.id })}><Plus size={15} /> Novo lead</Button>
-      </div>
+      </div>}
 
       <div className="crm-board">
         {stages.map((st) => {
@@ -210,29 +247,6 @@ function FunnelView({ ctx }) {
                 {leads === null && <div className="crm-skel" />}
                 {items.map((l) => (
                   <div key={l.id} className="crm-card" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => setOpen(l)}>
-                    {modelFields.length > 0 ? (
-                      <div className="crm-mcard" style={{ "--band": st.color }}>
-                        <div className="crm-mcard-band">
-                          {(() => {
-                            const k = (kindField && l.custom?.[kindField.id]) || (!kindField && l.source && l.source !== "Importação" ? l.source : null);
-                            return <span>{/renova/i.test(k || "") ? <RefreshCw size={13} /> : <Tag size={13} />} {(k || st.name).toUpperCase()}</span>;
-                          })()}
-                          <span><Clock size={13} /> Há {ago(l.stageChangedAt)}</span>
-                        </div>
-                        <div className="crm-mcard-grid">
-                          <div className="wide"><small>Cliente</small><strong>{l.name}</strong></div>
-                          {cardFields.map((f) => (
-                            <div key={f.id} className={f.alert ? "wide" : ""}>
-                              <small>{f.label.replace(/\s*\(.*\)$/, "")}</small>
-                              <strong>{fmtField(f, l.custom?.[f.id])}</strong>
-                              {f.alert && l.custom?.[f.id] && <DueBadge date={l.custom[f.id]} />}
-                            </div>
-                          ))}
-                          <div><small>Responsável</small><strong>{l.ownerName || "—"}</strong></div>
-                          {l.value ? <div><small>Valor</small><strong>{brl(l.value)}</strong></div> : null}
-                        </div>
-                      </div>
-                    ) : (
                     <div className="crm-card-top">
                       <span className="crm-avatar">{initials(l.name)}</span>
                       <div className="crm-card-id">
@@ -241,7 +255,22 @@ function FunnelView({ ctx }) {
                       </div>
                       <span className="crm-value">{l.value ? brl(l.value) : "+ Valor"}</span>
                     </div>
-                    )}
+                    {(() => {
+                      const k = kindField && l.custom?.[kindField.id];
+                      const shown = cardFields.filter((f) => l.custom?.[f.id]);
+                      if (!k && !shown.length) return null;
+                      return (
+                        <div className="crm-info">
+                          {k && <span className="crm-kind" style={{ "--c": st.color }}>{/renova/i.test(k) ? <RefreshCw size={11} /> : <Tag size={11} />} {k}</span>}
+                          {shown.map((f) => (
+                            <span key={f.id} className="crm-info-item">
+                              <small>{f.label.replace(/\s*\(.*\)$/, "")}:</small> {fmtField(f, l.custom[f.id])}
+                              {f.alert && <DueBadge date={l.custom[f.id]} />}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                     {l.tagIds.length > 0 && (
                       <div className="crm-tags">
                         {l.tagIds.map((id) => tagById.get(id)).filter(Boolean).map((t) => (
@@ -459,7 +488,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
     setUploading(false);
   };
   const delFile = async (f) => {
-    if (!confirm(`Remover o anexo "${f.name}"?`)) return;
+    if (!await askConfirm(`Remover o anexo "${f.name}"?`)) return;
     try { const l = await crm.deleteLeadFile(lead.id, f.id); setFiles(l.attachments || []); } catch (e) { setErr(errText(e)); }
   };
   const openConversation = async () => {
@@ -504,7 +533,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
     setBusy(false);
   };
   const remove = async () => {
-    if (!confirm(`Excluir o lead "${lead.name}"?`)) return;
+    if (!await askConfirm(`Excluir o lead "${lead.name}"?`)) return;
     await crm.deleteLead(lead.id).catch(() => {});
     onSaved();
   };
@@ -907,7 +936,7 @@ function AgendaView({ ctx }) {
         <strong style={{ fontSize: 17 }}>{days[0].toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – {days[6].toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</strong>
         <div style={{ flex: 1 }} />
         {g.configured && (g.connected
-          ? <Button variant="secondary" title={g.email || ""} onClick={async () => { if (confirm("Desconectar sua conta Google?")) { await googleDisconnectApi(); setG((x) => ({ ...x, connected: false })); } }}>🟢 Google Agenda</Button>
+          ? <Button variant="secondary" title={g.email || ""} onClick={async () => { if (await askConfirm("Desconectar sua conta Google?")) { await googleDisconnectApi(); setG((x) => ({ ...x, connected: false })); } }}>🟢 Google Agenda</Button>
           : <Button variant="secondary" onClick={connectGoogle}>Conectar Google Agenda</Button>)}
         <Button onClick={() => setNewEv({ kind: "reuniao", title: "Reunião", startsAt: toLocalInput(new Date(Date.now() + 3600000)), leadId: "", google: g.connected, meet: true, inviteLead: true })}><Plus size={15} /> Agendar</Button>
       </div>
@@ -923,7 +952,7 @@ function AgendaView({ ctx }) {
                   <strong>{e.title}</strong>
                   {e.leadName && <span>{e.leadName}</span>}
                   {e.meetLink && <a href={e.meetLink} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()} className="crm-meet">🎥 Entrar no Meet</a>}
-                  <button className="crm-event-del" onClick={async (ev) => { ev.stopPropagation(); if (confirm("Excluir este agendamento?")) { await crm.deleteEvent(e.id); load(); } }}><Trash2 size={11} /></button>
+                  <button className="crm-event-del" onClick={async (ev) => { ev.stopPropagation(); if (await askConfirm("Excluir este agendamento?")) { await crm.deleteEvent(e.id); load(); } }}><Trash2 size={11} /></button>
                 </div>
               ))}
             </div>
@@ -991,7 +1020,7 @@ function ProductsView({ ctx }) {
       {edit && (
         <Sheet title={edit.id ? "Editar produto" : "Novo produto"} onClose={() => setEdit(null)} width={480}
           footer={<>
-            {edit.id && <Button variant="danger" style={{ marginRight: "auto" }} onClick={async () => { if (confirm("Excluir este produto?")) { await crm.deleteProduct(edit.id); setEdit(null); loadProducts(); } }}><Trash2 size={14} /></Button>}
+            {edit.id && <Button variant="danger" style={{ marginRight: "auto" }} onClick={async () => { if (await askConfirm("Excluir este produto?")) { await crm.deleteProduct(edit.id); setEdit(null); loadProducts(); } }}><Trash2 size={14} /></Button>}
             <Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button disabled={!edit.name?.trim()} onClick={save}>Salvar</Button>
           </>}>
           <Group>
@@ -1034,7 +1063,7 @@ function TagsView({ ctx }) {
       {edit && (
         <Sheet title={edit.id ? "Editar tag" : "Nova tag"} onClose={() => setEdit(null)} width={440}
           footer={<>
-            {edit.id && <Button variant="danger" style={{ marginRight: "auto" }} onClick={async () => { if (confirm("Excluir esta tag?")) { await crm.deleteTag(edit.id); setEdit(null); loadTags(); } }}><Trash2 size={14} /></Button>}
+            {edit.id && <Button variant="danger" style={{ marginRight: "auto" }} onClick={async () => { if (await askConfirm("Excluir esta tag?")) { await crm.deleteTag(edit.id); setEdit(null); loadTags(); } }}><Trash2 size={14} /></Button>}
             <Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button disabled={!edit.name?.trim()} onClick={save}>Salvar</Button>
           </>}>
           <Group><Row label="Nome"><input autoFocus value={edit.name} onChange={(e) => setEdit((c) => ({ ...c, name: e.target.value }))} placeholder="Ex: MQL" /></Row></Group>

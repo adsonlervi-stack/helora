@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import { createPortal } from "react-dom";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -743,7 +744,7 @@ export default function ChatWindow({
     if (action === "forward") return setForwarding(m);
     if (action === "copy") return navigator.clipboard?.writeText(m.text || "");
     if (action === "delete") {
-      if (window.confirm("Apagar esta mensagem para todos?")) onDeleteMessage?.(m.id);
+      if (await askConfirm("Apagar esta mensagem para todos?")) onDeleteMessage?.(m.id);
     }
   };
 

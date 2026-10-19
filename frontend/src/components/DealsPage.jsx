@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, MessageCircle, Trophy, XCircle, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
 import { getDeals, createDealApi, updateDealApi, removeDeal, getTeam, getPipelineStagesApi, savePipelineStagesApi } from "../api.js";
@@ -138,9 +139,9 @@ export default function DealsPage({ onOpenConversation }) {
     [next[i], next[j]] = [next[j], next[i]];
     persistStages(next);
   };
-  const deleteCol = (id) => {
+  const deleteCol = async (id) => {
     if (deals.some((d) => d.stage === id)) return alert("Mova os negócios desta coluna antes de excluir.");
-    if (!confirm("Excluir esta coluna?")) return;
+    if (!await askConfirm("Excluir esta coluna?")) return;
     persistStages(STAGES.filter((s) => s.id !== id));
   };
 

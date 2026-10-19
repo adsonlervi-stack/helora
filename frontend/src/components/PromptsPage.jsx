@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
 import { Plus, Sparkles, Trash2 } from "lucide-react";
 import { aiPrompts, aiStatusApi, getDepartments } from "../api.js";
@@ -61,7 +62,7 @@ export default function PromptsPage({ canEdit }) {
       {edit && (
         <Sheet title={edit.id ? "Editar prompt" : "Criar prompt"} subtitle="A IA responde o cliente seguindo exatamente este texto." onClose={() => setEdit(null)} width={760}
           footer={<>
-            {edit.id && <Button variant="danger" style={{ marginRight: "auto" }} onClick={async () => { if (confirm("Excluir este prompt?")) { await aiPrompts.remove(edit.id); setEdit(null); load(); } }}><Trash2 size={14} /> Excluir</Button>}
+            {edit.id && <Button variant="danger" style={{ marginRight: "auto" }} onClick={async () => { if (await askConfirm("Excluir este prompt?")) { await aiPrompts.remove(edit.id); setEdit(null); load(); } }}><Trash2 size={14} /> Excluir</Button>}
             <Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button>
             <Button disabled={!edit.name.trim() || !edit.prompt.trim()} onClick={save}>Salvar</Button>
           </>}>

@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
 import { X, MessageCircle, Trophy, XCircle, Trash2, ExternalLink } from "lucide-react";
 import { getDealActivities, addDealActivityApi } from "../api.js";
@@ -166,8 +167,8 @@ export default function DealDetailPanel({ deal, team, onUpdate, onDelete, onOpen
 
         <button
           className="deal-delete-btn"
-          onClick={() => {
-            if (confirm("Excluir este negócio? Essa ação não pode ser desfeita.")) onDelete(deal.id);
+          onClick={async () => {
+            if (await askConfirm("Excluir este negócio? Essa ação não pode ser desfeita.")) onDelete(deal.id);
           }}
         >
           <Trash2 size={13} style={{ marginRight: 6, verticalAlign: -2 }} />

@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
 import {
   Trash2,
@@ -453,9 +454,9 @@ function LabelsTab() {
             </span>
             <span className="reply-response" />
             <button className="reply-delete" title="Editar" onClick={async () => {
-              const t = prompt("Novo nome da etiqueta:", l.title);
+              const t = await askPrompt("Novo nome da etiqueta:", l.title);
               if (t === null) return;
-              const c = prompt("Cor (opcional, ex: #2b82ea):", l.color) || l.color;
+              const c = await askPrompt("Cor (opcional, ex: #2b82ea):", l.color) || l.color;
               await updateLabelApi(l.id, { title: t.trim() || l.title, color: c });
               load();
             }}><Pencil size={15} /></button>
@@ -519,13 +520,13 @@ function DepartmentsTab() {
           <div className="reply-item" key={d.id}>
             <span className="reply-response" style={{ opacity: d.active === false ? 0.45 : 1 }}>{d.name}{d.active === false ? " (desativado)" : ""}</span>
             <button className="reply-delete" title="Editar nome" onClick={async () => {
-              const n = prompt("Novo nome do setor:", d.name);
+              const n = await askPrompt("Novo nome do setor:", d.name);
               if (n && n.trim()) { await updateDepartmentApi(d.id, { name: n.trim() }); load(); }
             }}><Pencil size={15} /></button>
             <button className="reply-delete" title={d.active === false ? "Ativar" : "Desativar"} onClick={async () => { await updateDepartmentApi(d.id, { active: d.active === false }); load(); }}>
               {d.active === false ? <Eye size={15} /> : <EyeOff size={15} />}
             </button>
-            <button className="reply-delete" title="Excluir" onClick={() => confirm(`Excluir o setor "${d.name}"?`) && handleDelete(d.id)}>
+            <button className="reply-delete" title="Excluir" onClick={async () => (await askConfirm(`Excluir o setor "${d.name}"?`)) && handleDelete(d.id)}>
               <Trash2 size={16} />
             </button>
           </div>

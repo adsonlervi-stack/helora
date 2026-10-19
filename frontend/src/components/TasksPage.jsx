@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, CheckCircle2, Circle, Paperclip, CalendarClock, AlertTriangle, X } from "lucide-react";
 import {
@@ -39,7 +40,7 @@ export default function TasksPage({ profile }) {
     try { await updateTaskApi(t.id, { status: t.status === "done" ? "open" : "done" }); } catch (e) { setMsg({ type: "error", text: errText(e) }); loadTasks(); }
   };
   const remove = async (t) => {
-    if (!confirm("Excluir esta tarefa?")) return;
+    if (!await askConfirm("Excluir esta tarefa?")) return;
     await deleteTaskApi(t.id).catch(() => {});
     loadTasks();
   };
@@ -144,7 +145,7 @@ export default function TasksPage({ profile }) {
                 <span className="cv-muted">{m.text}{m.fileName ? ` 📎 ${m.fileName}` : ""}</span>
                 <span className="task-meta">{recurLabel(m)}{m.sign ? " · com assinatura" : ""}{m.needsAttachment ? " · anexo variável" : ""}{m.createdBy ? ` · por ${m.createdBy}` : ""}</span>
               </div>
-              <button className="icon-btn" title="Cancelar" onClick={async () => { if (confirm("Cancelar este agendamento?")) { await cancelScheduledMessageApi(m.id); loadScheduled(); } }}><X size={15} /></button>
+              <button className="icon-btn" title="Cancelar" onClick={async () => { if (await askConfirm("Cancelar este agendamento?")) { await cancelScheduledMessageApi(m.id); loadScheduled(); } }}><X size={15} /></button>
             </div>
           ))}
           {scheduled && !upcoming.length && <div className="cv-muted" style={{ padding: "10px 0" }}>Nenhuma mensagem agendada.</div>}

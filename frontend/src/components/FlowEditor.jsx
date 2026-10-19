@@ -1,3 +1,4 @@
+import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Save, Play, Plus, Minus, Maximize2, Trash2, Copy, X, RotateCcw, Send, Clock3 } from "lucide-react";
 import BusinessHoursEditor from "./BusinessHoursEditor.jsx";
@@ -325,7 +326,7 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
     <div className="fe">
       {/* Barra superior */}
       <div className="fe-top lg-bar">
-        <button className="cv-icon-btn" onClick={() => (!dirty || window.confirm("Sair sem salvar as alterações?")) && onBack()} title="Voltar">
+        <button className="cv-icon-btn" onClick={async () => (!dirty || await askConfirm("Sair sem salvar as alterações?")) && onBack()} title="Voltar">
           <ArrowLeft size={16} />
         </button>
         <input
