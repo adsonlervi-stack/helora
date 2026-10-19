@@ -367,8 +367,8 @@ export const adminUpdateMaster = (id, d) => api.patch(`/admin/masters/${id}`, d)
 export const adminDeleteMaster = (id) => api.delete(`/admin/masters/${id}`);
 export const adminUploadBoleto = (id, file) => { const fd = new FormData(); fd.append("file", file); return api.post(`/admin/invoices/${id}/boleto`, fd).then((r) => r.data); };
 
-// ---- V6: IA ----
+// ---- V6: IA (só nos fluxos) ----
 export const aiStatusApi = () => api.get("/ai/status").then((r) => r.data).catch(() => ({ enabled: false }));
-export const aiSuggestApi = (conversationId, hint) => api.post("/ai/suggest", { conversationId, hint }).then((r) => r.data.text);
-export const aiRewriteApi = (text, mode) => api.post("/ai/rewrite", { text, mode }).then((r) => r.data.text);
-export const aiSummaryApi = (conversationId) => api.post("/ai/summary", { conversationId }).then((r) => r.data.text);
+export const googleStatusApi = () => api.get("/google/status").then((r) => r.data).catch(() => ({ configured: false, connected: false }));
+export const googleAuthUrlApi = () => api.get("/google/auth-url").then((r) => r.data.url);
+export const googleDisconnectApi = () => api.delete("/google");
