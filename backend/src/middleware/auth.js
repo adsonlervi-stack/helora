@@ -22,11 +22,16 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ error: "Sessão inválida ou expirada." });
   }
 
-  const { data: profile, error: profileError } = await supabase
+  let { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("account_id, role, is_super_admin, name")
+    .select("account_id, role, is_super_admin, name, admin_level")
     .eq("id", userData.user.id)
     .maybeSingle();
+  if (profileError && /admin_level/.test(profileError.message)) {
+    // banco ainda sem a migration 024
+    ({ data: profile, error: profileError } = await supabase
+      .from("profiles").select("account_id, role, is_super_admin, name").eq("id", userData.user.id).maybeSingle());
+  }
 
   if (profileError || !profile) {
     return res.status(403).json({ error: "Usuário sem conta associada." });
@@ -36,6 +41,7 @@ export async function requireAuth(req, res, next) {
   req.accountId = profile.account_id;
   req.role = profile.role;
   req.isSuperAdmin = profile.is_super_admin;
+  req.adminLevel = profile.is_super_admin ? profile.admin_level || "master" : null;
   req.userName = profile.name || (userData.user.email || "").split("@")[0] || "Atendente";
   req.actingAsAccount = false;
 
@@ -79,6 +85,10 @@ export async function requireAuth(req, res, next) {
 export function requireSuperAdmin(req, res, next) {
   if (!req.isSuperAdmin) {
     return res.status(403).json({ error: "Acesso restrito ao administrador do sistema." });
+  }
+  // Usuário "Suporte" da Gestora: sem financeiro, planos, créditos e usuários master
+  if (req.adminLevel === "support" && /^\/(invoices|billing|plans|credits|masters|accounts\/[^/]+\/plan|email|migrate)/.test(req.path || "")) {
+    return res.status(403).json({ error: "Seu usuário de suporte não tem acesso a esta área." });
   }
   next();
 }
