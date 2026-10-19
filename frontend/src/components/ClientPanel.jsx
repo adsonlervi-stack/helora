@@ -92,7 +92,7 @@ export default function ClientPanel({ conversation, departments = [], team = [],
               <>
                 <Group title="Contato">
                   <Row label="Nome"><input defaultValue={contact.name || contact.pushName || ""} placeholder="Nome" onBlur={(e) => e.target.value !== (contact.name || "") && saveField({ name: e.target.value })} /></Row>
-                  <Row label="WhatsApp"><input defaultValue={contact.phone || ""} inputMode="tel" placeholder="5584999998888" onBlur={(e) => { const v = e.target.value.replace(/\D/g, ""); if (v && v !== contact.phone) saveField({ phone: v }); }} /></Row>
+                  <Row label="WhatsApp"><input key={contact.phone || ""} defaultValue={fmtPhone(contact.phone || "") || ""} inputMode="tel" placeholder="5584999998888" onBlur={(e) => { const v = e.target.value.replace(/\D/g, ""); if (v && v !== contact.phone) saveField({ phone: v }); }} /></Row>
                   <Row label="E-mail"><input defaultValue={contact.email || ""} inputMode="email" placeholder="Adicionar" onBlur={(e) => e.target.value !== (contact.email || "") && saveField({ email: e.target.value })} /></Row>
                 </Group>
                 <Group title="Lead" hint="Mudar o status coloca ou move o contato no Pipeline.">

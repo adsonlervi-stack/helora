@@ -190,6 +190,10 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
     const c = toCanvas(r.left + r.width / 2 - 120, r.top + r.height / 2 - 60);
     const n = newNode(type, c.x + (Math.random() * 40 - 20), c.y + (Math.random() * 40 - 20));
     mutate((g) => {
+      // não nasce em cima de outro bloco: anda para a direita/baixo até achar espaço livre
+      for (let i = 0; i < 40 && g.nodes.some((o) => Math.abs(o.x - n.x) < NODE_W + 30 && Math.abs(o.y - n.y) < 150); i++) {
+        if (i % 4 === 3) { n.x -= (NODE_W + 60) * 3; n.y += 190; } else n.x += NODE_W + 60;
+      }
       g.nodes.push(n);
       // liga automaticamente do bloco selecionado (saída livre) para o novo
       if (selected?.kind === "node") {

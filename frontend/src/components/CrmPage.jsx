@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
-  ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2
+  ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
+  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks
 } from "lucide-react";
-import { crm, getTeam, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
+import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 
 const COLORS = ["#0a84ff", "#5ac8fa", "#bf5af2", "#ff375f", "#ff9f0a", "#ffcc00", "#30d158", "#64d2ff", "#8e8e93", "#ac8e68"];
@@ -39,7 +40,7 @@ const TABS = [
 ];
 
 /** CRM: prospecção, qualificação e triagem de leads (independente do Pipeline de atendimento). */
-export default function CrmPage({ profile }) {
+export default function CrmPage({ profile, onOpenConversation }) {
   const isManager = profile?.role === "owner" || profile?.isSuperAdmin;
   const [tab, setTab] = useState("funnel");
   const [pipelines, setPipelines] = useState([]);
@@ -47,6 +48,7 @@ export default function CrmPage({ profile }) {
   const [tags, setTags] = useState([]);
   const [products, setProducts] = useState([]);
   const [team, setTeam] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [error, setError] = useState(null);
 
   const loadPipelines = () =>
@@ -58,9 +60,10 @@ export default function CrmPage({ profile }) {
     loadTags();
     loadProducts();
     getTeam().then(setTeam).catch(() => {});
+    getDepartments().then(setDepartments).catch(() => {});
   }, []);
   const pipeline = pipelines.find((p) => p.id === pipelineId);
-  const ctx = { isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, loadPipelines, loadTags, loadProducts, setPipelines };
+  const ctx = { isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, loadPipelines, loadTags, loadProducts, setPipelines };
 
   return (
     <div className="page crm-page">
@@ -107,6 +110,12 @@ function FunnelView({ ctx }) {
     setLeads((cur) => cur.map((l) => (l.id === id ? { ...l, stage, stageChangedAt: new Date().toISOString() } : l)));
     try { await crm.updateLead(id, { stage }); } catch { load(); }
   };
+  const openConv = async (l) => {
+    try {
+      const r = l.conversationId ? { conversationId: l.conversationId } : await crm.openLeadConversation(l.id);
+      ctx.onOpenConversation?.(r.conversationId);
+    } catch (e) { alert(errText(e)); }
+  };
   const saveStages = async (next) => {
     try {
       await crm.updatePipeline(pipeline.id, { stages: next });
@@ -116,8 +125,8 @@ function FunnelView({ ctx }) {
   const saveCol = () => {
     const name = (editCol?.name || "").trim();
     if (!name) return;
-    if (editCol.id) saveStages(stages.map((s) => (s.id === editCol.id ? { ...s, name, color: editCol.color } : s)));
-    else saveStages([...stages, { id: name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "_").slice(0, 24) + "_" + Date.now().toString(36).slice(-4), name, color: editCol.color }]);
+    if (editCol.id) saveStages(stages.map((s) => (s.id === editCol.id ? { ...s, name, color: editCol.color, automations: editCol.automations || [] } : s)));
+    else saveStages([...stages, { id: name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "_").slice(0, 24) + "_" + Date.now().toString(36).slice(-4), name, color: editCol.color, automations: editCol.automations || [] }]);
     setEditCol(null);
   };
   const moveCol = (id, dir) => {
@@ -164,12 +173,13 @@ function FunnelView({ ctx }) {
               <div className="crm-col-head">
                 <span className="crm-dot" style={{ background: st.color }} />
                 <strong title={st.name}>{st.name}</strong>
+                {(st.automations || []).some((a) => a.active !== false) && <span className="crm-auto-ind" title="Esta coluna tem automações"><Zap size={12} /></span>}
                 <span className="crm-count">{items.length}</span>
                 {isManager && (
                   <span className="crm-col-tools">
                     <button onClick={() => moveCol(st.id, -1)} title="Mover para a esquerda"><ChevronLeft size={13} /></button>
                     <button onClick={() => moveCol(st.id, 1)} title="Mover para a direita"><ChevronRight size={13} /></button>
-                    <button onClick={() => setEditCol({ id: st.id, name: st.name, color: st.color })} title="Editar"><Pencil size={12} /></button>
+                    <button onClick={() => setEditCol({ id: st.id, name: st.name, color: st.color, automations: st.automations || [] })} title="Editar"><Pencil size={12} /></button>
                     <button onClick={() => deleteCol(st.id)} title="Excluir"><Trash2 size={12} /></button>
                   </span>
                 )}
@@ -194,6 +204,13 @@ function FunnelView({ ctx }) {
                         ))}
                       </div>
                     )}
+                    {(l.attachments?.length > 0 || l.checklist?.length > 0 || l.conversationId) && (
+                      <div className="crm-badges">
+                        {l.checklist?.length > 0 && (() => { const d = l.checklist.filter((c) => c.done).length; return <span className={d === l.checklist.length ? "ok" : ""}><CheckSquare size={12} /> {d}/{l.checklist.length}</span>; })()}
+                        {l.attachments?.length > 0 && <span><Paperclip size={12} /> {l.attachments.length}</span>}
+                        {l.conversationId && <span><MessageCircle size={12} /> Conversa</span>}
+                      </div>
+                    )}
                     <div className="crm-meta">
                       <span><Timer size={12} /> {ago(l.stageChangedAt)} na coluna</span>
                       {l.products.length > 0 && <span><Briefcase size={12} /> {l.products.length} produto(s)</span>}
@@ -201,7 +218,7 @@ function FunnelView({ ctx }) {
                     </div>
                     <div className="crm-card-foot" onClick={(e) => e.stopPropagation()}>
                       <span className="crm-owner" title={l.ownerName || ""}>{l.ownerAvatar ? <img src={l.ownerAvatar} alt="" /> : initials(l.ownerName)}</span>
-                      {l.phone && <a href={`https://wa.me/${l.phone}`} target="_blank" rel="noreferrer" title="WhatsApp"><MessageCircle size={15} /></a>}
+                      {l.phone && <button type="button" className="crm-foot-btn" title="Abrir conversa no Helora" onClick={() => openConv(l)}><MessageCircle size={15} /></button>}
                       {l.phone && <a href={`tel:+${l.phone}`} title="Ligar"><Phone size={15} /></a>}
                       <span className="crm-created">Criado há {ago(l.createdAt)}</span>
                     </div>
@@ -216,13 +233,70 @@ function FunnelView({ ctx }) {
 
       {open && <LeadSheet ctx={ctx} lead={open} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); load(); }} />}
       {editCol && (
-        <Sheet title={editCol.id ? "Editar coluna" : "Nova coluna"} onClose={() => setEditCol(null)} width={440}
+        <Sheet title={editCol.id ? "Editar coluna" : "Nova coluna"} subtitle="Automações rodam sempre que um card entra nesta coluna." onClose={() => setEditCol(null)} width={560}
           footer={<><Button variant="secondary" onClick={() => setEditCol(null)}>Cancelar</Button><Button onClick={saveCol}>Salvar</Button></>}>
           <Group><Row label="Nome"><input autoFocus value={editCol.name} onChange={(e) => setEditCol((c) => ({ ...c, name: e.target.value }))} placeholder="Ex: Qualificação" /></Row></Group>
           <Group title="Cor"><ColorPicker value={editCol.color} onChange={(c) => setEditCol((x) => ({ ...x, color: c }))} /></Group>
+          <AutomationsEditor ctx={ctx} list={editCol.automations || []} onChange={(automations) => setEditCol((x) => ({ ...x, automations }))} />
         </Sheet>
       )}
       {newPipe && <NewPipelineSheet onClose={() => setNewPipe(false)} onCreated={(p) => { setNewPipe(false); loadPipelines().then(() => setPipelineId(p.id)); }} />}
+    </>
+  );
+}
+
+const AUTO_META = {
+  message: { label: "Enviar mensagem no WhatsApp", hint: "Abre a conversa com o lead e manda o texto. Use {nome} e {empresa}." },
+  task: { label: "Criar tarefa para o responsável", hint: "Aparece em Tarefas, com prazo." },
+  followup: { label: "Agendar follow-up", hint: "Entra na Agenda do CRM às 10h do dia." },
+  owner: { label: "Passar para outro responsável", hint: "Troca o dono do card automaticamente." }
+};
+function AutomationsEditor({ ctx, list, onChange }) {
+  const upd = (id, patch) => onChange(list.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+  const add = (type) => onChange([...list, { id: Math.random().toString(36).slice(2, 10), type, active: true, days: type === "followup" ? 2 : 1, text: type === "message" ? "Olá {nome}! " : undefined }]);
+  return (
+    <>
+      <Group title="Automações" hint={list.length ? "Rodam na ordem, sempre que um card entra nesta coluna." : "Ex.: ao entrar em “Proposta”, mandar a mensagem e criar uma tarefa de retorno em 2 dias."}>
+        {list.map((a) => (
+          <div key={a.id} className="crm-auto">
+            <div className="crm-auto-head">
+              <span className="crm-auto-ico"><Zap size={13} /></span>
+              <strong>{AUTO_META[a.type]?.label}</strong>
+              <Switch checked={a.active !== false} onChange={(v) => upd(a.id, { active: v })} />
+              <button type="button" className="fi-icon" onClick={() => onChange(list.filter((x) => x.id !== a.id))} title="Remover"><Trash2 size={14} /></button>
+            </div>
+            {a.type === "message" && (
+              <>
+                <textarea rows={3} value={a.text || ""} onChange={(e) => upd(a.id, { text: e.target.value })} placeholder="Olá {nome}! Recebemos seu pedido…" />
+                {(ctx.departments || []).length > 0 && (
+                  <select value={a.departmentId || ""} onChange={(e) => upd(a.id, { departmentId: e.target.value || undefined })}>
+                    <option value="">Setor da conversa: manter</option>
+                    {ctx.departments.map((d) => <option key={d.id} value={d.id}>Setor: {d.name}</option>)}
+                  </select>
+                )}
+              </>
+            )}
+            {(a.type === "task" || a.type === "followup") && (
+              <div className="crm-auto-two">
+                <input value={a.title || ""} onChange={(e) => upd(a.id, { title: e.target.value })} placeholder={a.type === "task" ? "Falar com {nome}" : "Follow-up {nome}"} />
+                <label>em <input type="number" min="0" max="365" value={a.days ?? 1} onChange={(e) => upd(a.id, { days: e.target.value })} /> dia(s)</label>
+              </div>
+            )}
+            {a.type === "owner" && (
+              <select value={a.ownerId || ""} onChange={(e) => upd(a.id, { ownerId: e.target.value || undefined })}>
+                <option value="">Escolha o responsável…</option>
+                {(ctx.team || []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            )}
+            <small>{AUTO_META[a.type]?.hint}</small>
+          </div>
+        ))}
+        <div className="crm-auto-add">
+          {Object.entries(AUTO_META).map(([k, m]) => (
+            <button type="button" key={k} onClick={() => add(k)}><Plus size={13} /> {m.label}</button>
+          ))}
+        </div>
+      </Group>
     </>
   );
 }
@@ -254,6 +328,37 @@ function NewPipelineSheet({ onClose, onCreated }) {
 function LeadSheet({ ctx, lead, onClose, onSaved }) {
   const { pipeline, pipelines, tags, products, team, isManager } = ctx;
   const isNew = !!lead.isNew;
+  const [files, setFiles] = useState(lead.attachments || []);
+  const [checklist, setChecklist] = useState(lead.checklist || []);
+  const [newItem, setNewItem] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+  const agendaRef = useRef(null);
+  const doneCount = checklist.filter((c) => c.done).length;
+  const addFiles = async (list) => {
+    setUploading(true);
+    for (const file of list) {
+      try { const l = await crm.uploadLeadFile(lead.id, file); setFiles(l.attachments || []); } catch (e) { setErr(errText(e)); }
+    }
+    setUploading(false);
+  };
+  const delFile = async (f) => {
+    if (!confirm(`Remover o anexo "${f.name}"?`)) return;
+    try { const l = await crm.deleteLeadFile(lead.id, f.id); setFiles(l.attachments || []); } catch (e) { setErr(errText(e)); }
+  };
+  const openConversation = async () => {
+    try {
+      const r = lead.conversationId ? { conversationId: lead.conversationId } : await crm.openLeadConversation(lead.id);
+      onClose();
+      ctx.onOpenConversation?.(r.conversationId);
+    } catch (e) { setErr(errText(e)); }
+  };
+  const addItem = () => {
+    const t = newItem.trim();
+    if (!t) return;
+    setChecklist((c) => [...c, { id: Math.random().toString(36).slice(2, 10), text: t, done: false }]);
+    setNewItem("");
+  };
   const [f, setF] = useState({
     name: lead.name || "", phone: lead.phone || "", email: lead.email || "", company: lead.company || "",
     value: lead.value ?? "", ownerId: lead.ownerId || "", source: lead.source || "", notes: lead.notes || "",
@@ -273,7 +378,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
     setBusy(true);
     setErr(null);
     try {
-      const body = { ...f, ownerId: f.ownerId || undefined };
+      const body = { ...f, ownerId: f.ownerId || undefined, checklist };
       const saved = isNew ? await crm.createLead(body) : await crm.updateLead(lead.id, body);
       const prev = JSON.stringify((lead.products || []).map((p) => [p.productId, p.qty, p.price]));
       const now = JSON.stringify(items.map((i) => [i.productId, Number(i.qty), Number(i.price)]));
@@ -302,6 +407,15 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
         <Button variant="secondary" onClick={onClose}>Cancelar</Button>
         <Button disabled={busy || !f.name.trim()} onClick={save}>{busy ? "Salvando…" : isNew ? "Criar lead" : "Salvar"}</Button>
       </>}>
+      {!isNew && (
+        <div className="crm-actionbar">
+          <button type="button" onClick={openConversation} disabled={!f.phone}><MessageCircle size={16} /><span>{lead.conversationId ? "Ver conversa" : "Abrir conversa"}</span></button>
+          <button type="button" onClick={() => { setNewEv({ kind: "reuniao", title: "Reunião", startsAt: toLocalInput(new Date(Date.now() + 86400000)) }); setTimeout(() => agendaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }}><CalendarDays size={16} /><span>Agendar</span></button>
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}><Paperclip size={16} /><span>{uploading ? "Enviando…" : "Anexar"}</span></button>
+          {f.phone && <a href={`tel:+${String(f.phone).replace(/\D/g, "")}`}><Phone size={16} /><span>Ligar</span></a>}
+          <input ref={fileRef} type="file" multiple hidden onChange={(e) => { const l = [...(e.target.files || [])]; e.target.value = ""; l.length && addFiles(l); }} />
+        </div>
+      )}
       <Group title="Contato">
         <Row label="Nome"><input autoFocus={isNew} value={f.name} onChange={set("name")} placeholder="Obrigatório" /></Row>
         <Row label="Empresa"><input value={f.company} onChange={set("company")} placeholder="Opcional" /></Row>
@@ -328,6 +442,40 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
         </Row>
         <Row label="Valor (R$)"><input value={items.length ? total.toLocaleString("pt-BR") : f.value} onChange={set("value")} disabled={items.length > 0} inputMode="decimal" placeholder="0" /></Row>
       </Group>
+      <Group title={`Checklist${checklist.length ? ` · ${doneCount}/${checklist.length}` : ""}`}>
+        {checklist.length > 0 && (
+          <div className="crm-progress"><span style={{ width: `${Math.round((doneCount / checklist.length) * 100)}%` }} /></div>
+        )}
+        {checklist.map((c) => (
+          <div key={c.id} className={`crm-check-row ${c.done ? "done" : ""}`}>
+            <button type="button" className={`crm-ev-check ${c.done ? "on" : ""}`} onClick={() => setChecklist((l) => l.map((x) => (x.id === c.id ? { ...x, done: !x.done } : x)))}>{c.done && <Check size={12} />}</button>
+            <input value={c.text} onChange={(e) => setChecklist((l) => l.map((x) => (x.id === c.id ? { ...x, text: e.target.value } : x)))} />
+            <button type="button" className="fi-icon" onClick={() => setChecklist((l) => l.filter((x) => x.id !== c.id))} title="Remover"><X size={14} /></button>
+          </div>
+        ))}
+        <div className="crm-check-row add">
+          <Plus size={15} />
+          <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }} placeholder="Adicionar item (ex.: pedir documentos, enviar cotação)" />
+          {newItem.trim() && <button type="button" className="ap-btn primary" style={{ height: 30, padding: "0 12px" }} onClick={addItem}>Adicionar</button>}
+        </div>
+      </Group>
+      {!isNew && (
+        <Group title={`Anexos${files.length ? ` · ${files.length}` : ""}`}>
+          {files.map((fl) => (
+            <div key={fl.id} className="crm-file-row">
+              {/^image\//.test(fl.type || "") ? <img src={fl.url} alt="" /> : <span className="crm-file-ico"><FileText size={18} /></span>}
+              <a href={fl.url} target="_blank" rel="noreferrer" className="crm-file-name">
+                <strong>{fl.name}</strong>
+                <small>{fl.size ? `${(fl.size / 1024 / 1024).toFixed(fl.size > 1048576 ? 1 : 2)} MB · ` : ""}{new Date(fl.at).toLocaleDateString("pt-BR")}{fl.by ? ` · ${fl.by}` : ""}</small>
+              </a>
+              <a href={fl.url} target="_blank" rel="noreferrer" className="fi-icon" title="Abrir"><ExternalLink size={14} /></a>
+              <button type="button" className="fi-icon" onClick={() => delFile(fl)} title="Remover"><Trash2 size={14} /></button>
+            </div>
+          ))}
+          <button type="button" className="fi-add" onClick={() => fileRef.current?.click()} disabled={uploading}><Paperclip size={15} /> {uploading ? "Enviando…" : "Anexar arquivo (apólice, proposta, documentos…)"}</button>
+        </Group>
+      )}
+      {isNew && <p className="cv-muted" style={{ margin: "14px 4px 0", fontSize: 13 }}>Depois de criar o lead você poderá anexar arquivos, abrir a conversa e agendar.</p>}
       <Group title="Tags">
         <div className="ap-chips">
           {tags.map((t) => {
@@ -355,7 +503,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
         </div>
       </Group>
       {!isNew && (
-        <Group title="Agenda">
+        <div ref={agendaRef}><Group title="Agenda">
           {events.map((ev) => (
             <div key={ev.id} className="crm-ev-row">
               <button className={`crm-ev-check ${ev.done ? "on" : ""}`} onClick={async () => { await crm.updateEvent(ev.id, { done: !ev.done }); crm.events({ leadId: lead.id }).then(setEvents); }}>{ev.done && <Check size={12} />}</button>
@@ -376,7 +524,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
               <Button variant="ghost" onClick={() => setNewEv({ kind: "reuniao", title: "Reunião", startsAt: toLocalInput(new Date(Date.now() + 86400000)) })}><Plus size={14} /> Agendar reunião / call</Button>
             </div>
           )}
-        </Group>
+        </Group></div>
       )}
       <Group title="Anotações"><Row label="" stack><textarea rows={3} value={f.notes} onChange={set("notes")} placeholder="Observações sobre o lead" /></Row></Group>
       {err && <div className="admin-feedback error" style={{ marginTop: 12 }}>{err}</div>}
