@@ -9,6 +9,7 @@
  */
 import { Router } from "express";
 import publicApi from "./publicApi.js";
+import { apiEnabled } from "../governance.js";
 import {
   findApiKey,
   createDeal,
@@ -43,6 +44,7 @@ router.use(async (req, res, next) => {
   const key = req.headers["x-api-key"] || (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   const found = await findApiKey(key).catch(() => null);
   if (!found) return res.status(401).json({ error: "Chave de API inválida ou revogada." });
+  if (!(await apiEnabled(found.accountId).catch(() => false))) return res.status(403).json({ error: "API não liberada para esta empresa.", erro: "API não liberada para esta empresa." });
   if (!rateLimit(found.keyId)) return res.status(429).json({ error: "Muitas requisições. Tente de novo em 1 minuto." });
   req.accountId = found.accountId;
   next();
