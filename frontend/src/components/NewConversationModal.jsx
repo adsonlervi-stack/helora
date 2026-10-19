@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Search, Paperclip, X, FileText } from "lucide-react";
-import { getContacts, startConversationApi, sendMediaMessage } from "../api.js";
+import { getContacts, startConversationApi, sendMediaMessage, getDepartments } from "../api.js";
 import Avatar from "./Avatar.jsx";
 import { Sheet, Group, Row, Button } from "./ui.jsx";
 
@@ -29,6 +29,9 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const fileRef = useRef(null);
+  const [departments, setDepartments] = useState([]);
+  const [departmentId, setDepartmentId] = useState("");
+  useEffect(() => { getDepartments().then((l) => { setDepartments(l); if (l.length === 1) setDepartmentId(l[0].id); }).catch(() => {}); }, []);
 
   useEffect(() => {
     const t = setTimeout(() => getContacts(search).then((l) => setContacts(l.slice(0, 30))).catch(() => {}), 250);
@@ -44,7 +47,7 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
     setBusy(true);
     setError(null);
     try {
-      const conv = await startConversationApi({ phone, name, text: text.trim() });
+      const conv = await startConversationApi({ phone, name, text: text.trim(), departmentId });
       for (const f of files) await sendMediaMessage(conv.id, f).catch((e) => setError(e.response?.data?.error || e.message));
       onStarted(conv);
     } catch (err) {
@@ -62,7 +65,7 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
       width={620}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-        <Button disabled={busy || phone.length < 12} onClick={submit}>{busy ? "Abrindo…" : label}</Button>
+        <Button disabled={busy || phone.length < 12 || (departments.length > 0 && !departmentId)} onClick={submit}>{busy ? "Abrindo…" : label}</Button>
       </>}
     >
       <div className="crm-search" style={{ width: "100%", boxSizing: "border-box", marginTop: 4 }}>
@@ -88,6 +91,14 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
       <Group title="Contato">
         <Row label="WhatsApp"><input value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="5584999998888" /></Row>
         <Row label="Nome"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Opcional" /></Row>
+        {departments.length > 0 && (
+          <Row label="Setor *">
+            <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+              <option value="">Escolha o setor</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </Row>
+        )}
       </Group>
 
       <Group title="Primeira mensagem (opcional)" hint="Deixe em branco para só abrir a conversa.">
