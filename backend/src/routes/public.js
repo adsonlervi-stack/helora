@@ -8,6 +8,7 @@
  *   POST /public/v1/campaigns    → cria e inicia uma campanha (1 crédito por mensagem)
  */
 import { Router } from "express";
+import publicApi from "./publicApi.js";
 import {
   findApiKey,
   createDeal,
@@ -142,5 +143,22 @@ router.post("/campaigns", async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+
+// Versão em português (simples): texto e mídia avulsos
+router.post(["/mensagens/texto", "/mensagens/midia"], async (req, res) => {
+  const b = req.body || {};
+  const phone = onlyDigits(b.telefone);
+  if (phone.length < 10) return res.status(400).json({ erro: "telefone inválido (DDI + DDD + número)." });
+  const midia = req.path.endsWith("midia");
+  if (midia ? !b.midiaUrl : !b.texto) return res.status(400).json({ erro: midia ? "midiaUrl é obrigatório." : "texto é obrigatório." });
+  try {
+    res.status(201).json(await sendOne(req.accountId, phone, b.texto || "", { mediaUrl: midia ? b.midiaUrl : undefined, mediaType: b.tipoMidia, name: b.nome, channelId: b.canalId }));
+  } catch (err) {
+    res.status(err.status || 400).json({ erro: err.message });
+  }
+});
+
+// API v1 completa (atendimentos, contatos, CRM, tarefas…)
+router.use(publicApi);
 
 export default router;

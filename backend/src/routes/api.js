@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { WEBHOOK_EVENTS, emitEvent, invalidateWebhooks } from "../webhooks.js";
+import { supabase as whDb } from "../config/db.js";
 import multer from "multer";
 import {
   listConversations,
@@ -986,6 +988,42 @@ router.post("/api-keys", requireOwner, async (req, res) => {
 router.delete("/api-keys/:id", requireOwner, async (req, res) => {
   await revokeApiKey(req.accountId, req.params.id);
   res.sendStatus(204);
+});
+
+// ---------- Webhooks ----------
+const whMap = (w) => ({ id: w.id, url: w.url, secret: w.secret, events: w.events || [], active: w.active, lastStatus: w.last_status, lastError: w.last_error, lastAt: w.last_at });
+router.get("/webhooks", requireOwner, async (req, res) => {
+  const { data, error } = await whDb.from("webhooks").select("*").eq("account_id", req.accountId).order("created_at");
+  if (error) return res.status(500).json({ error: /webhooks/.test(error.message) ? "Rode a migration 029 no Supabase." : error.message });
+  res.json({ events: WEBHOOK_EVENTS, items: data.map(whMap) });
+});
+router.post("/webhooks", requireOwner, async (req, res) => {
+  const url = String(req.body?.url || "").trim();
+  if (!/^https?:\/\//.test(url)) return res.status(400).json({ error: "Informe uma URL http(s) válida." });
+  const { data, error } = await whDb.from("webhooks").insert({ account_id: req.accountId, url, events: req.body?.events || [], active: true }).select().single();
+  if (error) return res.status(400).json({ error: error.message });
+  invalidateWebhooks(req.accountId);
+  res.status(201).json(whMap(data));
+});
+router.patch("/webhooks/:id", requireOwner, async (req, res) => {
+  const b = req.body || {}; const patch = {};
+  if (b.url !== undefined) patch.url = String(b.url).trim();
+  if (b.events !== undefined) patch.events = b.events;
+  if (b.active !== undefined) patch.active = !!b.active;
+  const { data, error } = await whDb.from("webhooks").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
+  if (error) return res.status(400).json({ error: error.message });
+  invalidateWebhooks(req.accountId);
+  res.json(whMap(data));
+});
+router.delete("/webhooks/:id", requireOwner, async (req, res) => {
+  await whDb.from("webhooks").delete().eq("account_id", req.accountId).eq("id", req.params.id);
+  invalidateWebhooks(req.accountId);
+  res.sendStatus(204);
+});
+router.post("/webhooks/:id/test", requireOwner, async (req, res) => {
+  invalidateWebhooks(req.accountId);
+  await emitEvent(req.accountId, "teste", { mensagem: "Evento de teste da Helora", webhookId: req.params.id, em: new Date().toISOString() });
+  res.json({ ok: true });
 });
 
 router.get("/conversations/:id/messages", async (req, res) => {

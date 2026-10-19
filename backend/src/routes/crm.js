@@ -3,6 +3,7 @@ import { supabase } from "../config/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { enforceTabs } from "../governance.js";
 import { createGoogleEvent, deleteGoogleEvent } from "../google.js";
+import { emitEvent } from "../webhooks.js";
 
 /**
  * CRM (prospecção e qualificação), separado do Pipeline de atendimento.
@@ -115,6 +116,7 @@ router.post("/leads", async (req, res) => {
     const row = { ...leadRow(b), account_id: req.accountId, owner_id: b.ownerId || req.userId, stage_changed_at: new Date().toISOString() };
     const { data, error } = await supabase.from("crm_leads").insert(row).select(LEAD_SELECT).single();
     if (error) throw error;
+    emitEvent(req.accountId, "lead.criado", mapLead(data));
     res.status(201).json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
@@ -127,6 +129,7 @@ router.patch("/leads/:id", async (req, res) => {
     if (!isManager(req)) q = q.eq("owner_id", req.userId);
     const { data, error } = await q.select(LEAD_SELECT).single();
     if (error) throw error;
+    emitEvent(req.accountId, "lead.atualizado", mapLead(data));
     res.json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
