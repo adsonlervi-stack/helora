@@ -171,6 +171,13 @@ export function CommercialEditor({ account, onClose, onSaved }) {
         </div>
       </Group>
 
+      <Group title="Contrato" hint="O gestor aceita no primeiro acesso; a cópia vai por e-mail.">
+        <Row label="Situação"><span style={{ color: account.contract_accepted_at ? "#248a3d" : "#c93400", fontWeight: 600, fontSize: 15 }}>
+          {account.contract_accepted_at ? `Aceito em ${new Date(account.contract_accepted_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "Ainda não aceito"}
+        </span></Row>
+        <Row label="Ver contrato"><a href="/contrato.html" target="_blank" rel="noreferrer" style={{ color: "#0071e3", fontSize: 15 }}>Abrir</a></Row>
+      </Group>
+
       <Group title="Dados da empresa">
         <Row label="CNPJ / CPF"><input value={f.document} onChange={set("document")} placeholder="Obrigatório para PIX" /></Row>
         <Row label="Responsável"><input value={f.contactName} onChange={set("contactName")} placeholder="Nome" /></Row>

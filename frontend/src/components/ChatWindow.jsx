@@ -9,7 +9,7 @@ import ClientPanel from "./ClientPanel.jsx";
 import TransferModal from "./TransferModal.jsx";
 import {
   getCannedResponses, getDepartments, getTeam, getConversationChannelStatus, sendTypingApi, getPresenceApi,
-  getStickersApi, sendStickerApi, createScheduledMessageApi, getScheduledMessages, cancelScheduledMessageApi, getContactsPage, aiStatusApi, aiSuggestApi, aiRewriteApi, aiSummaryApi
+  getStickersApi, sendStickerApi, createScheduledMessageApi, getScheduledMessages, cancelScheduledMessageApi, getContactsPage
 } from "../api.js";
 
 // Cor fixa por pessoa no grupo (igual WhatsApp)
@@ -529,27 +529,34 @@ export default function ChatWindow({
   const cancelRecRef = useRef(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
-  const [ai, setAi] = useState({ enabled: false });
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiSummary, setAiSummary] = useState(null);
-  useEffect(() => { aiStatusApi().then(setAi); }, []);
-  const runAi = async (kind) => {
-    setAiOpen(false);
-    setAiBusy(true);
-    try {
-      if (kind === "suggest") handleTextChange(await aiSuggestApi(conversation.id, text.trim() || undefined));
-      else if (kind === "summary") setAiSummary(await aiSummaryApi(conversation.id));
-      else {
-        if (!text.trim()) throw new Error("Digite um texto no campo de mensagem primeiro.");
-        handleTextChange(await aiRewriteApi(text, kind));
-      }
-      setTimeout(() => inputRef.current?.focus(), 0);
-    } catch (e) {
-      alert(e.response?.data?.error || e.message);
-    }
-    setAiBusy(false);
+  // Correção ortográfica enquanto digita (sugestões clicáveis acima do campo)
+  const [spell, setSpell] = useState([]);
+  useEffect(() => {
+    const t0 = text;
+    if (!t0 || t0.trim().length < 4 || t0.startsWith("/")) { setSpell([]); return; }
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const r = await fetch("https://api.languagetool.org/v2/check", {
+          method: "POST", signal: ctrl.signal,
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ text: t0, language: "pt-BR", enabledOnly: "false" })
+        });
+        const data = await r.json();
+        setSpell((data.matches || [])
+          .filter((m) => m.replacements?.length && /TYPOS|GRAMMAR|CASING|CONFUSED|TYPOGRAPHY/.test(m.rule?.category?.id || "") )
+          .slice(0, 4)
+          .map((m) => ({ offset: m.offset, length: m.length, wrong: t0.substr(m.offset, m.length), fix: m.replacements[0].value, base: t0 })));
+      } catch {}
+    }, 900);
+    return () => { clearTimeout(timer); ctrl.abort(); };
+  }, [text]);
+  const applySpell = (sp) => {
+    if (text !== sp.base) return setSpell([]);
+    handleTextChange(text.slice(0, sp.offset) + sp.fix + text.slice(sp.offset + sp.length));
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
+
   // Começou a digitar no teclado com a conversa aberta → o texto vai direto para o campo
   useEffect(() => {
     const onKey = (e) => {
@@ -942,18 +949,6 @@ export default function ChatWindow({
                 ))}
               </div>
             )}
-            {aiSummary && (
-              <div className="modal-backdrop" onClick={() => setAiSummary(null)}>
-                <div className="modal lg-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
-                  <div className="modal-header"><h3>Resumo da conversa</h3><button type="button" className="icon-btn" onClick={() => setAiSummary(null)}><X size={16} /></button></div>
-                  <div style={{ whiteSpace: "pre-wrap", fontSize: 15, lineHeight: 1.55, color: "#1d1d1f" }}>{aiSummary}</div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
-                    <button type="button" className="pill-btn" onClick={() => navigator.clipboard.writeText(aiSummary)}>Copiar</button>
-                    <button type="button" className="pill-btn primary" onClick={() => setAiSummary(null)}>Fechar</button>
-                  </div>
-                </div>
-              </div>
-            )}
             {pendingFile && (
               <div className="modal-backdrop" onClick={() => setPendingFile(null)}>
                 <div className="modal lg-modal media-preview" onClick={(e) => e.stopPropagation()}>
@@ -974,6 +969,24 @@ export default function ChatWindow({
                     <button type="button" className="connect-btn" style={{ width: "auto", padding: "0 22px" }} onClick={confirmPendingFile}><Send size={15} /> Enviar</button>
                   </div>
                 </div>
+              </div>
+            )}
+            {spell.length > 0 && text === spell[0].base && (
+              <div className="spell-bar">
+                <span className="spell-label">Correção:</span>
+                {spell.map((sp, i) => (
+                  <button type="button" key={i} onClick={() => applySpell(sp)} title="Clique para corrigir">
+                    <s>{sp.wrong}</s> → <strong>{sp.fix}</strong>
+                  </button>
+                ))}
+                {spell.length > 1 && (
+                  <button type="button" className="spell-all" onClick={() => {
+                    let t = text;
+                    [...spell].sort((a, b) => b.offset - a.offset).forEach((sp) => { t = t.slice(0, sp.offset) + sp.fix + t.slice(sp.offset + sp.length); });
+                    handleTextChange(t);
+                    setTimeout(() => inputRef.current?.focus(), 0);
+                  }}>Corrigir tudo</button>
+                )}
               </div>
             )}
             <form className={`composer ${offline ? "disabled" : ""}`} onSubmit={handleSubmit}>
@@ -1027,24 +1040,6 @@ export default function ChatWindow({
                   </div>
                 )}
               </div>
-
-              {ai.enabled && (
-                <div className="attach-wrap">
-                  <button type="button" className={`composer-icon-btn ai-btn ${aiBusy ? "busy" : ""}`} title="IA: sugerir, corrigir, resumir" disabled={offline || recording || aiBusy} onClick={() => setAiOpen((v) => !v)}>
-                    <Sparkles size={17} />
-                  </button>
-                  {aiOpen && (
-                    <div className="attach-menu ai-menu" onMouseLeave={() => setAiOpen(false)}>
-                      <button type="button" onClick={() => runAi("suggest")}>✨ Sugerir resposta{text.trim() ? " (usando o que digitei)" : ""}</button>
-                      <button type="button" onClick={() => runAi("fix")}>✍️ Corrigir texto</button>
-                      <button type="button" onClick={() => runAi("formal")}>👔 Mais formal</button>
-                      <button type="button" onClick={() => runAi("friendly")}>😊 Mais simpático</button>
-                      <button type="button" onClick={() => runAi("short")}>✂️ Mais curto</button>
-                      <button type="button" onClick={() => runAi("summary")}>📋 Resumir conversa</button>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {recording ? (
                 <div className="rec-bar">

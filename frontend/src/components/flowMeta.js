@@ -1,4 +1,4 @@
-import { Zap, MessageSquare, HelpCircle, ListOrdered, Clock, GitBranch, Timer, Bolt, Flag } from "lucide-react";
+import { Zap, MessageSquare, HelpCircle, ListOrdered, Clock, GitBranch, Timer, Bolt, Flag, Sparkles } from "lucide-react";
 
 export const NODE_W = 248;
 export const HEAD_H = 40;
@@ -14,6 +14,7 @@ export const TYPES = {
   hours: { label: "Horário comercial", color: "#ff9f0a", icon: Clock, group: "Lógica", desc: "Aberto ou fechado agora" },
   condition: { label: "Condição", color: "#ff2d55", icon: GitBranch, group: "Lógica", desc: "Se a resposta for…" },
   wait: { label: "Espera", color: "#8e8e93", icon: Timer, group: "Lógica", desc: "Pausa antes de seguir" },
+  ai: { label: "Atendente IA", color: "#bf5af2", icon: Sparkles, group: "Mensagens", desc: "A IA conversa até resolver ou chamar humano" },
   action: { label: "Ação", color: "#ff3b30", icon: Bolt, group: "Ações", desc: "Transferir, etiquetar, encerrar" },
   end: { label: "Fim", color: "#1d1d1f", icon: Flag, group: "Ações", desc: "Encerra o roteiro do bot" }
 };
@@ -53,6 +54,7 @@ export function portsOf(node) {
       ];
     case "hours": return [{ id: "open", label: "Aberto" }, { id: "closed", label: "Fechado" }];
     case "condition": return [{ id: "true", label: "Sim" }, { id: "false", label: "Não" }];
+    case "ai": return [{ id: "done", label: "Resolveu" }, { id: "human", label: "Precisa de humano" }];
     case "end": return [];
     default: return [{ id: "out", label: "Depois" }];
   }
@@ -88,6 +90,7 @@ export function summary(node, ctx = {}) {
       return extra ? `${base}: ${extra}` : base;
     }
     case "end": return d.text || "Encerra sem mensagem";
+    case "ai": return d.instructions ? d.instructions.slice(0, 90) : "Escreva as instruções da IA…";
     default: return "";
   }
 }
@@ -104,5 +107,6 @@ export function newNode(type, x, y) {
   if (type === "wait") base.data = { seconds: 5 };
   if (type === "action") base.data = { action: "transfer", text: "" };
   if (type === "end") base.data = { text: "" };
+  if (type === "ai") base.data = { instructions: "", knowledge: "", maxTurns: 12 };
   return base;
 }

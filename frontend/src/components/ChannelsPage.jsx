@@ -13,6 +13,7 @@ import {
   API_BASE
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
+import { Sheet, Group, Row, Button } from "./ui.jsx";
 
 const PLATFORM_LABELS = { whatsapp: "WhatsApp", messenger: "Messenger", instagram: "Instagram" };
 
@@ -89,7 +90,7 @@ function NewChannelModal({ departments, flows, initial, onClose, onCreate }) {
   const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     if (!name.trim()) return setError("Dê um apelido para o canal.");
     try {
       await onCreate({
@@ -109,95 +110,63 @@ function NewChannelModal({ departments, flows, initial, onClose, onCreate }) {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card deal-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>{editing ? "Editar canal" : "Novo canal"}</h3>
-        <form onSubmit={handleSubmit}>
-          <label className="login-field">
-            <span>Plataforma</span>
-            <select value={platform} disabled={editing} onChange={(e) => setPlatform(e.target.value)} className="deal-stage-select">
-              <option value="whatsapp">WhatsApp (QR Code ou código)</option>
-              <option value="messenger">Facebook (Messenger)</option>
-              <option value="instagram">Instagram Direct</option>
+    <Sheet
+      title={editing ? "Editar canal" : "Novo canal"}
+      subtitle="Número de WhatsApp, página do Facebook ou Instagram que a empresa atende."
+      onClose={onClose}
+      width={560}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={handleSubmit}>{editing ? "Salvar" : "Criar canal"}</Button></>}
+    >
+      <Group title="Conexão">
+        <Row label="Plataforma">
+          <select value={platform} disabled={editing} onChange={(e) => setPlatform(e.target.value)}>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="messenger">Facebook Messenger</option>
+            <option value="instagram">Instagram Direct</option>
+          </select>
+        </Row>
+        {platform === "whatsapp" && (
+          <Row label="Tipo">
+            <select value={provider} disabled={editing} onChange={(e) => setProvider(e.target.value)}>
+              <option value="baileys">QR Code (celular)</option>
+              <option value="cloud">API oficial da Meta</option>
             </select>
-          </label>
-          {platform === "whatsapp" && (
-            <label className="login-field">
-              <span>Tipo de conexão</span>
-              <select value={provider} disabled={editing} onChange={(e) => setProvider(e.target.value)} className="deal-stage-select">
-                <option value="baileys">QR Code (WhatsApp normal ou Business no celular)</option>
-                <option value="cloud">API oficial da Meta (WhatsApp Cloud API)</option>
-              </select>
-            </label>
-          )}
-          {isCloud && (
-            <>
-              <label className="login-field"><span>Phone Number ID</span><input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="Ex: 123456789012345" /></label>
-              <label className="login-field"><span>WhatsApp Business Account ID (opcional)</span><input value={wabaId} onChange={(e) => setWabaId(e.target.value)} /></label>
-            </>
-          )}
-          {isMeta && (
-            <label className="login-field">
-              <span>{platform === "instagram" ? "ID da conta do Instagram" : "ID da Página do Facebook"}</span>
-              <input value={externalPageId} onChange={(e) => setExternalPageId(e.target.value)} placeholder="Ex: 1029384756" />
-            </label>
-          )}
-          {(isMeta || isCloud) && (
-            <>
-              <label className="login-field">
-                <span>Token de acesso {editing && initial?.hasToken ? "(deixe vazio para manter o atual)" : ""}</span>
-                <input type="password" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder="Token permanente do app na Meta" autoComplete="off" />
-              </label>
-              <div className="channel-meta-help">
-                <strong>Na Meta for Developers, configure o Webhook:</strong>
-                <span>URL: <code>{webhookUrl}</code></span>
-                <span>Token de verificação: o valor de <code>META_VERIFY_TOKEN</code> no servidor</span>
-                <span>Assinar: {isCloud ? "messages" : platform === "instagram" ? "messages (Instagram)" : "messages, messaging_postbacks"}</span>
-              </div>
-            </>
-          )}
-          <label className="login-field">
-            <span>Apelido do dispositivo</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Comercial 2" autoFocus />
-          </label>
-          <label className="login-field">
-            <span>Setor de atendimento</span>
-            <select
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-              className="deal-stage-select"
-            >
-              <option value="">Sem setor (fica em Pendentes para todos)</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-            <small className="cv-muted">Toda conversa nova deste número entra neste setor.</small>
-          </label>
-          <label className="login-field">
-            <span>Fluxo de atendimento (bot)</span>
-            <select value={flowId} onChange={(e) => setFlowId(e.target.value)} className="deal-stage-select">
-              <option value="">Usar o fluxo ativo da empresa</option>
-              {flows.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}{f.active ? " (ativo)" : ""}
-                </option>
-              ))}
-            </select>
-            <small className="cv-muted">O bot deste número segue este fluxo. Crie fluxos na aba Fluxos.</small>
-          </label>
-          {error && <div className="admin-feedback error">{error}</div>}
-          <button type="submit" className="connect-btn" style={{ marginTop: 6 }}>
-            {editing ? "Salvar" : "Criar canal"}
-          </button>
-        </form>
-        <button className="modal-close" onClick={onClose}>
-          Cancelar
-        </button>
-      </div>
-    </div>
+          </Row>
+        )}
+        <Row label="Apelido"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Comercial 2" autoFocus /></Row>
+      </Group>
+      {isCloud && (
+        <Group title="API oficial">
+          <Row label="Phone Number ID"><input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="123456789012345" /></Row>
+          <Row label="WABA ID"><input value={wabaId} onChange={(e) => setWabaId(e.target.value)} placeholder="Opcional" /></Row>
+        </Group>
+      )}
+      {isMeta && (
+        <Group title={platform === "instagram" ? "Instagram" : "Facebook"}>
+          <Row label={platform === "instagram" ? "ID da conta" : "ID da página"}><input value={externalPageId} onChange={(e) => setExternalPageId(e.target.value)} placeholder="1029384756" /></Row>
+        </Group>
+      )}
+      {(isMeta || isCloud) && (
+        <Group title="Token da Meta" hint={`Webhook: ${webhookUrl} · Token de verificação: META_VERIFY_TOKEN do servidor · Assinar: ${isCloud ? "messages" : platform === "instagram" ? "messages (Instagram)" : "messages, messaging_postbacks"}`}>
+          <Row label="Token de acesso"><input type="password" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder={editing && initial?.hasToken ? "Vazio = manter o atual" : "Token permanente"} autoComplete="off" /></Row>
+        </Group>
+      )}
+      <Group title="Atendimento" hint="Toda conversa nova deste número entra no setor escolhido e segue o fluxo do robô.">
+        <Row label="Setor">
+          <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+            <option value="">Sem setor (Pendentes)</option>
+            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </Row>
+        <Row label="Fluxo do robô">
+          <select value={flowId} onChange={(e) => setFlowId(e.target.value)}>
+            <option value="">Fluxo ativo da empresa</option>
+            {flows.map((f) => <option key={f.id} value={f.id}>{f.name}{f.active ? " (ativo)" : ""}</option>)}
+          </select>
+        </Row>
+      </Group>
+      {error && <div className="admin-feedback error" style={{ marginTop: 12 }}>{error}</div>}
+    </Sheet>
   );
 }
 

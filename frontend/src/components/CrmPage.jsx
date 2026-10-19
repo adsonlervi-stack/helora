@@ -3,7 +3,7 @@ import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2
 } from "lucide-react";
-import { crm, getTeam } from "../api.js";
+import { crm, getTeam, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 
 const COLORS = ["#0a84ff", "#5ac8fa", "#bf5af2", "#ff375f", "#ff9f0a", "#ffcc00", "#30d158", "#64d2ff", "#8e8e93", "#ac8e68"];
@@ -539,6 +539,11 @@ function AgendaView({ ctx }) {
   const [events, setEvents] = useState([]);
   const [leads, setLeads] = useState([]);
   const [newEv, setNewEv] = useState(null);
+  const [g, setG] = useState({ configured: false, connected: false });
+  useEffect(() => { googleStatusApi().then(setG); }, []);
+  const connectGoogle = async () => {
+    try { window.location.href = await googleAuthUrlApi(); } catch (e) { alert(errText(e)); }
+  };
   const days = [...Array(7)].map((_, i) => new Date(weekStart.getTime() + i * 86400000));
   const load = () => crm.events({ from: weekStart.toISOString(), to: new Date(weekStart.getTime() + 7 * 86400000).toISOString() }).then(setEvents).catch(() => {});
   useEffect(() => { load(); }, [weekStart]);
@@ -546,9 +551,11 @@ function AgendaView({ ctx }) {
   const KIND = { reuniao: "Reunião", call: "Call", followup: "Follow-up" };
   const save = async () => {
     try {
-      await crm.createEvent({ ...newEv, startsAt: new Date(newEv.startsAt).toISOString(), leadId: newEv.leadId || null });
+      const ev = await crm.createEvent({ ...newEv, startsAt: new Date(newEv.startsAt).toISOString(), leadId: newEv.leadId || null });
       setNewEv(null);
       load();
+      if (ev.googleError) alert(ev.googleError);
+      else if (ev.meet_link) { navigator.clipboard?.writeText(ev.meet_link).catch(() => {}); alert(`Reunião criada no Google Agenda.\nLink do Meet (copiado): ${ev.meet_link}`); }
     } catch (e) { alert(errText(e)); }
   };
   const today = new Date().toDateString();
@@ -560,7 +567,10 @@ function AgendaView({ ctx }) {
         <Button variant="secondary" onClick={() => setWeekStart((d) => new Date(d.getTime() + 7 * 86400000))}><ChevronRight size={15} /></Button>
         <strong style={{ fontSize: 17 }}>{days[0].toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – {days[6].toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</strong>
         <div style={{ flex: 1 }} />
-        <Button onClick={() => setNewEv({ kind: "reuniao", title: "Reunião", startsAt: toLocalInput(new Date(Date.now() + 3600000)), leadId: "" })}><Plus size={15} /> Agendar</Button>
+        {g.configured && (g.connected
+          ? <Button variant="secondary" title={g.email || ""} onClick={async () => { if (confirm("Desconectar sua conta Google?")) { await googleDisconnectApi(); setG((x) => ({ ...x, connected: false })); } }}>🟢 Google Agenda</Button>
+          : <Button variant="secondary" onClick={connectGoogle}>Conectar Google Agenda</Button>)}
+        <Button onClick={() => setNewEv({ kind: "reuniao", title: "Reunião", startsAt: toLocalInput(new Date(Date.now() + 3600000)), leadId: "", google: g.connected, meet: true, inviteLead: true })}><Plus size={15} /> Agendar</Button>
       </div>
       <div className="crm-week">
         {days.map((d) => {
@@ -573,6 +583,7 @@ function AgendaView({ ctx }) {
                   <span className="crm-event-time">{new Date(e.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} · {KIND[e.kind] || e.kind}</span>
                   <strong>{e.title}</strong>
                   {e.leadName && <span>{e.leadName}</span>}
+                  {e.meetLink && <a href={e.meetLink} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()} className="crm-meet">🎥 Entrar no Meet</a>}
                   <button className="crm-event-del" onClick={async (ev) => { ev.stopPropagation(); if (confirm("Excluir este agendamento?")) { await crm.deleteEvent(e.id); load(); } }}><Trash2 size={11} /></button>
                 </div>
               ))}
@@ -598,6 +609,11 @@ function AgendaView({ ctx }) {
               </select>
             </Row>
             <Row label="Notas" stack><textarea rows={2} value={newEv.notes || ""} onChange={(e) => setNewEv((c) => ({ ...c, notes: e.target.value }))} /></Row>
+          </Group>
+          <Group title="Google Agenda" hint={g.connected ? `Conectado como ${g.email || "sua conta"}.` : g.configured ? "Conecte sua conta Google no topo da Agenda para usar." : "Integração ainda não ativada pela Helora."}>
+            <Row label="Salvar no Google Agenda"><Switch checked={!!newEv.google} disabled={!g.connected} onChange={(v) => setNewEv((c) => ({ ...c, google: v }))} /></Row>
+            <Row label="Criar link do Google Meet"><Switch checked={!!newEv.meet} disabled={!g.connected || !newEv.google} onChange={(v) => setNewEv((c) => ({ ...c, meet: v }))} /></Row>
+            <Row label="Enviar convite ao e-mail do lead"><Switch checked={!!newEv.inviteLead} disabled={!g.connected || !newEv.google || !newEv.leadId} onChange={(v) => setNewEv((c) => ({ ...c, inviteLead: v }))} /></Row>
           </Group>
         </Sheet>
       )}
