@@ -18,7 +18,8 @@ import {
   Layers,
   BarChart3,
   Wallet,
-  ListChecks
+  ListChecks,
+  Target
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -29,6 +30,7 @@ export const NAV_ITEMS = [
   { key: "agents", label: "Fluxos", icon: Workflow },
   { key: "contacts", label: "Contatos", icon: Contact },
   { key: "campaigns", label: "Campanhas", icon: Megaphone },
+  { key: "crm", label: "CRM", icon: Target },
   { key: "tasks", label: "Tarefas", icon: ListChecks },
   { key: "reports", label: "Relatórios", icon: BarChart3 },
   { key: "channels", label: "Canais", icon: Smartphone },
@@ -70,6 +72,7 @@ export const SECTION_TITLES = {
   g_plans: "Planos",
   reports: "Relatórios",
   tasks: "Tarefas",
+  crm: "CRM",
   finance: "Financeiro",
   g_support: "Suporte",
   g_announcements: "Comunicados",

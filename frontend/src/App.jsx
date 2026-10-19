@@ -26,6 +26,7 @@ import { NAV_ITEMS, ADMIN_NAV_ITEM, GESTAO_NAV_ITEMS, MOBILE_NAV_KEYS } from "./
 import ProfileModal from "./components/ProfileModal.jsx";
 import ReportsPage from "./components/ReportsPage.jsx";
 import TasksPage from "./components/TasksPage.jsx";
+import CrmPage from "./components/CrmPage.jsx";
 import FinancePage from "./components/FinancePage.jsx";
 import TermsGate from "./components/TermsGate.jsx";
 
@@ -361,6 +362,7 @@ export default function App() {
           {activeSection === "channels" && <ChannelsPage />}
           {activeSection === "reports" && <ReportsPage />}
           {activeSection === "tasks" && <TasksPage profile={profile} />}
+          {activeSection === "crm" && <CrmPage profile={profile} />}
           {activeSection === "finance" && (isManager ? <FinancePage /> : (
             <div className="page"><div className="admin-feedback error">O acesso da empresa está pausado por pendência financeira. Fale com o responsável pela conta.</div></div>
           ))}

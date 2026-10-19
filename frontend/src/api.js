@@ -329,3 +329,29 @@ export const setAccountPlanAdmin = (accountId, planId) => api.post(`/admin/accou
 // ---- V6: abas liberadas ----
 export const getAccountTabsApi = () => api.get("/account/tabs").then((r) => r.data);
 export const setAgentTabsApi = (tabs) => api.put("/account/agent-tabs", { tabs }).then((r) => r.data);
+
+// ---- V6: CRM ----
+export const crm = {
+  pipelines: () => api.get("/crm/pipelines").then((r) => r.data),
+  createPipeline: (d) => api.post("/crm/pipelines", d).then((r) => r.data),
+  updatePipeline: (id, d) => api.patch(`/crm/pipelines/${id}`, d).then((r) => r.data),
+  deletePipeline: (id) => api.delete(`/crm/pipelines/${id}`),
+  leads: (params) => api.get("/crm/leads", { params }).then((r) => r.data),
+  createLead: (d) => api.post("/crm/leads", d).then((r) => r.data),
+  updateLead: (id, d) => api.patch(`/crm/leads/${id}`, d).then((r) => r.data),
+  deleteLead: (id) => api.delete(`/crm/leads/${id}`),
+  importLeads: (d) => api.post("/crm/leads/import", d).then((r) => r.data),
+  setLeadProducts: (id, items) => api.put(`/crm/leads/${id}/products`, { items }).then((r) => r.data),
+  tags: () => api.get("/crm/tags").then((r) => r.data),
+  createTag: (d) => api.post("/crm/tags", d).then((r) => r.data),
+  updateTag: (id, d) => api.patch(`/crm/tags/${id}`, d).then((r) => r.data),
+  deleteTag: (id) => api.delete(`/crm/tags/${id}`),
+  products: () => api.get("/crm/products").then((r) => r.data),
+  createProduct: (d) => api.post("/crm/products", d).then((r) => r.data),
+  updateProduct: (id, d) => api.patch(`/crm/products/${id}`, d).then((r) => r.data),
+  deleteProduct: (id) => api.delete(`/crm/products/${id}`),
+  events: (params) => api.get("/crm/events", { params }).then((r) => r.data),
+  createEvent: (d) => api.post("/crm/events", d).then((r) => r.data),
+  updateEvent: (id, d) => api.patch(`/crm/events/${id}`, d).then((r) => r.data),
+  deleteEvent: (id) => api.delete(`/crm/events/${id}`)
+};
