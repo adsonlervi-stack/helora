@@ -21,6 +21,7 @@ import SupportChat from "./components/SupportChat.jsx";
 import { notifyEvent } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
+import { getAccountTabsApi } from "./api.js";
 import { NAV_ITEMS, ADMIN_NAV_ITEM, GESTAO_NAV_ITEMS, MOBILE_NAV_KEYS } from "./navConfig.js";
 import ProfileModal from "./components/ProfileModal.jsx";
 import ReportsPage from "./components/ReportsPage.jsx";
@@ -35,6 +36,22 @@ export default function App() {
     new URLSearchParams(window.location.search).get("secao") === "financeiro" ? "finance" : "home"
   );
   const [billingBlocked, setBillingBlocked] = useState(false);
+  const [tabs, setTabs] = useState({ enabledTabs: null, agentTabs: null });
+  useEffect(() => {
+    if (!profile || (profile.isSuperAdmin && !profile.acting)) return;
+    getAccountTabsApi().then(setTabs).catch(() => {});
+  }, [profile?.accountId, profile?.acting?.id, profile?.role]);
+  // Clicar de novo na aba em que já está → volta para o topo
+  const navTo = (key) => {
+    if (key === section) {
+      document.querySelectorAll(".shell-content, .shell-content *").forEach((el) => {
+        if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight) el.scrollTo({ top: 0, behavior: "smooth" });
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setSection(key);
+  };
   useEffect(() => {
     const on = () => { setBillingBlocked(true); setSection("finance"); };
     window.addEventListener("helora:billing-blocked", on);
@@ -269,13 +286,21 @@ export default function App() {
   // Super admin fora de uma empresa = Painel Helora (só gestão).
   const isHeloraPanel = profile.isSuperAdmin && !profile.acting;
   const isManager = profile.role === "owner" || profile.isSuperAdmin;
-  const navItems = isHeloraPanel ? GESTAO_NAV_ITEMS : NAV_ITEMS.filter((i) => !i.ownerOnly || isManager);
+  // Abas: a Gestora define as da empresa; o Gestor define as dos atendentes
+  const tabAllowed = (key) => {
+    if (profile.isSuperAdmin) return true;
+    if (tabs.enabledTabs && !["home", "conversations", "settings", "finance"].includes(key) && !tabs.enabledTabs.includes(key)) return false;
+    if (!isManager) return key === "conversations" || (tabs.agentTabs || []).includes(key);
+    return true;
+  };
+  const navItems = isHeloraPanel ? GESTAO_NAV_ITEMS : NAV_ITEMS.filter((i) => (!i.ownerOnly || isManager) && tabAllowed(i.key));
   const mobileApp = isMobile && !isHeloraPanel;
-  const mobileItems = mobileApp ? NAV_ITEMS.filter((i) => MOBILE_NAV_KEYS.includes(i.key)) : navItems;
+  const mobileItems = mobileApp ? NAV_ITEMS.filter((i) => MOBILE_NAV_KEYS.includes(i.key) && tabAllowed(i.key)) : navItems;
   let activeSection = isHeloraPanel
     ? (section.startsWith("g_") ? section : "g_dashboard")
     : section.startsWith("g_") || section === "admin" ? "home" : section;
   if (mobileApp && !MOBILE_NAV_KEYS.includes(activeSection)) activeSection = "conversations";
+  if (!isHeloraPanel && !tabAllowed(activeSection)) activeSection = "conversations";
   if (billingBlocked && !isHeloraPanel) activeSection = "finance";
   const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
   const canEditFooter = profile.role === "owner" || profile.isSuperAdmin;
@@ -286,7 +311,7 @@ export default function App() {
       <IconRail
         items={navItems}
         section={activeSection}
-        onChange={setSection}
+        onChange={navTo}
         unreadTotal={unreadTotal}
         profile={profile}
         onAvatarUpdated={handleAvatarUpdated}
@@ -355,7 +380,7 @@ export default function App() {
         onOpenProfile={() => setShowProfile(true)}
         onHelp={isHeloraPanel ? undefined : () => setShowSupport(true)}
         section={activeSection}
-        onChange={setSection}
+        onChange={navTo}
         unreadTotal={unreadTotal}
         profile={profile}
         onAvatarUpdated={handleAvatarUpdated}

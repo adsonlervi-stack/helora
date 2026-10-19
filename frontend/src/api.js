@@ -95,8 +95,10 @@ export const reactToMessage = (messageId, emoji) =>
   api.post(`/messages/${messageId}/react`, { emoji }).then((r) => r.data);
 
 // ---- Setores (departamentos) ----
-export const getDepartments = () => api.get("/departments").then((r) => r.data);
+export const getAllDepartments = () => api.get("/departments").then((r) => r.data);
+export const getDepartments = () => getAllDepartments().then((l) => l.filter((d) => d.active !== false));
 export const createDepartmentApi = (name) => api.post("/departments", { name }).then((r) => r.data);
+export const updateDepartmentApi = (id, data) => api.patch(`/departments/${id}`, data).then((r) => r.data);
 export const removeDepartment = (id) => api.delete(`/departments/${id}`);
 
 // ---- Equipe ----
@@ -134,6 +136,9 @@ export const createNote = (conversationId, content) =>
 export const getLabels = () => api.get("/labels").then((r) => r.data);
 export const createLabelApi = (title, color) =>
   api.post("/labels", { title, color }).then((r) => r.data);
+export const updateLabelApi = (id, data) => api.patch(`/labels/${id}`, data).then((r) => r.data);
+export const getPipelineStagesApi = () => api.get("/pipeline/stages").then((r) => r.data.stages);
+export const savePipelineStagesApi = (stages) => api.put("/pipeline/stages", { stages }).then((r) => r.data.stages);
 export const removeLabel = (id) => api.delete(`/labels/${id}`);
 
 // ---- Respostas prontas do atendente ----
@@ -305,3 +310,7 @@ export const getPlansAdmin = () => api.get("/admin/plans").then((r) => r.data);
 export const savePlanAdmin = (id, data) => (id ? api.patch(`/admin/plans/${id}`, data) : api.post("/admin/plans", data)).then((r) => r.data);
 export const deletePlanAdmin = (id) => api.delete(`/admin/plans/${id}`);
 export const setAccountPlanAdmin = (accountId, planId) => api.post(`/admin/accounts/${accountId}/plan`, { planId });
+
+// ---- V6: abas liberadas ----
+export const getAccountTabsApi = () => api.get("/account/tabs").then((r) => r.data);
+export const setAgentTabsApi = (tabs) => api.put("/account/agent-tabs", { tabs }).then((r) => r.data);

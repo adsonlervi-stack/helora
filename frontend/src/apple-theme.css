@@ -965,3 +965,37 @@ input, select, textarea { font-family: var(--font-body); }
 .composer .rec-cancel { all: unset; margin-left: auto; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: #6e6e73; font-size: 13px; }
 .composer .rec-cancel:hover { color: #d70015; }
 .composer-icon-btn.recording { background: #34c759 !important; color: #fff !important; }
+
+/* Preview de mídia antes de enviar */
+.media-preview { max-width: 560px; }
+.media-preview-body { display: flex; justify-content: center; align-items: center; background: rgba(118,118,128,.08); border-radius: 14px; padding: 10px; margin-bottom: 10px; max-height: 60vh; overflow: hidden; }
+.media-preview-body img, .media-preview-body video { max-width: 100%; max-height: 56vh; border-radius: 10px; object-fit: contain; }
+.media-preview-doc { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 24px; color: #0071e3; }
+.media-preview-doc strong { color: #1d1d1f; word-break: break-all; text-align: center; }
+
+/* iPhone: campos com 16px não dão zoom automático no Safari */
+@media (max-width: 1024px) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* Pipeline: ferramentas da coluna */
+.kanban-col-head .col-tools { margin-left: auto; display: inline-flex; gap: 2px; opacity: 0; transition: opacity .15s; }
+.kanban-col:hover .col-tools { opacity: 1; }
+.kanban-col-head .col-tools button { border: 0; background: transparent; color: #6e6e73; cursor: pointer; padding: 3px; border-radius: 6px; display: inline-flex; }
+.kanban-col-head .col-tools button:hover { background: rgba(0,0,0,.06); color: #1d1d1f; }
+@media (hover: none) { .kanban-col-head .col-tools { opacity: 1; } }
+
+/* Cadastro de empresa (Gestão) */
+.company-create-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 14px; margin-top: 12px; align-items: end; }
+.company-create-form .cc-wide { grid-column: 1 / -1; }
+.cc-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #6e6e73; min-width: 0; }
+.cc-field input { height: 40px; width: 100%; box-sizing: border-box; border-radius: 10px; border: 1px solid rgba(0,0,0,.12); padding: 0 12px; font-size: 14px; background: #fff; color: #1d1d1f; }
+.cc-check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #1d1d1f; cursor: pointer; }
+.cc-check input { width: 18px; height: 18px; accent-color: #0071e3; }
+.cc-actions { display: flex; justify-content: flex-end; }
+.cc-actions .connect-btn { width: auto; padding: 0 26px; }
+@media (max-width: 760px) { .company-create-form { grid-template-columns: 1fr; } }
+/* campos de data/mês alinhados */
+.admin-create-grid input[type="date"], .admin-create-grid input[type="month"], .admin-create-grid select { height: 40px; box-sizing: border-box; width: 100%; min-width: 0; }
+.admin-create-grid input[type="date"]::-webkit-date-and-time-value, .admin-create-grid input[type="month"]::-webkit-date-and-time-value { text-align: left; }
+.gestao-form-grid input[type="date"] { height: 40px; box-sizing: border-box; width: 100%; }
