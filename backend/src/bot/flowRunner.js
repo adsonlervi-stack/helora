@@ -26,7 +26,10 @@ const MAX_STEPS = 40;
 const MAX_WAIT_SECONDS = 600; // esperas maiores que 10 min são encurtadas
 
 export function normalize(text = "") {
-  return String(text)
+  return String(text || "")
+    // ignora a assinatura do atendente ("*Nome:*" na 1ª linha) e a formatação do WhatsApp
+    .replace(/^\s*\*[^*\n]{1,60}:\*\s*\n+/, "")
+    .replace(/[*_~`]/g, "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

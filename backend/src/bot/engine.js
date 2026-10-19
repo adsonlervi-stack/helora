@@ -17,7 +17,10 @@ export const CSAT_PROMPT_TEXT =
   "Antes de encerrar: de 1 a 5, como você avalia esse atendimento? (responda só com o número)";
 
 function normalize(text = "") {
-  return text
+  return String(text || "")
+    // ignora a assinatura do atendente ("*Nome:*" na 1ª linha) e a formatação do WhatsApp
+    .replace(/^\s*\*[^*\n]{1,60}:\*\s*\n+/, "")
+    .replace(/[*_~`]/g, "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
