@@ -118,6 +118,8 @@ function FunnelView({ ctx }) {
   const all = !!ctx.allMode;
   const pipeById = useMemo(() => new Map(pipelines.map((p) => [p.id, p])), [pipelines]);
   const normName = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  // "Perdido" e "Perdidos", "Lead novo" e "Leads novos" viram a mesma coluna
+  const colKey = (x) => normName(x).split(/\s+/).map((w) => (w.length > 3 ? w.replace(/s$/, "") : w)).join(" ");
   const load = () => (all ? crm.leads() : pipelineId ? crm.leads({ pipelineId }) : Promise.resolve([])).then(setLeads).catch(() => setLeads([]));
   const deletePipeline = async () => {
     const n = (leads || []).length;
@@ -135,14 +137,17 @@ function FunnelView({ ctx }) {
   // Em "todos os funis" as colunas com o mesmo nome viram uma só
   const stages = useMemo(() => {
     if (!all) return pipeline?.stages || [];
+    // ordena pela posição da coluna em cada funil: as primeiras colunas de todos os funis ficam lado a lado
     const out = [];
-    for (const p of pipelines) for (const st of p.stages || []) {
-      const key = normName(st.name);
-      if (!out.some((x) => x.id === key)) out.push({ id: key, name: st.name, color: st.color });
-    }
-    return out;
+    for (const p of pipelines) (p.stages || []).forEach((st, i) => {
+      const key = colKey(st.name);
+      const ex = out.find((x) => x.id === key);
+      if (ex) ex.pos = Math.min(ex.pos, i);
+      else out.push({ id: key, name: st.name, color: st.color, pos: i, seq: out.length });
+    });
+    return out.sort((a, b) => a.pos - b.pos || a.seq - b.seq);
   }, [all, pipeline, pipelines]);
-  const colOf = (l) => (all ? normName(pipeById.get(l.pipelineId)?.stages?.find((st) => st.id === l.stage)?.name || l.stage) : l.stage);
+  const colOf = (l) => (all ? colKey(pipeById.get(l.pipelineId)?.stages?.find((st) => st.id === l.stage)?.name || l.stage) : l.stage);
   const fieldsOf = (l) => (all ? pipeById.get(l.pipelineId)?.fields || [] : modelFields);
   const filtered = (leads || []).filter((l) => {
     const t = `${l.name} ${l.company || ""} ${l.phone || ""} ${l.email || ""}`.toLowerCase();
@@ -154,7 +159,7 @@ function FunnelView({ ctx }) {
     const lead = leads.find((l) => l.id === id);
     let stage = col;
     if (all && lead) {
-      const target = pipeById.get(lead.pipelineId)?.stages?.find((st) => normName(st.name) === col);
+      const target = pipeById.get(lead.pipelineId)?.stages?.find((st) => colKey(st.name) === col);
       if (!target) return notify(`O funil "${pipeById.get(lead.pipelineId)?.name}" não tem a coluna "${stages.find((x) => x.id === col)?.name}".`, "error");
       stage = target.id;
     }
