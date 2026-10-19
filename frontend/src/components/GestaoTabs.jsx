@@ -92,6 +92,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
     maxUsers: account.max_users ?? 3,
     allowCloudApi: !!account.allow_cloud_api,
     billingMethod: account.billing_method || "manual",
+    serverId: account.server_id || "main",
     enabledTabs: Array.isArray(account.enabled_tabs) ? account.enabled_tabs : COMPANY_TABS.map(([k]) => k).filter((k) => k !== "api"),
     status: account.status,
     document: account.document || "",
@@ -155,6 +156,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
             <option value="manual">Manual (você anexa o boleto)</option>
           </select>
         </Row>
+        <Row label="Servidor"><input value={f.serverId} onChange={(e) => setF((c) => ({ ...c, serverId: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "") || "main" }))} placeholder="main" /></Row>
         <Row label="Situação">
           <select value={f.status} onChange={set("status")}>
             <option value="active">Ativa</option>
