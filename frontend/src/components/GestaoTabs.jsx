@@ -75,6 +75,11 @@ export function DashboardTab() {
   );
 }
 
+const COMPANY_TABS = [
+  ["overview", "Painel"], ["deals", "Pipeline"], ["crm", "CRM"], ["tasks", "Tarefas"], ["agents", "Fluxos/Robô"],
+  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"], ["channels", "Canais"]
+];
+
 // ------------------------------------------------- Dados comerciais da empresa
 export function CommercialEditor({ account, onClose, onSaved }) {
   const [f, setF] = useState({
@@ -82,6 +87,9 @@ export function CommercialEditor({ account, onClose, onSaved }) {
     monthlyPrice: account.monthly_price ?? 0,
     dueDay: account.due_day ?? 10,
     maxWhatsappChannels: account.max_whatsapp_channels ?? 1,
+    maxUsers: account.max_users ?? 3,
+    allowCloudApi: !!account.allow_cloud_api,
+    enabledTabs: Array.isArray(account.enabled_tabs) ? account.enabled_tabs : COMPANY_TABS.map(([k]) => k),
     status: account.status,
     document: account.document || "",
     contactName: account.contact_name || "",
@@ -100,7 +108,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
   const pickPlan = (id) => {
     setPlanId(id);
     const p = plans.find((x) => x.id === id);
-    if (p) setF((cur) => ({ ...cur, planName: p.name, monthlyPrice: p.price, maxWhatsappChannels: p.maxWhatsapp }));
+    if (p) setF((cur) => ({ ...cur, planName: p.name, monthlyPrice: p.price, maxWhatsappChannels: p.maxWhatsapp, maxUsers: p.maxUsers }));
   };
 
   const save = async () => {
@@ -133,6 +141,24 @@ export function CommercialEditor({ account, onClose, onSaved }) {
           <label className="login-field"><span>Mensalidade (R$)</span><input value={f.monthlyPrice} onChange={set("monthlyPrice")} inputMode="decimal" /></label>
           <label className="login-field"><span>Dia de vencimento</span><input type="number" min="1" max="28" value={f.dueDay} onChange={set("dueDay")} /></label>
           <label className="login-field"><span>Números de WhatsApp liberados</span><input type="number" min="0" max="50" value={f.maxWhatsappChannels} onChange={set("maxWhatsappChannels")} /><small className="cv-muted">Messenger e Instagram: 1 de cada.</small></label>
+          <label className="login-field"><span>Usuários liberados</span><input type="number" min="1" max="500" value={f.maxUsers} onChange={set("maxUsers")} /></label>
+          <label className="login-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" style={{ width: 18, height: 18 }} checked={f.allowCloudApi} onChange={(e) => setF((p) => ({ ...p, allowCloudApi: e.target.checked }))} />
+            <span>Acesso à API oficial do WhatsApp</span>
+          </label>
+          <div className="login-field" style={{ gridColumn: "1 / -1" }}>
+            <span>Abas liberadas para a empresa</span>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", marginTop: 4 }}>
+              {COMPANY_TABS.map(([k, label]) => (
+                <label key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}>
+                  <input type="checkbox" checked={f.enabledTabs.includes(k)}
+                    onChange={() => setF((p) => ({ ...p, enabledTabs: p.enabledTabs.includes(k) ? p.enabledTabs.filter((x) => x !== k) : [...p.enabledTabs, k] }))} />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <small className="cv-muted">Início, Conversas, Config. e Financeiro ficam sempre liberados.</small>
+          </div>
           <label className="login-field">
             <span>Situação</span>
             <select className="deal-stage-select" value={f.status} onChange={set("status")}>

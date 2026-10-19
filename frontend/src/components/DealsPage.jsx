@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, MessageCircle, Trophy, XCircle } from "lucide-react";
-import { getDeals, createDealApi, updateDealApi, removeDeal, getTeam } from "../api.js";
+import { Plus, Trash2, MessageCircle, Trophy, XCircle, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
+import { getDeals, createDealApi, updateDealApi, removeDeal, getTeam, getPipelineStagesApi, savePipelineStagesApi } from "../api.js";
 import DealDetailPanel from "./DealDetailPanel.jsx";
 
 export const STAGES = [
@@ -99,10 +99,50 @@ export default function DealsPage({ onOpenConversation }) {
 
   const load = () => getDeals().then(setDeals).catch(console.error);
 
+  const [stagesVer, setStagesVer] = useState(0);
+  const [editCol, setEditCol] = useState(null); // {id?, name, color}
   useEffect(() => {
     load();
     getTeam().then(setTeam).catch(console.error);
+    getPipelineStagesApi().then((st) => { if (st?.length) { STAGES.splice(0, STAGES.length, ...st); setStagesVer((v) => v + 1); } }).catch(() => {});
   }, []);
+  const persistStages = async (next) => {
+    STAGES.splice(0, STAGES.length, ...next);
+    setStagesVer((v) => v + 1);
+    try {
+      const saved = await savePipelineStagesApi(next);
+      STAGES.splice(0, STAGES.length, ...saved);
+      setStagesVer((v) => v + 1);
+    } catch (e) {
+      alert(e.response?.data?.error || "Não consegui salvar as colunas (só o gestor pode editar).");
+    }
+  };
+  const saveCol = () => {
+    const name = (editCol?.name || "").trim();
+    if (!name) return;
+    if (editCol.id) persistStages(STAGES.map((s) => (s.id === editCol.id ? { ...s, name, color: editCol.color } : s)));
+    else {
+      const id = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").slice(0, 30) + "_" + Date.now().toString(36).slice(-4);
+      const idx = STAGES.findIndex((s) => s.id === "fechado");
+      const next = [...STAGES];
+      next.splice(idx < 0 ? next.length : idx, 0, { id, name, color: editCol.color });
+      persistStages(next);
+    }
+    setEditCol(null);
+  };
+  const moveCol = (id, dir) => {
+    const i = STAGES.findIndex((s) => s.id === id);
+    const j = i + dir;
+    if (j < 0 || j >= STAGES.length) return;
+    const next = [...STAGES];
+    [next[i], next[j]] = [next[j], next[i]];
+    persistStages(next);
+  };
+  const deleteCol = (id) => {
+    if (deals.some((d) => d.stage === id)) return alert("Mova os negócios desta coluna antes de excluir.");
+    if (!confirm("Excluir esta coluna?")) return;
+    persistStages(STAGES.filter((s) => s.id !== id));
+  };
 
   const columns = useMemo(() => {
     const filtered = deals.filter((d) => {
@@ -117,7 +157,7 @@ export default function DealsPage({ onOpenConversation }) {
       const sum = items.reduce((acc, d) => acc + (Number(d.value) || 0), 0);
       return { ...stage, items, sum };
     });
-  }, [deals, search, ownerFilter]);
+  }, [deals, search, ownerFilter, stagesVer]);
 
   const openDeal = deals.find((d) => d.id === openDealId) || null;
 
@@ -175,6 +215,9 @@ export default function DealsPage({ onOpenConversation }) {
 
         <div style={{ flex: 1 }} />
 
+        <button className="pill-btn" onClick={() => setEditCol({ name: "", color: "#0a84ff" })}>
+          <Plus size={14} /> Coluna
+        </button>
         <button className="connect-btn deals-new-btn" onClick={() => setShowNew(true)}>
           <Plus size={15} style={{ marginRight: 6, verticalAlign: -3 }} />
           Novo negócio
@@ -200,6 +243,14 @@ export default function DealsPage({ onOpenConversation }) {
             <div className="kanban-col-head">
               <span className="col-title">{col.name}</span>
               <span className="col-count">{col.items.length}</span>
+              {!["fechado", "perdido"].includes(col.id) && (
+                <span className="col-tools">
+                  <button title="Mover para a esquerda" onClick={() => moveCol(col.id, -1)}><ChevronLeft size={13} /></button>
+                  <button title="Mover para a direita" onClick={() => moveCol(col.id, 1)}><ChevronRight size={13} /></button>
+                  <button title="Editar coluna" onClick={() => setEditCol({ id: col.id, name: col.name, color: col.color })}><Pencil size={12} /></button>
+                  <button title="Excluir coluna" onClick={() => deleteCol(col.id)}><Trash2 size={12} /></button>
+                </span>
+              )}
             </div>
             <div className="col-sum">{formatMoney(col.sum)}</div>
 
@@ -292,6 +343,23 @@ export default function DealsPage({ onOpenConversation }) {
         ))}
       </div>
 
+      {editCol && (
+        <div className="modal-backdrop" onClick={() => setEditCol(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 380 }}>
+            <div className="modal-header"><h3>{editCol.id ? "Editar coluna" : "Nova coluna"}</h3></div>
+            <label className="login-field"><span>Nome</span><input autoFocus value={editCol.name} onChange={(e) => setEditCol((c) => ({ ...c, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && saveCol()} /></label>
+            <div className="label-color-row" style={{ margin: "10px 0" }}>
+              {["#0a84ff", "#bf5af2", "#ff9f0a", "#ffcc00", "#30d158", "#ff453a", "#64d2ff", "#8e8e93"].map((c) => (
+                <button type="button" key={c} className={`label-color-dot ${editCol.color === c ? "selected" : ""}`} style={{ background: c }} onClick={() => setEditCol((x) => ({ ...x, color: c }))} />
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="pill-btn" onClick={() => setEditCol(null)}>Cancelar</button>
+              <button className="pill-btn primary" onClick={saveCol}>Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showNew && <NewDealModal team={team} onClose={() => setShowNew(false)} onCreate={handleCreate} />}
 
       {openDeal && (

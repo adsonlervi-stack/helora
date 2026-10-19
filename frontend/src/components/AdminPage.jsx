@@ -33,6 +33,9 @@ function AccountsTab() {
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
+  const [maxUsers, setMaxUsers] = useState("");
+  const [maxChannels, setMaxChannels] = useState("");
+  const [allowCloud, setAllowCloud] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -47,6 +50,10 @@ function AccountsTab() {
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
+    if (!(parseInt(maxUsers, 10) >= 1) || maxChannels === "") {
+      setFeedback({ type: "error", text: "Defina a quantidade de usuários e de canais de WhatsApp da empresa." });
+      return;
+    }
     setLoading(true);
     setFeedback(null);
     try {
@@ -54,7 +61,10 @@ function AccountsTab() {
         name: name.trim(),
         ownerName: ownerName.trim() || undefined,
         ownerEmail: ownerEmail.trim() || undefined,
-        ownerPassword: ownerPassword || undefined
+        ownerPassword: ownerPassword || undefined,
+        maxUsers: parseInt(maxUsers, 10),
+        maxWhatsappChannels: parseInt(maxChannels, 10),
+        allowCloudApi: allowCloud
       });
       setFeedback({
         type: "success",
@@ -68,6 +78,9 @@ function AccountsTab() {
       setOwnerName("");
       setOwnerEmail("");
       setOwnerPassword("");
+      setMaxUsers("");
+      setMaxChannels("");
+      setAllowCloud(false);
       load();
     } catch (err) {
       setFeedback({ type: "error", text: err.response?.data?.error || err.message });
@@ -96,14 +109,19 @@ function AccountsTab() {
           e-mail e senha; sem senha, ele recebe convite por e-mail.
         </div>
 
-        <form className="admin-create-grid" onSubmit={handleCreate}>
-          <input className="response" placeholder="Nome da empresa *" value={name} onChange={(e) => setName(e.target.value)} />
-          <input className="response" placeholder="Nome do gestor (opcional)" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} />
-          <input className="response" type="email" placeholder="E-mail do gestor (opcional)" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} />
-          <input className="response" type="password" placeholder="Senha do gestor (mín. 6)" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} autoComplete="new-password" />
-          <button type="submit" className="connect-btn" disabled={loading || !name.trim()}>
-            {loading ? "Criando..." : "Criar empresa"}
-          </button>
+        <form className="company-create-form" onSubmit={handleCreate}>
+          <label className="cc-field cc-wide"><span>Nome da empresa *</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
+          <label className="cc-field"><span>Usuários liberados *</span><input type="number" min="1" inputMode="numeric" value={maxUsers} onChange={(e) => setMaxUsers(e.target.value)} placeholder="Ex: 5" /></label>
+          <label className="cc-field"><span>Canais de WhatsApp *</span><input type="number" min="0" inputMode="numeric" value={maxChannels} onChange={(e) => setMaxChannels(e.target.value)} placeholder="Ex: 2" /></label>
+          <label className="cc-check cc-wide"><input type="checkbox" checked={allowCloud} onChange={(e) => setAllowCloud(e.target.checked)} /> Liberar integração com a API oficial do WhatsApp (Meta)</label>
+          <label className="cc-field"><span>Nome do gestor</span><input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} /></label>
+          <label className="cc-field"><span>E-mail do gestor</span><input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} /></label>
+          <label className="cc-field"><span>Senha do gestor (mín. 6)</span><input type="password" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} autoComplete="new-password" /></label>
+          <div className="cc-actions cc-wide">
+            <button type="submit" className="connect-btn" disabled={loading || !name.trim()}>
+              {loading ? "Criando..." : "Criar empresa"}
+            </button>
+          </div>
         </form>
 
         {feedback && <div className={`admin-feedback ${feedback.type}`}>{feedback.text}</div>}

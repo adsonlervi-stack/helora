@@ -488,6 +488,23 @@ export default function ChatWindow({
   const [recSecs, setRecSecs] = useState(0);
   const cancelRecRef = useRef(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  // Começou a digitar no teclado com a conversa aberta → o texto vai direto para o campo
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      if (document.querySelector(".modal-backdrop, .modal-overlay")) return;
+      const input = inputRef.current;
+      if (!input || input.disabled) return;
+      e.preventDefault();
+      input.focus();
+      handleTextChange((input.value || "") + e.key);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   useEffect(() => {
     if (!recording) return;
     const t = setInterval(() => setRecSecs((s) => s + 1), 1000);
@@ -671,9 +688,17 @@ export default function ChatWindow({
     e.target.value = "";
     if (!raw || offline) return;
     const file = await compressImage(raw);
+    // mostra o preview antes de enviar
+    setPendingFile({ file, url: URL.createObjectURL(file), caption: "" });
+  };
+  const confirmPendingFile = async () => {
+    const pf = pendingFile;
+    if (!pf) return;
+    setPendingFile(null);
     const q = replyTo ? quotedOf(replyTo) : null;
     setReplyTo(null);
-    await onSendMedia(file, undefined, q);
+    await onSendMedia(pf.file, pf.caption.trim() || undefined, q);
+    URL.revokeObjectURL(pf.url);
   };
 
   const startRecording = async () => {
@@ -856,6 +881,28 @@ export default function ChatWindow({
                 ))}
               </div>
             )}
+            {pendingFile && (
+              <div className="modal-backdrop" onClick={() => setPendingFile(null)}>
+                <div className="modal lg-modal media-preview" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-header"><h3>Enviar arquivo</h3><button type="button" className="icon-btn" onClick={() => setPendingFile(null)}><X size={16} /></button></div>
+                  <div className="media-preview-body">
+                    {pendingFile.file.type.startsWith("image/") ? <img src={pendingFile.url} alt="" />
+                      : pendingFile.file.type.startsWith("video/") ? <video src={pendingFile.url} controls />
+                      : pendingFile.file.type.startsWith("audio/") ? <audio src={pendingFile.url} controls />
+                      : <div className="media-preview-doc"><FileText size={40} /><strong>{pendingFile.file.name}</strong><span className="cv-muted">{(pendingFile.file.size / 1024 / 1024).toFixed(2)} MB</span></div>}
+                  </div>
+                  {!pendingFile.file.type.startsWith("audio/") && (
+                    <input className="response" autoFocus placeholder="Legenda (opcional)" value={pendingFile.caption}
+                      onChange={(e) => setPendingFile((p) => ({ ...p, caption: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), confirmPendingFile())} />
+                  )}
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
+                    <button type="button" className="pill-btn" onClick={() => setPendingFile(null)}>Cancelar</button>
+                    <button type="button" className="connect-btn" style={{ width: "auto", padding: "0 22px" }} onClick={confirmPendingFile}><Send size={15} /> Enviar</button>
+                  </div>
+                </div>
+              </div>
+            )}
             <form className={`composer ${offline ? "disabled" : ""}`} onSubmit={handleSubmit}>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: "none" }} />
               <div className="attach-wrap">
@@ -919,6 +966,11 @@ export default function ChatWindow({
                 placeholder={offline ? "WhatsApp desconectado" : "Mensagem  ·  / para respostas prontas"}
                 value={text}
                 disabled={offline}
+                spellCheck
+                lang="pt-BR"
+                autoCorrect="on"
+                autoCapitalize="sentences"
+                autoComplete="on"
                 onChange={(e) => handleTextChange(e.target.value)}
               />
               )}

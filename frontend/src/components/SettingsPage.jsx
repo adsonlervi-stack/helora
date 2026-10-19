@@ -24,7 +24,10 @@ import {
   getLabels,
   createLabelApi,
   removeLabel,
+  updateLabelApi,
+  updateDepartmentApi,
   getDepartments,
+  getAllDepartments,
   createDepartmentApi,
   removeDepartment,
   getTeam,
@@ -41,7 +44,9 @@ import {
   revokeApiKeyApi,
   API_BASE,
   getAccountSettingsApi,
-  updateAccountSettingsApi
+  updateAccountSettingsApi,
+  getAccountTabsApi,
+  setAgentTabsApi
 } from "../api.js";
 import BusinessHoursEditor from "./BusinessHoursEditor.jsx";
 import { SOUNDS, NOTIFY_EVENTS, getNotifyPrefs, setNotifyPrefs, playSound, enableNotify, notifyEnabled } from "../notifications.js";
@@ -72,6 +77,7 @@ const CARDS = [
     desc: "Atalhos de texto pro atendente usar no chat",
     icon: MessagesSquare
   },
+  { key: "perms", label: "Abas do atendente", desc: "O que o atendente pode ver no menu", icon: KeyRound },
   { key: "labels", label: "Etiquetas", desc: "Categorize as conversas por cor", icon: Tag },
   { key: "departments", label: "Setores", desc: "Times/filas de atendimento", icon: Building2 },
   {
@@ -138,6 +144,7 @@ export default function SettingsPage({ onGoToChannels, canManage = false }) {
       {tab === "attendance" && canManage && <AttendanceTab />}
       {tab === "notify" && <NotifyTab />}
       {tab === "labels" && <LabelsTab />}
+      {tab === "perms" && canManage && <AgentTabsTab />}
       {tab === "departments" && <DepartmentsTab />}
       {tab === "team" && <TeamTab canManage={canManage} />}
       {tab === "scheduled" && <ScheduledMessagesTab />}
@@ -441,6 +448,13 @@ function LabelsTab() {
               {l.title}
             </span>
             <span className="reply-response" />
+            <button className="reply-delete" title="Editar" onClick={async () => {
+              const t = prompt("Novo nome da etiqueta:", l.title);
+              if (t === null) return;
+              const c = prompt("Cor (opcional, ex: #2b82ea):", l.color) || l.color;
+              await updateLabelApi(l.id, { title: t.trim() || l.title, color: c });
+              load();
+            }}><Pencil size={15} /></button>
             <button className="reply-delete" onClick={() => handleDelete(l.id)}>
               <Trash2 size={16} />
             </button>
@@ -460,7 +474,7 @@ function DepartmentsTab() {
   const [departments, setDepartments] = useState([]);
   const [name, setName] = useState("");
 
-  const load = () => getDepartments().then(setDepartments).catch(console.error);
+  const load = () => getAllDepartments().then(setDepartments).catch(console.error);
   useEffect(() => {
     load();
   }, []);
@@ -499,8 +513,15 @@ function DepartmentsTab() {
       <div>
         {departments.map((d) => (
           <div className="reply-item" key={d.id}>
-            <span className="reply-response">{d.name}</span>
-            <button className="reply-delete" onClick={() => handleDelete(d.id)}>
+            <span className="reply-response" style={{ opacity: d.active === false ? 0.45 : 1 }}>{d.name}{d.active === false ? " (desativado)" : ""}</span>
+            <button className="reply-delete" title="Editar nome" onClick={async () => {
+              const n = prompt("Novo nome do setor:", d.name);
+              if (n && n.trim()) { await updateDepartmentApi(d.id, { name: n.trim() }); load(); }
+            }}><Pencil size={15} /></button>
+            <button className="reply-delete" title={d.active === false ? "Ativar" : "Desativar"} onClick={async () => { await updateDepartmentApi(d.id, { active: d.active === false }); load(); }}>
+              {d.active === false ? <Eye size={15} /> : <EyeOff size={15} />}
+            </button>
+            <button className="reply-delete" title="Excluir" onClick={() => confirm(`Excluir o setor "${d.name}"?`) && handleDelete(d.id)}>
               <Trash2 size={16} />
             </button>
           </div>
@@ -916,5 +937,46 @@ document.getElementById("lead").onsubmit = async (e) => {
         <p className="cv-muted">Etapas aceitas em "stage": novo_lead, contato, negociacao, proposta, fechado, perdido. Respostas de erro: 401 chave inválida, 402 sem créditos, 429 muitas chamadas.</p>
       </div>
     </>
+  );
+}
+
+
+const AGENT_TAB_OPTIONS = [
+  ["home", "Início"], ["overview", "Painel"], ["deals", "Pipeline"], ["crm", "CRM"], ["tasks", "Tarefas"],
+  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"]
+];
+
+/** Gestor escolhe quais abas o atendente vê. Config., Fluxos, Canais e Financeiro são só do gestor. */
+function AgentTabsTab() {
+  const [sel, setSel] = useState(null);
+  const [enabled, setEnabled] = useState(null);
+  const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    getAccountTabsApi().then((t) => { setSel(t.agentTabs || []); setEnabled(t.enabledTabs); }).catch(() => setSel([]));
+  }, []);
+  if (!sel) return <div className="cv-muted">Carregando…</div>;
+  const toggle = (k) => setSel((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]));
+  const save = async () => {
+    try {
+      await setAgentTabsApi(sel);
+      setMsg({ type: "success", text: "Salvo. Os atendentes veem as novas abas ao recarregar a página." });
+    } catch (e) {
+      setMsg({ type: "error", text: e.response?.data?.error || e.message });
+    }
+  };
+  return (
+    <div className="card">
+      <div className="card-subtitle">
+        <strong>Conversas</strong> está sempre liberada. <strong>Config., Fluxos, Canais e Financeiro</strong> são só do gestor.
+        Abas que a sua empresa não contratou não aparecem.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "12px 0" }}>
+        {AGENT_TAB_OPTIONS.filter(([k]) => !enabled || ["home"].includes(k) || enabled.includes(k)).map(([k, label]) => (
+          <label key={k} className="bh-switch"><input type="checkbox" checked={sel.includes(k)} onChange={() => toggle(k)} /> {label}</label>
+        ))}
+      </div>
+      <button className="pill-btn primary" onClick={save}>Salvar</button>
+      {msg && <div className={`admin-feedback ${msg.type}`} style={{ marginTop: 10 }}>{msg.text}</div>}
+    </div>
   );
 }
