@@ -355,3 +355,14 @@ export const crm = {
   updateEvent: (id, d) => api.patch(`/crm/events/${id}`, d).then((r) => r.data),
   deleteEvent: (id) => api.delete(`/crm/events/${id}`)
 };
+
+// ---- V6: governança ----
+export const logSessionApi = () => api.post("/session/login").catch(() => {});
+export const getAccessLogsApi = () => api.get("/access-logs").then((r) => r.data);
+export const getConversationAuditApi = (id) => api.get(`/conversations/${id}/audit`).then((r) => r.data);
+export const adminAccessLogs = (accountId) => api.get("/admin/logs/access", { params: accountId ? { accountId } : {} }).then((r) => r.data);
+export const adminMasters = () => api.get("/admin/masters").then((r) => r.data);
+export const adminCreateMaster = (d) => api.post("/admin/masters", d).then((r) => r.data);
+export const adminUpdateMaster = (id, d) => api.patch(`/admin/masters/${id}`, d);
+export const adminDeleteMaster = (id) => api.delete(`/admin/masters/${id}`);
+export const adminUploadBoleto = (id, file) => { const fd = new FormData(); fd.append("file", file); return api.post(`/admin/invoices/${id}/boleto`, fd).then((r) => r.data); };

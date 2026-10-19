@@ -21,7 +21,7 @@ import SupportChat from "./components/SupportChat.jsx";
 import { notifyEvent } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
-import { getAccountTabsApi } from "./api.js";
+import { getAccountTabsApi, logSessionApi } from "./api.js";
 import { NAV_ITEMS, ADMIN_NAV_ITEM, GESTAO_NAV_ITEMS, MOBILE_NAV_KEYS } from "./navConfig.js";
 import ProfileModal from "./components/ProfileModal.jsx";
 import ReportsPage from "./components/ReportsPage.jsx";
@@ -39,6 +39,13 @@ export default function App() {
   );
   const [billingBlocked, setBillingBlocked] = useState(false);
   const [tabs, setTabs] = useState({ enabledTabs: null, agentTabs: null });
+  useEffect(() => {
+    if (!profile?.id) return;
+    try {
+      const k = `helora_logged_${profile.id}`;
+      if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, "1"); logSessionApi(); }
+    } catch { logSessionApi(); }
+  }, [profile?.id]);
   useEffect(() => {
     if (!profile || (profile.isSuperAdmin && !profile.acting)) return;
     getAccountTabsApi().then(setTabs).catch(() => {});

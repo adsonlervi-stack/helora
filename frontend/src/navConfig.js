@@ -47,7 +47,8 @@ export const GESTAO_NAV_ITEMS = [
   { key: "g_credits", label: "Créditos", icon: Coins },
   { key: "g_support", label: "Suporte", icon: LifeBuoy },
   { key: "g_announcements", label: "Comunicados", icon: Megaphone },
-  { key: "g_users", label: "Usuários", icon: Users }
+  { key: "g_users", label: "Usuários", icon: Users },
+  { key: "g_logs", label: "Acessos", icon: ShieldCheck }
 ];
 
 // Só aparece pra quem é super admin (dono da Helora) — ver App.jsx
@@ -76,7 +77,8 @@ export const SECTION_TITLES = {
   finance: "Financeiro",
   g_support: "Suporte",
   g_announcements: "Comunicados",
-  g_users: "Usuários"
+  g_users: "Usuários",
+  g_logs: "Acessos"
 };
 
 // No celular o Helora funciona como app: só Conversas e Pipeline.
