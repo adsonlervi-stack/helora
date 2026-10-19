@@ -366,7 +366,7 @@ export default function App() {
           )}
           {activeSection === "deals" && <DealsPage onOpenConversation={openConversation} />}
           {activeSection === "settings" && (
-            <SettingsPage onGoToChannels={() => setSection("channels")} canManage={profile.role === "owner" || profile.isSuperAdmin} />
+            <SettingsPage onGoToChannels={() => setSection("channels")} canManage={profile.role === "owner" || profile.isSuperAdmin} apiEnabled={!!profile.isSuperAdmin || !!tabs.enabledTabs?.includes("api")} />
           )}
           {activeSection === "channels" && <ChannelsPage />}
           {activeSection === "reports" && <ReportsPage />}
