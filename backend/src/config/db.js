@@ -916,6 +916,9 @@ export async function addMessage({
     (extra?.type === "contact" ? "👤 Contato" : extra?.type === "location" ? "📍 Localização" : "") ||
     "";
   const patch = { last_message_at: msgRow.timestamp, last_message_preview: preview };
+  if (direction === "in" && author === "user") {
+    import("../push.js").then((m) => m.pushIncoming(accountId, conversationId, preview)).catch(() => {});
+  }
   if (direction === "in") {
     const { data: conv } = await supabase
       .from("conversations")
