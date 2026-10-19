@@ -117,8 +117,12 @@ export async function listActiveAccountIds() {
   return data.map((a) => a.id);
 }
 
-export async function createAccount({ name }) {
-  const { data, error } = await supabase.from("accounts").insert({ name }).select().single();
+export async function createAccount({ name, maxUsers, maxWhatsappChannels, allowCloudApi }) {
+  const row = { name };
+  if (maxUsers != null) row.max_users = Math.max(1, parseInt(maxUsers, 10) || 1);
+  if (maxWhatsappChannels != null) row.max_whatsapp_channels = Math.max(0, parseInt(maxWhatsappChannels, 10) || 0);
+  if (allowCloudApi != null) row.allow_cloud_api = !!allowCloudApi;
+  const { data, error } = await supabase.from("accounts").insert(row).select().single();
   if (error) throw error;
   return data;
 }
@@ -368,6 +372,15 @@ export async function createDepartment({ accountId, name }) {
     .insert({ account_id: accountId, name })
     .select()
     .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateDepartment(accountId, id, { name, active } = {}) {
+  const patch = {};
+  if (name !== undefined) patch.name = String(name).trim();
+  if (active !== undefined) patch.active = !!active;
+  const { data, error } = await supabase.from("departments").update(patch).eq("account_id", accountId).eq("id", id).select().single();
   if (error) throw error;
   return data;
 }
@@ -1011,6 +1024,15 @@ export async function createLabel({ accountId, title, color }) {
   return data;
 }
 
+export async function updateLabel(accountId, id, { title, color } = {}) {
+  const patch = {};
+  if (title !== undefined) patch.title = String(title).trim().toLowerCase();
+  if (color !== undefined) patch.color = color;
+  const { data, error } = await supabase.from("labels").update(patch).eq("account_id", accountId).eq("id", id).select().single();
+  if (error) throw error;
+  return data;
+}
+
 export async function deleteLabel(accountId, id) {
   const { error } = await supabase.from("labels").delete().eq("account_id", accountId).eq("id", id);
   if (error) throw error;
@@ -1444,7 +1466,10 @@ const ACCOUNT_COMMERCIAL_FIELDS = {
   contactEmail: "contact_email",
   notes: "notes",
   soldAt: "sold_at",
-  maxWhatsappChannels: "max_whatsapp_channels"
+  maxWhatsappChannels: "max_whatsapp_channels",
+  maxUsers: "max_users",
+  allowCloudApi: "allow_cloud_api",
+  enabledTabs: "enabled_tabs"
 };
 
 export async function updateAccountCommercial(accountId, body) {
@@ -1455,6 +1480,9 @@ export async function updateAccountCommercial(accountId, body) {
     if (key === "monthlyPrice") v = Number(String(v).replace(",", ".")) || 0;
     if (key === "dueDay") v = Math.min(28, Math.max(1, parseInt(v, 10) || 10));
     if (key === "maxWhatsappChannels") v = Math.min(50, Math.max(0, parseInt(v, 10) || 0));
+    if (key === "maxUsers") v = Math.min(500, Math.max(1, parseInt(v, 10) || 1));
+    if (key === "allowCloudApi") v = v === true || v === "true" || v === 1;
+    if (key === "enabledTabs") v = Array.isArray(v) ? v.map(String) : null;
     if (typeof v === "string") v = v.trim() || null;
     patch[col] = v;
   }
@@ -2722,4 +2750,40 @@ export async function listAttendances(accountId, f = {}) {
     channel: c.channelName || c.platform, agent: c.assignedAgentName || null, department: c.departmentName || null,
     labels: (c.labels || []).map((l) => l.name), mode: c.mode, createdAt: c.createdAt, resolvedAt: c.resolvedAt
   }));
+}
+
+
+// ---------- Pipeline: colunas personalizadas ----------
+export async function getPipelineStages(accountId) {
+  const { data } = await supabase.from("accounts").select("pipeline_stages").eq("id", accountId).maybeSingle();
+  return Array.isArray(data?.pipeline_stages) && data.pipeline_stages.length ? data.pipeline_stages : null;
+}
+
+export async function savePipelineStages(accountId, stages) {
+  const clean = (stages || [])
+    .filter((s) => s && s.id && s.name)
+    .map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff" }));
+  for (const fixed of [{ id: "fechado", name: "Fechado", color: "#30d158" }, { id: "perdido", name: "Perdido", color: "#ff453a" }]) {
+    if (!clean.some((s) => s.id === fixed.id)) clean.push(fixed);
+  }
+  const { error } = await supabase.from("accounts").update({ pipeline_stages: clean }).eq("id", accountId);
+  if (error) throw error;
+  return clean;
+}
+
+
+// ---------- Abas liberadas (Gestora → empresa; Gestor → atendentes) ----------
+export const DEFAULT_AGENT_TABS = ["home", "conversations", "deals", "contacts", "reports", "tasks"];
+export async function getAccountTabs(accountId) {
+  const { data } = await supabase.from("accounts").select("enabled_tabs, agent_tabs").eq("id", accountId).maybeSingle();
+  return {
+    enabledTabs: Array.isArray(data?.enabled_tabs) ? data.enabled_tabs : null,
+    agentTabs: Array.isArray(data?.agent_tabs) ? data.agent_tabs : DEFAULT_AGENT_TABS
+  };
+}
+export async function setAgentTabs(accountId, tabs) {
+  const clean = (Array.isArray(tabs) ? tabs : []).map(String).filter((t) => !["settings", "agents", "channels", "finance"].includes(t));
+  const { error } = await supabase.from("accounts").update({ agent_tabs: clean }).eq("id", accountId);
+  if (error) throw error;
+  return clean;
 }
