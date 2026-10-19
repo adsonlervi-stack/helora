@@ -25,7 +25,7 @@ function ago(iso) {
   if (s < 86400 * 365) return `${Math.round(s / 86400 / 30)} mês(es)`;
   return `${Math.round(s / 86400 / 365)} ano(s)`;
 }
-const KIND_BY_TEMPLATE = { seguros_renovacao: "Renovação", seguros_vendas: "Venda nova", seguros_sinistros: "Sinistro" };
+const KIND_BY_TEMPLATE = { seguros_renovacao: "Renovação", seguros_vendas: "Venda nova", seguros_sinistros: "Sinistro", seguros_saude: "Saúde", consorcio: "Consórcio", imobiliaria: "Imóvel", clinica: "Paciente" };
 const fmtField = (f, v) => {
   if (v == null || v === "") return "—";
   if (f.type === "date") return String(v).split("-").reverse().join("/");
