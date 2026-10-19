@@ -127,7 +127,8 @@ import {
   createTask,
   updateTask,
   deleteTask,
-  closeTasksForScheduled
+  closeTasksForScheduled,
+  logConversationEvent
 } from "../config/db.js";
 import { runGraph } from "../bot/flowRunner.js";
 import {
@@ -800,6 +801,7 @@ router.post("/conversations/:id/transfer", async (req, res) => {
     conversationId: req.params.id,
     content: `🔁 Transferido por ${req.userName || "atendente"} para ${to || "a fila"}${note ? `\nObservação: ${note}` : ""}`
   });
+  await logConversationEvent(req.accountId, req.params.id, "transferred", `Conversa transferida para ${to || "a fila"} por ${req.userName || "atendente"}${note ? ` · "${note}"` : ""}`, req.userName);
   res.json(updated);
 });
 
@@ -996,6 +998,10 @@ router.post("/conversations/:id/status", async (req, res) => {
   if (!(await assertConversationAccess(req, res, before))) return;
 
   const conversation = await updateConversation(req.accountId, req.params.id, { status });
+  if (before.status !== status) {
+    await logConversationEvent(req.accountId, req.params.id, status === "resolved" ? "closed" : "reopened",
+      status === "resolved" ? `Conversa encerrada por ${req.userName || "atendente"}` : `Conversa reaberta por ${req.userName || "atendente"}`, req.userName);
+  }
 
   // Dispara a pesquisa de satisfação só quando a conversa vira "resolvida"
   // agora (evita reenviar toda vez que reabre/resolve de novo).
@@ -1056,6 +1062,11 @@ router.post("/conversations/:id/assign", async (req, res) => {
   const existing = await getConversation(req.accountId, req.params.id);
   if (!(await assertConversationAccess(req, res, existing))) return;
   const conversation = await updateConversation(req.accountId, req.params.id, { assignedAgentId: agentId || null });
+  if ((existing.assignedAgentId || null) !== (agentId || null)) {
+    const who = agentId ? (await listTeam(req.accountId)).find((t) => t.id === agentId)?.name : null;
+    await logConversationEvent(req.accountId, req.params.id, "assigned",
+      agentId === req.userId ? `${req.userName || "Atendente"} assumiu a conversa` : agentId ? `Conversa atribuída a ${who || "atendente"} por ${req.userName || "atendente"}` : `Conversa devolvida para a fila por ${req.userName || "atendente"}`, req.userName);
+  }
   res.json(conversation);
 });
 
