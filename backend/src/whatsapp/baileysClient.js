@@ -667,7 +667,23 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 // Chamado uma vez, no boot do servidor: liga cada dispositivo de WhatsApp
 // de cada conta ativa.
 export async function startAllChannels() {
-  const channels = await listWhatsAppChannels();
+  let channels = await listWhatsAppChannels();
+  // Vários servidores: cada um só conecta os WhatsApps das empresas dele (SERVER_ID; padrão "main").
+  const serverId = process.env.SERVER_ID || "main";
+  try {
+    const ids = [...new Set(channels.map((c) => c.accountId))];
+    if (ids.length) {
+      const { supabase } = await import("../config/db.js");
+      const { data, error } = await supabase.from("accounts").select("id, server_id").in("id", ids);
+      if (!error && data) {
+        const mine = new Set(data.filter((a) => (a.server_id || "main") === serverId).map((a) => a.id));
+        channels = channels.filter((c) => mine.has(c.accountId));
+      }
+    }
+  } catch (err) {
+    console.warn("[WhatsApp] filtro de servidor ignorado:", err.message);
+  }
+  console.log(`[Servidor] ${serverId}`);
   console.log(`[WhatsApp] Iniciando ${channels.length} dispositivo(s)...`);
   for (const { channelId, accountId } of channels) {
     // Só religa quem já tinha sessão salva. Os demais esperam o "Conectar"
