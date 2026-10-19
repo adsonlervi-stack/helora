@@ -71,15 +71,22 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
   };
 
   // ---------- coordenadas ----------
+  // Zoom da interface (o sistema reduz para 90% em telas de computador): converte pixels da tela em pixels do canvas
+  const uiZ = () => {
+    const el = wrapRef.current;
+    if (!el || !el.offsetWidth) return 1;
+    return el.getBoundingClientRect().width / el.offsetWidth || 1;
+  };
   const toCanvas = (clientX, clientY) => {
     const r = wrapRef.current.getBoundingClientRect();
-    return { x: (clientX - r.left - view.x) / view.zoom, y: (clientY - r.top - view.y) / view.zoom };
+    const z = uiZ();
+    return { x: ((clientX - r.left) / z - view.x) / view.zoom, y: ((clientY - r.top) / z - view.y) / view.zoom };
   };
 
   const fit = useCallback(() => {
     const nodes = graph.nodes;
     if (!nodes.length || !wrapRef.current) return;
-    const r = wrapRef.current.getBoundingClientRect();
+    const r = { width: wrapRef.current.offsetWidth, height: wrapRef.current.offsetHeight };
     const minX = Math.min(...nodes.map((n) => n.x)) - 40;
     const minY = Math.min(...nodes.map((n) => n.y)) - 40;
     const maxX = Math.max(...nodes.map((n) => n.x + NODE_W)) + 40;
@@ -127,10 +134,12 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
     }
     if (!d) return;
     if (d.kind === "pan") {
-      setView((v) => ({ ...v, x: d.vx + (e.clientX - d.sx), y: d.vy + (e.clientY - d.sy) }));
+      const z = uiZ();
+      setView((v) => ({ ...v, x: d.vx + (e.clientX - d.sx) / z, y: d.vy + (e.clientY - d.sy) / z }));
     } else if (d.kind === "node") {
-      const dx = (e.clientX - d.sx) / view.zoom;
-      const dy = (e.clientY - d.sy) / view.zoom;
+      const z = uiZ();
+      const dx = (e.clientX - d.sx) / z / view.zoom;
+      const dy = (e.clientY - d.sy) / z / view.zoom;
       if (Math.abs(dx) + Math.abs(dy) > 2) d.moved = true;
       setGraph((g) => ({
         ...g,
@@ -162,8 +171,9 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
   const onWheel = (e) => {
     e.preventDefault();
     const r = wrapRef.current.getBoundingClientRect();
-    const mx = e.clientX - r.left;
-    const my = e.clientY - r.top;
+    const z = uiZ();
+    const mx = (e.clientX - r.left) / z;
+    const my = (e.clientY - r.top) / z;
     setView((v) => {
       const zoom = clamp(v.zoom * (e.deltaY > 0 ? 0.9 : 1.1), 0.25, 2);
       return { zoom, x: mx - ((mx - v.x) / v.zoom) * zoom, y: my - ((my - v.y) / v.zoom) * zoom };
@@ -179,8 +189,7 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
 
   const zoomBy = (f) =>
     setView((v) => {
-      const r = wrapRef.current.getBoundingClientRect();
-      const mx = r.width / 2, my = r.height / 2;
+      const mx = wrapRef.current.offsetWidth / 2, my = wrapRef.current.offsetHeight / 2;
       const zoom = clamp(v.zoom * f, 0.25, 2);
       return { zoom, x: mx - ((mx - v.x) / v.zoom) * zoom, y: my - ((my - v.y) / v.zoom) * zoom };
     });
@@ -188,7 +197,8 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
   // ---------- ações ----------
   const addNode = (type) => {
     const r = wrapRef.current.getBoundingClientRect();
-    const c = toCanvas(r.left + r.width / 2 - 120, r.top + r.height / 2 - 60);
+    const z = uiZ();
+    const c = toCanvas(r.left + r.width / 2 - 120 * z, r.top + r.height / 2 - 60 * z);
     const n = newNode(type, c.x + (Math.random() * 40 - 20), c.y + (Math.random() * 40 - 20));
     mutate((g) => {
       // não nasce em cima de outro bloco: anda para a direita/baixo até achar espaço livre
