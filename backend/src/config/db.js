@@ -1512,7 +1512,7 @@ export async function updateAccountCommercial(accountId, body) {
     if (key === "allowCloudApi") v = v === true || v === "true" || v === 1;
     if (key === "enabledTabs") v = Array.isArray(v) ? v.map(String) : null;
     if (key === "billingMethod") v = v === "asaas" ? "asaas" : "manual";
-    if (key === "serverId") v = String(v || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30) || "main";
+    if (key === "serverId") v = String(parseInt(String(v).replace(/\D/g, ""), 10) || 1);
     if (typeof v === "string") v = v.trim() || null;
     patch[col] = v;
   }
