@@ -94,6 +94,92 @@ export const TEMPLATES = [
       { id: "valor_indenizado", label: "Valor indenizado", type: "currency" }
     ]
   }
+  ,{
+    key: "seguros_saude",
+    name: "Corretora · Planos de saúde",
+    group: "Corretora de seguros",
+    description: "Cotação de planos de saúde e odonto: vidas, faixas etárias, operadora e reajuste de aniversário.",
+    stages: [
+      { id: "novo", name: "Novo lead", color: "#0a84ff" },
+      { id: "cotacao", name: "Em cotação", color: "#bf5af2" },
+      { id: "proposta", name: "Proposta enviada", color: "#ff9f0a" },
+      { id: "documentos", name: "Documentação", color: "#5ac8fa" },
+      { id: "implantado", name: "Implantado", color: "#30d158" },
+      { id: "perdido", name: "Perdido", color: "#ff453a" }
+    ],
+    fields: [
+      { id: "operadora", label: "Operadora", type: "select", options: ["Amil", "Bradesco Saúde", "Hapvida NotreDame", "Porto Saúde", "SulAmérica", "Unimed", "Outra"], card: true },
+      { id: "vidas", label: "Nº de vidas", type: "number", card: true },
+      { id: "modalidade", label: "Modalidade", type: "select", options: ["PF", "PME", "Adesão", "Empresarial"], card: true },
+      { id: "idades", label: "Idades dos beneficiários", type: "text" },
+      { id: "aniversario", label: "Aniversário do contrato (reajuste)", type: "date", alert: true },
+      { id: "mensalidade", label: "Mensalidade", type: "currency" }
+    ]
+  },
+  {
+    key: "consorcio",
+    name: "Consórcio",
+    group: "Corretora de seguros",
+    description: "Venda de cotas de consórcio: bem, crédito, prazo, administradora e acompanhamento de contemplação.",
+    stages: [
+      { id: "novo", name: "Novo lead", color: "#0a84ff" },
+      { id: "simulacao", name: "Simulação enviada", color: "#bf5af2" },
+      { id: "negociacao", name: "Negociação", color: "#ff9f0a" },
+      { id: "vendido", name: "Cota vendida", color: "#30d158" },
+      { id: "contemplado", name: "Contemplado", color: "#ffcc00" },
+      { id: "perdido", name: "Perdido", color: "#ff453a" }
+    ],
+    fields: [
+      { id: "bem", label: "Bem", type: "select", options: ["Imóvel", "Automóvel", "Moto", "Pesados", "Serviços"], card: true },
+      { id: "credito", label: "Crédito", type: "currency", card: true },
+      { id: "prazo", label: "Prazo (meses)", type: "number", card: true },
+      { id: "administradora", label: "Administradora", type: "text" },
+      { id: "grupo_cota", label: "Grupo / cota", type: "text" }
+    ]
+  },
+  {
+    key: "imobiliaria",
+    name: "Imobiliária",
+    group: "Outros segmentos",
+    description: "Atendimento de compra e locação: interesse, bairro, faixa de valor e visita marcada.",
+    stages: [
+      { id: "novo", name: "Novo contato", color: "#0a84ff" },
+      { id: "atendimento", name: "Em atendimento", color: "#5ac8fa" },
+      { id: "visita", name: "Visita agendada", color: "#bf5af2" },
+      { id: "proposta", name: "Proposta", color: "#ff9f0a" },
+      { id: "fechado", name: "Fechado", color: "#30d158" },
+      { id: "perdido", name: "Perdido", color: "#ff453a" }
+    ],
+    fields: [
+      { id: "interesse", label: "Interesse", type: "select", options: ["Compra", "Locação", "Venda do imóvel", "Avaliação"], card: true },
+      { id: "tipo_imovel", label: "Tipo de imóvel", type: "select", options: ["Apartamento", "Casa", "Terreno", "Sala comercial", "Galpão", "Outro"], card: true },
+      { id: "bairro", label: "Bairro / região", type: "text", card: true },
+      { id: "faixa_valor", label: "Faixa de valor", type: "currency" },
+      { id: "codigo_imovel", label: "Código do imóvel", type: "text" },
+      { id: "data_visita", label: "Data da visita", type: "date" }
+    ]
+  },
+  {
+    key: "clinica",
+    name: "Clínica / consultório",
+    group: "Outros segmentos",
+    description: "Do primeiro contato à consulta: procedimento de interesse, convênio e data agendada.",
+    stages: [
+      { id: "novo", name: "Novo contato", color: "#0a84ff" },
+      { id: "avaliacao", name: "Avaliação agendada", color: "#bf5af2" },
+      { id: "orcamento", name: "Orçamento enviado", color: "#ff9f0a" },
+      { id: "tratamento", name: "Em tratamento", color: "#30d158" },
+      { id: "retorno", name: "Retorno", color: "#5ac8fa" },
+      { id: "perdido", name: "Não fechou", color: "#ff453a" }
+    ],
+    fields: [
+      { id: "procedimento", label: "Procedimento de interesse", type: "text", card: true },
+      { id: "convenio", label: "Convênio", type: "text", card: true },
+      { id: "data_consulta", label: "Data da consulta", type: "date", card: true },
+      { id: "profissional", label: "Profissional", type: "text" },
+      { id: "orcamento", label: "Orçamento", type: "currency" }
+    ]
+  }
 ];
 
 const slug = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30);
