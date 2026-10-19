@@ -378,3 +378,8 @@ export const aiPrompts = {
   update: (id, d) => api.patch(`/ai/prompts/${id}`, d).then((r) => r.data),
   remove: (id) => api.delete(`/ai/prompts/${id}`)
 };
+export const getWebhooks = () => api.get("/webhooks").then((r) => r.data);
+export const createWebhook = (b) => api.post("/webhooks", b).then((r) => r.data);
+export const updateWebhook = (id, b) => api.patch(`/webhooks/${id}`, b).then((r) => r.data);
+export const deleteWebhook = (id) => api.delete(`/webhooks/${id}`);
+export const testWebhook = (id) => api.post(`/webhooks/${id}/test`).then((r) => r.data);
