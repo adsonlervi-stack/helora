@@ -746,7 +746,8 @@ router.post("/conversations/start", async (req, res) => {
       status: "open",
       mode: "human",
       assignedAgentId: req.userId,
-      isNew: false
+      isNew: false,
+      ...(req.body?.departmentId ? { departmentId: req.body.departmentId } : {})
     });
     // Grava com o número oficial do WhatsApp (no Brasil às vezes sem o 9 extra).
     await upsertContacts(req.accountId, channelId, [{ phone: jid.split("@")[0], name: req.body?.name?.trim() || null }], "manual");
