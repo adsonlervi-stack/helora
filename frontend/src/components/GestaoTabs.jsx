@@ -79,7 +79,7 @@ export function DashboardTab() {
 
 const COMPANY_TABS = [
   ["overview", "Painel"], ["deals", "Pipeline"], ["crm", "CRM"], ["tasks", "Tarefas"], ["agents", "Fluxos/Robô"],
-  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"], ["channels", "Canais"], ["ai", "IA"]
+  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"], ["channels", "Canais"], ["ai", "IA"], ["api", "API e integrações"]
 ];
 
 // ------------------------------------------------- Dados comerciais da empresa
@@ -92,7 +92,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
     maxUsers: account.max_users ?? 3,
     allowCloudApi: !!account.allow_cloud_api,
     billingMethod: account.billing_method || "manual",
-    enabledTabs: Array.isArray(account.enabled_tabs) ? account.enabled_tabs : COMPANY_TABS.map(([k]) => k),
+    enabledTabs: Array.isArray(account.enabled_tabs) ? account.enabled_tabs : COMPANY_TABS.map(([k]) => k).filter((k) => k !== "api"),
     status: account.status,
     document: account.document || "",
     contactName: account.contact_name || "",

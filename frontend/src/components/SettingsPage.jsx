@@ -106,14 +106,14 @@ const CARDS = [
   { key: "api", label: "API e integrações", desc: "Chave para site, landing page e sistemas", icon: KeyRound, ownerOnly: true }
 ];
 
-export default function SettingsPage({ onGoToChannels, canManage = false }) {
+export default function SettingsPage({ onGoToChannels, canManage = false, apiEnabled = false }) {
   const [tab, setTab] = useState(null);
 
   if (tab === null) {
     return (
       <div className="page">
         <div className="settings-grid">
-          {CARDS.filter((c) => !c.ownerOnly || canManage).map(({ key, label, desc, icon: Icon, external }) => (
+          {CARDS.filter((c) => (!c.ownerOnly || canManage) && (c.key !== "api" || apiEnabled)).map(({ key, label, desc, icon: Icon, external }) => (
             <button
               key={key}
               className="settings-card"
@@ -153,7 +153,7 @@ export default function SettingsPage({ onGoToChannels, canManage = false }) {
       {tab === "departments" && <DepartmentsTab />}
       {tab === "team" && <TeamTab canManage={canManage} />}
       {tab === "scheduled" && <ScheduledMessagesTab />}
-      {tab === "api" && canManage && <ApiTab />}
+      {tab === "api" && canManage && apiEnabled && <ApiTab />}
     </div>
   );
 }
