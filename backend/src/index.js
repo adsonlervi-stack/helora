@@ -4,6 +4,8 @@ import cors from "cors";
 
 import apiRoutes from "./routes/api.js";
 import adminRoutes from "./routes/admin.js";
+import crmRoutes from "./routes/crm.js";
+import { startRetentionJob } from "./retention.js";
 import metaWebhookRoutes from "./meta/webhookRoutes.js";
 import { startAllChannels } from "./whatsapp/baileysClient.js";
 import { startScheduledMessagesDispatcher } from "./scheduler.js";
@@ -61,6 +63,7 @@ app.use(express.json());
 
 // Rotas
 app.use("/api/admin", adminRoutes);
+app.use("/api/crm", crmRoutes);
 app.use("/api", apiRoutes);
 app.use("/", metaWebhookRoutes); // expõe GET/POST /webhook/meta
 
@@ -115,6 +118,7 @@ startAllChannels().catch((err) => {
 
 // Cobrança automática das mensalidades (PIX/Asaas + e-mails + bloqueio)
 startBillingScheduler();
+startRetentionJob();
 
 // Migração de banco (só roda se OLD_SUPABASE_* estiver configurado e o banco atual vazio)
 autoMigrateIfNeeded().catch((err) => console.error("[Migração]", err.message));
