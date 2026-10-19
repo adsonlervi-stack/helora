@@ -120,7 +120,14 @@ import {
   getPipelineStages,
   savePipelineStages,
   getAccountTabs,
-  setAgentTabs
+  setAgentTabs,
+  getScheduledMessage,
+  updateScheduledRaw,
+  listTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  closeTasksForScheduled
 } from "../config/db.js";
 import { runGraph } from "../bot/flowRunner.js";
 import {
@@ -1430,25 +1437,101 @@ router.get("/scheduled-messages", async (req, res) => {
   res.json(await listScheduledMessages(req.accountId));
 });
 
-router.post("/scheduled-messages", async (req, res) => {
-  const { conversationId, text, sendAt } = req.body;
-  if (!conversationId || !text || !sendAt) {
-    return res.status(400).json({ error: "conversationId, text e sendAt são obrigatórios" });
-  }
-  if (new Date(sendAt).getTime() <= Date.now()) {
-    return res.status(400).json({ error: "A data/hora precisa ser no futuro." });
-  }
-  const conversation = await getConversation(req.accountId, conversationId);
-  if (!(await assertConversationAccess(req, res, conversation))) return;
+async function saveUpload(req) {
+  if (!req.file) return null;
+  const name = req.file.originalname || "arquivo";
+  const ext = (name.split(".").pop() || "bin").toLowerCase().slice(0, 8);
+  const contentType = req.file.mimetype || "application/octet-stream";
+  const url = await uploadMedia({ accountId: req.accountId, buffer: req.file.buffer, extension: ext, contentType });
+  const mediaType = contentType.startsWith("image/") ? "image" : contentType.startsWith("video/") ? "video" : "document";
+  return { url, mediaType, fileName: name };
+}
 
-  const scheduled = await createScheduledMessage({
-    accountId: req.accountId,
-    conversationId,
-    text,
-    sendAt,
-    createdBy: req.userName
-  });
-  res.status(201).json(scheduled);
+router.post("/scheduled-messages", upload.single("file"), async (req, res) => {
+  try {
+    const b = req.body || {};
+    const { conversationId, text, sendAt } = b;
+    const recurrence = ["monthly", "interval"].includes(b.recurrence) ? b.recurrence : "none";
+    const needsAttachment = b.needsAttachment === true || b.needsAttachment === "true";
+    if (!conversationId || !sendAt || (!String(text || "").trim() && !req.file && !needsAttachment)) {
+      return res.status(400).json({ error: "Escolha a conversa, a data/hora e escreva a mensagem (ou anexe um arquivo)." });
+    }
+    if (new Date(sendAt).getTime() <= Date.now()) {
+      return res.status(400).json({ error: "A data/hora precisa ser no futuro." });
+    }
+    const conversation = await getConversation(req.accountId, conversationId);
+    if (!(await assertConversationAccess(req, res, conversation))) return;
+    const media = await saveUpload(req);
+    const scheduled = await createScheduledMessage({
+      accountId: req.accountId,
+      conversationId,
+      text: String(text || "").trim(),
+      sendAt,
+      createdBy: req.userName,
+      createdById: req.userId,
+      sign: b.sign === true || b.sign === "true",
+      recurrence,
+      recurDay: b.recurDay,
+      recurEveryDays: b.recurEveryDays,
+      needsAttachment: recurrence !== "none" && needsAttachment,
+      mediaUrl: media?.url,
+      mediaType: media?.mediaType,
+      fileName: media?.fileName
+    });
+    res.status(201).json(scheduled);
+  } catch (err) {
+    res.status(500).json({ error: /column|recurrence|sign|needs_attachment/.test(err.message) ? "Rode a migration 021 no Supabase." : err.message });
+  }
+});
+
+// Anexa o arquivo do ciclo numa recorrente que estava esperando (ex.: boleto do mês) → libera o envio
+router.post("/scheduled-messages/:id/attachment", upload.single("file"), async (req, res) => {
+  try {
+    const row = await getScheduledMessage(req.accountId, req.params.id);
+    if (!row) return res.status(404).json({ error: "Agendamento não encontrado." });
+    if (!req.file) return res.status(400).json({ error: "Envie o arquivo." });
+    const media = await saveUpload(req);
+    const sendAt = new Date(Math.max(Date.now(), new Date(row.send_at).getTime())).toISOString();
+    await updateScheduledRaw(row.id, { media_url: media.url, media_type: media.mediaType, file_name: media.fileName, status: "pending", send_at: sendAt });
+    await closeTasksForScheduled(row.id);
+    res.json({ ok: true, sendAt });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- Tarefas ----------
+router.get("/tasks", async (req, res) => {
+  try {
+    const all = (req.role === "owner" || req.isSuperAdmin) && req.query.scope !== "mine";
+    res.json(await listTasks(req.accountId, { userId: req.userId, all }));
+  } catch (err) {
+    res.status(500).json({ error: /tasks/.test(err.message) ? "Rode a migration 021 no Supabase." : err.message });
+  }
+});
+router.post("/tasks", async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!String(b.title || "").trim()) return res.status(400).json({ error: "Dê um título para a tarefa." });
+    res.status(201).json(await createTask(req.accountId, { ...b, assigneeId: b.assigneeId || req.userId, createdById: req.userId, kind: "manual" }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router.patch("/tasks/:id", async (req, res) => {
+  try {
+    res.json(await updateTask(req.accountId, req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router.delete("/tasks/:id", async (req, res) => {
+  try {
+    await deleteTask(req.accountId, req.params.id);
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.delete("/scheduled-messages/:id", async (req, res) => {
