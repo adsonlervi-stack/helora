@@ -22,7 +22,7 @@
  * (question/options); conversation.flowVars = respostas salvas ({nome}, {email}...).
  */
 import { updateConversation, recordFlowEvent, addLabelToConversation, listMessages, supabase } from "../config/db.js";
-import { aiChat, aiConfigured } from "../aiClient.js";
+import { aiChat, aiConfigured, transcribeAudio } from "../aiClient.js";
 
 const HUMAN_TAG = "[[HUMANO]]";
 const DONE_TAG = "[[FIM]]";
@@ -47,24 +47,23 @@ async function aiTurn({ accountId, conversation, node, vars, dryRun, text }) {
     const msgs = await listMessages(accountId, conversation.id).catch(() => []);
     const recent = msgs.filter((m) => m.author !== "system" && (m.text || m.mediaType)).slice(-historySize);
     lastIn = [...recent].reverse().find((m) => m.direction === "in") || null;
-    // Mídia que a IA não processa → mensagem padrão, sem gastar IA
-    if (lastIn && !String(lastIn.text || "").trim() && lastIn.mediaType) {
-      const canImage = lastIn.mediaType === "image" && prompt?.process_images && lastIn.mediaUrl;
-      if (!canImage) {
-        return { text: prompt?.unsupported_media_message || "No momento eu só consigo entender mensagens de texto. Pode me escrever por aqui? 😊", port: null, prompt };
+    // Áudio do cliente → transcreve e a IA responde em texto. Outras mídias → mensagem padrão.
+    const transcripts = new Map();
+    for (const m of recent) {
+      if (m.direction === "in" && m.mediaType === "audio" && !String(m.text || "").trim() && m.mediaUrl && m === lastIn) {
+        const t = await transcribeAudio(m.mediaUrl).catch((err) => { console.warn("[IA] transcrição:", err.message); return null; });
+        if (t) transcripts.set(m.id, t);
       }
+    }
+    if (lastIn && !String(lastIn.text || "").trim() && lastIn.mediaType && !transcripts.has(lastIn.id)) {
+      return { text: prompt?.unsupported_media_message || "Ah, que pena! 😅 No momento eu só consigo entender mensagens de texto e áudios. Pode me escrever por aqui?", port: null, prompt };
     }
     for (const m of recent) {
       const role = m.direction === "in" ? "user" : "assistant";
-      let content;
-      if (role === "user" && m.mediaType === "image" && prompt?.process_images && m.mediaUrl && m === lastIn) {
-        content = [{ type: "image", source: { type: "url", url: m.mediaUrl } }, { type: "text", text: m.text || "(o cliente enviou esta imagem)" }];
-      } else {
-        content = m.text || (m.mediaType ? `[${m.mediaType}]` : "");
-      }
+      const content = transcripts.get(m.id) ? `(áudio transcrito) ${transcripts.get(m.id)}` : m.text || (m.mediaType ? `[${m.mediaType === "audio" ? "áudio" : m.mediaType}]` : "");
       if (!content) continue;
       const last = history[history.length - 1];
-      if (last && last.role === role && typeof last.content === "string" && typeof content === "string") last.content += `\n${content}`;
+      if (last && last.role === role) last.content += `\n${content}`;
       else history.push({ role, content });
     }
     while (history.length && history[0].role !== "user") history.shift();
