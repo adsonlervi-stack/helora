@@ -568,7 +568,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
                 {fd.type === "select" ? (
                   <select value={v} onChange={(e) => setV(e.target.value)}>
                     <option value="">—</option>
-                    {(fd.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+                    {[...(fd.options || []), ...(v && !(fd.options || []).includes(v) ? [v] : [])].map((o) => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : fd.type === "textarea" ? (
                   <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
