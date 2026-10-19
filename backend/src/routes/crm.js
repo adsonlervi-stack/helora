@@ -146,11 +146,21 @@ router.delete("/leads/:id", async (req, res) => {
 // Importação em massa (planilha Excel já convertida em linhas no navegador)
 router.post("/leads/import", async (req, res) => {
   try {
-    const { pipelineId, stage, rows } = req.body || {};
+    const { pipelineId, stage, rows, ownerId, kind } = req.body || {};
     if (!pipelineId || !Array.isArray(rows) || !rows.length) return res.status(400).json({ error: "Nada para importar." });
     if (rows.length > 5000) return res.status(400).json({ error: "Máximo de 5.000 linhas por importação." });
     const { data: tags } = await supabase.from("crm_tags").select("id, name").eq("account_id", req.accountId);
     const tagMap = new Map((tags || []).map((t) => [t.name.toLowerCase(), t.id]));
+    const { data: team } = await supabase.from("profiles").select("id, name").eq("account_id", req.accountId);
+    const norm = (v) => String(v || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const findOwner = (v) => {
+      const n = norm(v);
+      if (!n) return null;
+      const t = (team || []).find((u) => norm(u.email) === n || norm(u.name) === n) || (team || []).find((u) => norm(u.name).startsWith(n) || n.startsWith(norm(u.name).split(" ")[0] + " "));
+      return t?.id || null;
+    };
+    const defaultOwner = ownerId && (team || []).some((u) => u.id === ownerId) ? ownerId : req.userId;
+    if (kind) rows.forEach((r) => { r.tags = [r.tags, kind].filter(Boolean).join(","); });
     const newTags = new Set();
     for (const r of rows) String(r.tags || "").split(/[,;|]/).map((t) => t.trim()).filter(Boolean).forEach((t) => !tagMap.has(t.toLowerCase()) && newTags.add(t));
     if (newTags.size) {
@@ -161,9 +171,10 @@ router.post("/leads/import", async (req, res) => {
     const inserts = rows
       .filter((r) => String(r.name || r.phone || "").trim())
       .map((r) => ({
-        account_id: req.accountId, pipeline_id: pipelineId, stage: stage || "novos", owner_id: req.userId,
+        account_id: req.accountId, pipeline_id: pipelineId, stage: stage || "novos", owner_id: findOwner(r.owner) || defaultOwner,
         name: String(r.name || r.phone).trim().slice(0, 120), phone: onlyDigits(r.phone) || null, email: r.email || null,
-        company: r.company || null, source: r.source || "Importação", notes: r.notes || null,
+        company: r.company || null, source: r.source || kind || "Importação",
+        notes: [r.due ? `Vencimento: ${r.due}` : null, r.notes || null].filter(Boolean).join("\n") || null,
         value: r.value ? Number(String(r.value).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", ".")) || null : null,
         tag_ids: String(r.tags || "").split(/[,;|]/).map((t) => tagMap.get(t.trim().toLowerCase())).filter(Boolean),
         stage_changed_at: now
