@@ -728,8 +728,6 @@ router.post("/conversations/start", async (req, res) => {
   const phone = onlyDigits(req.body?.phone);
   const text = String(req.body?.text || "").trim();
   if (phone.length < 10) return res.status(400).json({ error: "Telefone inválido. Use DDI + DDD + número." });
-  if (!text) return res.status(400).json({ error: "Escreva a primeira mensagem." });
-
   const channelId = await getPrimaryWhatsAppChannel(req.accountId);
   if (!channelId) return res.status(400).json({ error: "Nenhum WhatsApp cadastrado nesta empresa." });
 
@@ -753,7 +751,7 @@ router.post("/conversations/start", async (req, res) => {
     // Grava com o número oficial do WhatsApp (no Brasil às vezes sem o 9 extra).
     await upsertContacts(req.accountId, channelId, [{ phone: jid.split("@")[0], name: req.body?.name?.trim() || null }], "manual");
     fetchWhatsAppAvatar(channelId, jid).then((url) => url && setConversationAvatar(conversation.id, url));
-    await sendTextToConversation(req.accountId, conversation, text, { senderName: req.userName, sign: req.body?.sign !== false });
+    if (text) await sendTextToConversation(req.accountId, conversation, text, { senderName: req.userName, sign: req.body?.sign !== false });
     res.status(201).json(conversation);
   } catch (err) {
     res.status(400).json({ error: err.message });

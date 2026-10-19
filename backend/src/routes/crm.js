@@ -2,6 +2,7 @@ import { Router } from "express";
 import { supabase } from "../config/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { enforceTabs } from "../governance.js";
+import { createGoogleEvent, deleteGoogleEvent } from "../google.js";
 
 /**
  * CRM (prospecção e qualificação), separado do Pipeline de atendimento.
@@ -281,7 +282,8 @@ router.get("/events", async (req, res) => {
     if (error) throw error;
     res.json(data.map((e) => ({
       id: e.id, title: e.title, kind: e.kind, startsAt: e.starts_at, endsAt: e.ends_at, done: e.done, notes: e.notes,
-      leadId: e.lead_id, leadName: e.crm_leads?.name || null, leadPhone: e.crm_leads?.phone || null, ownerId: e.owner_id, ownerName: e.owner?.name || null
+      leadId: e.lead_id, leadName: e.crm_leads?.name || null, leadPhone: e.crm_leads?.phone || null, ownerId: e.owner_id, ownerName: e.owner?.name || null,
+      meetLink: e.meet_link || null, googleEventId: e.google_event_id || null
     })));
   } catch (err) { fail(res, err); }
 });
@@ -295,7 +297,25 @@ router.post("/events", async (req, res) => {
     }).select().single();
     if (error) throw error;
     if (b.leadId) await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", b.leadId);
-    res.status(201).json(data);
+    // Google Agenda + Meet (se o usuário conectou a conta Google)
+    let google = null, googleError = null;
+    if (b.google) {
+      try {
+        let attendee = null, leadName = "";
+        if (b.leadId) {
+          const { data: lead } = await supabase.from("crm_leads").select("name, email").eq("id", b.leadId).maybeSingle();
+          attendee = b.inviteLead ? lead?.email || null : null;
+          leadName = lead?.name || "";
+        }
+        google = await createGoogleEvent(req.userId, {
+          title: leadName ? `${data.title} · ${leadName}` : data.title, startsAt: data.starts_at, endsAt: data.ends_at,
+          description: data.notes || "", attendeeEmail: attendee, meet: b.meet !== false
+        });
+        if (google) await supabase.from("crm_events").update({ google_event_id: google.eventId, meet_link: google.meetLink }).eq("id", data.id);
+        else googleError = "Conecte sua conta Google (CRM → Agenda) para criar o evento com Meet.";
+      } catch (err) { googleError = err.message; }
+    }
+    res.status(201).json({ ...data, meet_link: google?.meetLink || null, googleError });
   } catch (err) { fail(res, err); }
 });
 router.patch("/events/:id", async (req, res) => {
@@ -310,6 +330,8 @@ router.patch("/events/:id", async (req, res) => {
 });
 router.delete("/events/:id", async (req, res) => {
   try {
+    const { data: ev } = await supabase.from("crm_events").select("google_event_id, owner_id").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (ev?.google_event_id) deleteGoogleEvent(ev.owner_id || req.userId, ev.google_event_id);
     const { error } = await supabase.from("crm_events").delete().eq("account_id", req.accountId).eq("id", req.params.id);
     if (error) throw error;
     res.sendStatus(204);
