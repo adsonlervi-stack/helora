@@ -1265,3 +1265,9 @@ img, video { max-width: 100%; }
 .audit-meta strong { font-size: 13px; }
 .audit-meta span { font-size: 12px; color: #86868b; }
 .audit-text { font-size: 14px; color: #1d1d1f; margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+
+/* IA */
+.composer-icon-btn.ai-btn { color: #af52de; }
+.composer-icon-btn.ai-btn.busy { animation: aiPulse 1s ease-in-out infinite; }
+@keyframes aiPulse { 50% { opacity: .35; } }
+.ai-menu { min-width: 250px; }
