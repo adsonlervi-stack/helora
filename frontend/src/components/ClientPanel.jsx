@@ -1,3 +1,4 @@
+import { Group, Row } from "./ui.jsx";
 import React, { useEffect, useState } from "react";
 import { X, User, Briefcase, StickyNote, Plus } from "lucide-react";
 import Avatar from "./Avatar.jsx";
@@ -88,70 +89,60 @@ export default function ClientPanel({ conversation, departments = [], team = [],
           <>
             {contact && (
               <>
-                <label className="login-field"><span>Nome</span>
-                  <input defaultValue={contact.name || contact.pushName || ""} onBlur={(e) => e.target.value !== (contact.name || "") && saveField({ name: e.target.value })} />
-                </label>
-                <label className="login-field"><span>Telefone (WhatsApp)</span>
-                  <input defaultValue={contact.phone || ""} inputMode="tel" placeholder="5584999998888" onBlur={(e) => { const v = e.target.value.replace(/\D/g, ""); if (v && v !== contact.phone) saveField({ phone: v }); }} />
-                </label>
-                <label className="login-field"><span>E-mail</span>
-                  <input defaultValue={contact.email || ""} onBlur={(e) => e.target.value !== (contact.email || "") && saveField({ email: e.target.value })} />
-                </label>
-                <div className="client-two">
-                  <label className="login-field"><span>Origem do lead</span>
-                    <select className="deal-stage-select" value={contact.leadOrigin || ""} onChange={(e) => saveField({ leadOrigin: e.target.value })}>
-                      <option value="">—</option>
+                <Group title="Contato">
+                  <Row label="Nome"><input defaultValue={contact.name || contact.pushName || ""} placeholder="Nome" onBlur={(e) => e.target.value !== (contact.name || "") && saveField({ name: e.target.value })} /></Row>
+                  <Row label="WhatsApp"><input defaultValue={contact.phone || ""} inputMode="tel" placeholder="5584999998888" onBlur={(e) => { const v = e.target.value.replace(/\D/g, ""); if (v && v !== contact.phone) saveField({ phone: v }); }} /></Row>
+                  <Row label="E-mail"><input defaultValue={contact.email || ""} inputMode="email" placeholder="Adicionar" onBlur={(e) => e.target.value !== (contact.email || "") && saveField({ email: e.target.value })} /></Row>
+                </Group>
+                <Group title="Lead" hint="Mudar o status coloca ou move o contato no Pipeline.">
+                  <Row label="Origem">
+                    <select value={contact.leadOrigin || ""} onChange={(e) => saveField({ leadOrigin: e.target.value })}>
+                      <option value="">Escolher</option>
                       {ORIGINS.map((o) => <option key={o}>{o}</option>)}
                     </select>
-                  </label>
-                  <label className="login-field" title="Ao escolher, o contato entra/move no Pipeline"><span>Status do lead (Pipeline)</span>
-                    <select className="deal-stage-select" value={contact.leadStatus || ""} onChange={(e) => saveField({ leadStatus: e.target.value })}>
-                      <option value="">—</option>
+                  </Row>
+                  <Row label="Status">
+                    <select value={contact.leadStatus || ""} onChange={(e) => saveField({ leadStatus: e.target.value })}>
+                      <option value="">Escolher</option>
                       {STATUSES.map((o) => <option key={o}>{o}</option>)}
                     </select>
-                  </label>
-                </div>
-                <div className="client-two">
-                  <label className="login-field"><span>Atendente padrão</span>
-                    <select className="deal-stage-select" value={contact.defaultAgentId || ""} onChange={(e) => saveField({ defaultAgentId: e.target.value })}>
-                      <option value="">—</option>
+                  </Row>
+                  <Row label="Atendente padrão">
+                    <select value={contact.defaultAgentId || ""} onChange={(e) => saveField({ defaultAgentId: e.target.value })}>
+                      <option value="">Nenhum</option>
                       {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
-                  </label>
-                  <label className="login-field"><span>Setor padrão</span>
-                    <select className="deal-stage-select" value={contact.defaultDepartmentId || ""} onChange={(e) => saveField({ defaultDepartmentId: e.target.value })}>
-                      <option value="">—</option>
+                  </Row>
+                  <Row label="Setor padrão">
+                    <select value={contact.defaultDepartmentId || ""} onChange={(e) => saveField({ defaultDepartmentId: e.target.value })}>
+                      <option value="">Nenhum</option>
                       {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
-                  </label>
-                </div>
-                <label className="login-field"><span>Observações do cliente</span>
-                  <textarea rows={3} defaultValue={contact.notes || ""} onBlur={(e) => e.target.value !== (contact.notes || "") && saveField({ notes: e.target.value })} />
-                </label>
-                {saving && <div className="cv-muted">Salvando…</div>}
+                  </Row>
+                </Group>
+                <Group title="Observações">
+                  <Row label="" stack><textarea rows={3} defaultValue={contact.notes || ""} placeholder="Anotações sobre o cliente" onBlur={(e) => e.target.value !== (contact.notes || "") && saveField({ notes: e.target.value })} /></Row>
+                </Group>
+                {saving && <div className="cv-muted" style={{ marginTop: 6 }}>Salvando…</div>}
               </>
             )}
 
-            <div className="client-section-title">Esta conversa</div>
-            <div className="panel-field">
-              <span className="panel-field-label">Prioridade</span>
-              <PrioritySelector value={conversation.priority} onChange={onSetPriority} />
-            </div>
-            <div className="client-two">
-              <label className="login-field"><span>Setor</span>
-                <select className="deal-stage-select" value={conversation.departmentId || ""} onChange={(e) => onSetDepartment(e.target.value || null)}>
+            <Group title="Esta conversa">
+              <div className="ap-row"><span className="ap-row-label">Prioridade</span><span className="ap-row-control"><PrioritySelector value={conversation.priority} onChange={onSetPriority} /></span></div>
+              <Row label="Setor">
+                <select value={conversation.departmentId || ""} onChange={(e) => onSetDepartment(e.target.value || null)}>
                   <option value="">Sem setor</option>
                   {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
-              </label>
-              <label className="login-field"><span>Atendente</span>
-                <select className="deal-stage-select" value={conversation.assignedAgentId || ""} onChange={(e) => onAssign(e.target.value || null)}>
+              </Row>
+              <Row label="Atendente">
+                <select value={conversation.assignedAgentId || ""} onChange={(e) => onAssign(e.target.value || null)}>
                   <option value="">Ninguém (pendente)</option>
                   {team.map((m) => <option key={m.id} value={m.id}>{m.name || "Sem nome"}</option>)}
                 </select>
-              </label>
-            </div>
-            <div className="client-section-title">Etiquetas</div>
+              </Row>
+            </Group>
+            <div className="ap-group-title" style={{ marginTop: 18 }}>Etiquetas</div>
             <div className="panel-labels">
               {(conversation.labels || []).map((l) => (
                 <span key={l.id} className="cv-tag" style={{ "--tag": l.color }}>{l.title}</span>

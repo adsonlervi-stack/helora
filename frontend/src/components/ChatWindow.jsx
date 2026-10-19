@@ -88,7 +88,19 @@ function PendingMedia({ message, onDownload }) {
   );
 }
 
+const EVENT_ICON = { closed: "✅", reopened: "🔄", transferred: "🔁", assigned: "🙋" };
+function EventPill({ message }) {
+  const kind = message.extra?.kind;
+  const when = message.timestamp || message.createdAt;
+  return (
+    <div className={`chat-event ${kind || ""}`}>
+      <span>{EVENT_ICON[kind] || "•"} {message.text}{when ? ` · ${new Date(when).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}</span>
+    </div>
+  );
+}
+
 function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat, isGroup, onDownload }) {
+  if (message.author === "system" || message.extra?.type === "event") return <EventPill message={message} />;
   const deleted = !!message.deletedAt;
   // Grupo: quem mandou (novo formato em extra.sender; antigo vinha "*Nome:* texto")
   let groupSender = null;
