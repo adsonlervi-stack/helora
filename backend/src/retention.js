@@ -64,7 +64,14 @@ async function purgeConversations() {
   return removed;
 }
 
+async function purgeAudit() {
+  // a trigger da auditoria só deixa apagar o que já passou do prazo de 120 dias
+  const { error } = await supabase.from("message_audit").delete().lt("at", daysAgo(CONV_DAYS()));
+  if (error && !/message_audit/.test(error.message)) throw error;
+}
+
 export async function runRetention() {
+  await purgeAudit().catch((e) => console.error("[Retenção] auditoria:", e.message));
   const media = await purgeMedia().catch((e) => { console.error("[Retenção] anexos:", e.message); return 0; });
   const convs = await purgeConversations().catch((e) => { console.error("[Retenção] conversas:", e.message); return 0; });
   if (media || convs) console.log(`[Retenção] ${media} anexo(s) com mais de ${MEDIA_DAYS()} dias e ${convs} conversa(s) com mais de ${CONV_DAYS()} dias removidos.`);
