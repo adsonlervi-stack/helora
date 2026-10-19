@@ -18,8 +18,32 @@ export async function enableNotify() {
   try {
     localStorage.setItem(KEY, ok ? "on" : "off");
   } catch {}
-  if (ok) playPing();
+  if (ok) { playPing(); subscribePush(); }
   return ok;
+}
+
+const pushActive = () => { try { return localStorage.getItem("helora_push") === "1"; } catch { return false; } };
+
+/** Inscreve este aparelho para receber push com o Helora fechado. */
+export async function subscribePush() {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || Notification.permission !== "granted") return false;
+    const reg = await navigator.serviceWorker.ready;
+    const { api } = await import("./api.js");
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const { data } = await api.get("/push/key");
+      const raw = atob(data.publicKey.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (data.publicKey.length % 4)) % 4));
+      const key = Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    }
+    await api.post("/push/subscribe", { subscription: sub.toJSON() });
+    try { localStorage.setItem("helora_push", "1"); } catch {}
+    return true;
+  } catch (err) {
+    console.warn("[Push]", err.message);
+    return false;
+  }
 }
 
 export function disableNotify() {
@@ -94,7 +118,7 @@ export function notifyEvent(type, title, body, onClick) {
   const p = getNotifyPrefs()[type];
   if (!p?.on) return;
   playSound(p.sound);
-  if (!notifyEnabled() || (!document.hidden && document.hasFocus())) return;
+  if (!notifyEnabled() || (!document.hidden && document.hasFocus()) || (pushActive() && /message|new/.test(type))) return;
   try {
     const n = new Notification(title, { body, icon: "/favicon.png", tag: `${type}-${title}` });
     n.onclick = () => {
@@ -107,7 +131,7 @@ export function notifyEvent(type, title, body, onClick) {
 
 export function showNotification(title, body, onClick) {
   playPing();
-  if (!notifyEnabled() || (!document.hidden && document.hasFocus())) return;
+  if (!notifyEnabled() || (!document.hidden && document.hasFocus()) || pushActive()) return;
   try {
     const n = new Notification(title, { body, icon: "/favicon.png", tag: title });
     n.onclick = () => {

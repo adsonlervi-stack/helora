@@ -22,6 +22,7 @@ import { notifyEvent } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
 import { getAccountTabsApi, logSessionApi } from "./api.js";
+import { subscribePush } from "./notifications.js";
 import { NAV_ITEMS, ADMIN_NAV_ITEM, GESTAO_NAV_ITEMS, MOBILE_NAV_KEYS } from "./navConfig.js";
 import ProfileModal from "./components/ProfileModal.jsx";
 import ReportsPage from "./components/ReportsPage.jsx";
@@ -35,7 +36,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
 
   const [section, setSection] = useState(() =>
-    new URLSearchParams(window.location.search).get("secao") === "financeiro" ? "finance" : "home"
+    new URLSearchParams(window.location.search).get("secao") === "financeiro" ? "finance" : new URLSearchParams(window.location.search).get("c") ? "conversations" : "home"
   );
   const [billingBlocked, setBillingBlocked] = useState(false);
   const [tabs, setTabs] = useState({ enabledTabs: null, agentTabs: null });
@@ -45,6 +46,7 @@ export default function App() {
       const k = `helora_logged_${profile.id}`;
       if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, "1"); logSessionApi(); }
     } catch { logSessionApi(); }
+    subscribePush();
   }, [profile?.id]);
   useEffect(() => {
     if (!profile || (profile.isSuperAdmin && !profile.acting)) return;
