@@ -907,6 +907,8 @@ export async function addMessage({
   }
 
   if (error) throw error;
+  // Eventos do sistema (encerrada, transferida…) ficam no histórico, mas não mexem na lista de conversas
+  if (author === "system") return mapMessage(msgRow);
 
   const preview =
     (text || "").trim().slice(0, 120) ||
@@ -2866,4 +2868,15 @@ export async function deleteTask(accountId, id) {
 }
 export async function closeTasksForScheduled(scheduledId) {
   await supabase.from("tasks").update({ status: "done", done_at: new Date().toISOString() }).eq("scheduled_message_id", scheduledId).eq("status", "open");
+}
+
+
+/** Registra um evento no histórico da conversa (aparece como etiqueta centralizada no chat). */
+export async function logConversationEvent(accountId, conversationId, kind, text, by = null) {
+  try {
+    return await addMessage({ accountId, conversationId, direction: "out", author: "system", text, senderName: by, extra: { type: "event", kind } });
+  } catch (err) {
+    console.warn("[Evento] não registrado:", err.message);
+    return null;
+  }
 }
