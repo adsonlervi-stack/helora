@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
-  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown
+  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
@@ -79,7 +79,7 @@ export default function CrmPage({ profile, onOpenConversation }) {
     getDepartments().then(setDepartments).catch(() => {});
   }, []);
   const pipeline = pipelines.find((p) => p.id === pipelineId);
-  const ctx = { isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, setAllMode, loadPipelines, loadTags, loadProducts, setPipelines };
+  const ctx = { isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, allMode, setAllMode, loadPipelines, loadTags, loadProducts, setPipelines };
 
   return (
     <div className="page crm-page">
@@ -89,29 +89,7 @@ export default function CrmPage({ profile, onOpenConversation }) {
         ))}
       </div>
       {error && <div className="admin-feedback error">{error}</div>}
-      {tab === "funnel" && !allMode && <FunnelView ctx={ctx} />}
-      {tab === "funnel" && allMode && (
-        <>
-          <div className="crm-toolbar">
-            <label className="crm-select">
-              <span>Funil</span>
-              <select value="__all" onChange={(e) => { if (e.target.value !== "__all") { setPipelineId(e.target.value); setAllMode(false); } }}>
-                <option value="__all">Todos os funis</option>
-                {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </label>
-          </div>
-          {pipelines.map((p) => (
-            <section key={p.id} className="crm-all-section">
-              <div className="crm-all-title">
-                <strong>{p.name}</strong>
-                <button type="button" onClick={() => { setPipelineId(p.id); setAllMode(false); }}>Abrir este funil</button>
-              </div>
-              <FunnelView ctx={{ ...ctx, pipeline: p, pipelineId: p.id, embedded: true }} />
-            </section>
-          ))}
-        </>
-      )}
+      {tab === "funnel" && <FunnelView ctx={ctx} />}
       {tab === "contacts" && <ContactsView ctx={ctx} />}
       {tab === "agenda" && <AgendaView ctx={ctx} />}
       {tab === "products" && <ProductsView ctx={ctx} />}
@@ -137,7 +115,10 @@ function FunnelView({ ctx }) {
   const cardFields = modelFields.filter((f) => f.card).slice(0, 4);
   const kindField = modelFields.find((f) => f.kind);
 
-  const load = () => pipelineId && crm.leads({ pipelineId }).then(setLeads).catch(() => setLeads([]));
+  const all = !!ctx.allMode;
+  const pipeById = useMemo(() => new Map(pipelines.map((p) => [p.id, p])), [pipelines]);
+  const normName = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const load = () => (all ? crm.leads() : pipelineId ? crm.leads({ pipelineId }) : Promise.resolve([])).then(setLeads).catch(() => setLeads([]));
   const deletePipeline = async () => {
     const n = (leads || []).length;
     if (!(await askConfirm(`Apagar o funil "${pipeline.name}"?${n ? `\n\n${n} lead(s) deste funil também serão apagados.` : ""}\nEssa ação não pode ser desfeita.`, { okText: "Apagar funil", danger: true }))) return;
@@ -149,17 +130,34 @@ function FunnelView({ ctx }) {
       notify("Funil apagado.");
     } catch (e) { notify(errText(e), "error"); }
   };
-  useEffect(() => { setLeads(null); load(); }, [pipelineId]);
+  useEffect(() => { setLeads(null); load(); }, [pipelineId, all]);
 
-  const stages = pipeline?.stages || [];
+  // Em "todos os funis" as colunas com o mesmo nome viram uma só
+  const stages = useMemo(() => {
+    if (!all) return pipeline?.stages || [];
+    const out = [];
+    for (const p of pipelines) for (const st of p.stages || []) {
+      const key = normName(st.name);
+      if (!out.some((x) => x.id === key)) out.push({ id: key, name: st.name, color: st.color });
+    }
+    return out;
+  }, [all, pipeline, pipelines]);
+  const colOf = (l) => (all ? normName(pipeById.get(l.pipelineId)?.stages?.find((st) => st.id === l.stage)?.name || l.stage) : l.stage);
+  const fieldsOf = (l) => (all ? pipeById.get(l.pipelineId)?.fields || [] : modelFields);
   const filtered = (leads || []).filter((l) => {
     const t = `${l.name} ${l.company || ""} ${l.phone || ""} ${l.email || ""}`.toLowerCase();
     return t.includes(search.toLowerCase()) && (!tagFilter || l.tagIds.includes(tagFilter));
   });
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
 
-  const move = async (id, stage) => {
+  const move = async (id, col) => {
     const lead = leads.find((l) => l.id === id);
+    let stage = col;
+    if (all && lead) {
+      const target = pipeById.get(lead.pipelineId)?.stages?.find((st) => normName(st.name) === col);
+      if (!target) return notify(`O funil "${pipeById.get(lead.pipelineId)?.name}" não tem a coluna "${stages.find((x) => x.id === col)?.name}".`, "error");
+      stage = target.id;
+    }
     if (!lead || lead.stage === stage) return;
     setLeads((cur) => cur.map((l) => (l.id === id ? { ...l, stage, stageChangedAt: new Date().toISOString() } : l)));
     try { await crm.updateLead(id, { stage }); } catch { load(); }
@@ -197,31 +195,31 @@ function FunnelView({ ctx }) {
 
   return (
     <>
-      {!ctx.embedded && <div className="crm-toolbar">
+      <div className="crm-toolbar">
         <label className="crm-select">
           <span>Funil</span>
-          <select value={pipelineId || ""} onChange={(e) => e.target.value === "__new" ? setNewPipe(true) : e.target.value === "__all" ? ctx.setAllMode(true) : setPipelineId(e.target.value)}>
+          <select value={all ? "__all" : pipelineId || ""} onChange={(e) => { const v = e.target.value; if (v === "__new") return setNewPipe(true); if (v === "__all") return ctx.setAllMode(true); ctx.setAllMode(false); setPipelineId(v); }}>
             {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            {pipelines.length > 1 && <option value="__all">Ver todos os funis</option>}
+            {pipelines.length > 1 && <option value="__all">Todos os funis</option>}
             {isManager && <option value="__new">+ Novo funil…</option>}
           </select>
         </label>
-        {isManager && <Button variant="secondary" onClick={() => setEditCol({ name: "", color: COLORS[0] })}><Plus size={15} /> Coluna</Button>}
-        {isManager && pipeline && pipelines.length > 1 && <Button variant="secondary" title="Apagar este funil" onClick={deletePipeline}><Trash2 size={15} /></Button>}
-        {isManager && pipeline && <Button variant="secondary" onClick={() => setEditFields(true)}><SlidersHorizontal size={15} /> Campos{pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}</Button>}
+        {isManager && !all && <Button variant="secondary" onClick={() => setEditCol({ name: "", color: COLORS[0] })}><Plus size={15} /> Coluna</Button>}
+        {isManager && !all && pipeline && pipelines.length > 1 && <Button variant="secondary" title="Apagar este funil" onClick={deletePipeline}><Trash2 size={15} /></Button>}
+        {isManager && !all && pipeline && <Button variant="secondary" onClick={() => setEditFields(true)}><SlidersHorizontal size={15} /> Campos{pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}</Button>}
         <div className="crm-search"><Search size={15} /><input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <select className="crm-filter" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
           <option value="">Todas as tags</option>
           {tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
         <div style={{ flex: 1 }} />
-        <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar planilha</Button>
-        <Button onClick={() => setOpen({ isNew: true, stage: stages[0]?.id })}><Plus size={15} /> Novo lead</Button>
-      </div>}
+        {!all && <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar planilha</Button>}
+        {!all && <Button onClick={() => setOpen({ isNew: true, stage: stages[0]?.id })}><Plus size={15} /> Novo lead</Button>}
+      </div>
 
       <div className="crm-board">
         {stages.map((st) => {
-          const items = filtered.filter((l) => l.stage === st.id);
+          const items = filtered.filter((l) => colOf(l) === st.id);
           const sum = items.reduce((s, l) => s + (l.value || 0), 0);
           return (
             <div key={st.id} className={`crm-col ${over === st.id ? "over" : ""}`}
@@ -233,7 +231,7 @@ function FunnelView({ ctx }) {
                 <strong title={st.name}>{st.name}</strong>
                 {(st.automations || []).some((a) => a.active !== false) && <span className="crm-auto-ind" title="Esta coluna tem automações"><Zap size={12} /></span>}
                 <span className="crm-count">{items.length}</span>
-                {isManager && (
+                {isManager && !all && (
                   <span className="crm-col-tools">
                     <button onClick={() => moveCol(st.id, -1)} title="Mover para a esquerda"><ChevronLeft size={13} /></button>
                     <button onClick={() => moveCol(st.id, 1)} title="Mover para a direita"><ChevronRight size={13} /></button>
@@ -246,59 +244,61 @@ function FunnelView({ ctx }) {
               <div className="crm-cards">
                 {leads === null && <div className="crm-skel" />}
                 {items.map((l) => (
-                  <div key={l.id} className="crm-card" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => setOpen(l)}>
-                    <div className="crm-card-top">
-                      <span className="crm-avatar">{initials(l.name)}</span>
-                      <div className="crm-card-id">
-                        <strong>{l.name}</strong>
-                        <span>{l.company || fmtPhone(l.phone) || l.email || "—"}</span>
-                      </div>
-                      <span className="crm-value">{l.value ? brl(l.value) : "+ Valor"}</span>
-                    </div>
+                  <div key={l.id} className="crm-card cc" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => setOpen(l)}>
                     {(() => {
-                      const k = kindField && l.custom?.[kindField.id];
-                      const shown = cardFields.filter((f) => l.custom?.[f.id]);
-                      if (!k && !shown.length) return null;
+                      const flds = fieldsOf(l);
+                      const kf = flds.find((f) => f.kind);
+                      const kind = kf && l.custom?.[kf.id];
+                      const chipsF = flds.filter((f) => f.card && l.custom?.[f.id]).slice(0, 4);
+                      const overdue = flds.some((f) => f.alert && l.custom?.[f.id] && daysUntil(l.custom[f.id]) < 0);
+                      const tagsL = l.tagIds.map((id) => tagById.get(id)).filter(Boolean);
+                      const done = (l.checklist || []).filter((c) => c.done).length;
                       return (
-                        <div className="crm-info">
-                          {k && <span className="crm-kind" style={{ "--c": st.color }}>{/renova/i.test(k) ? <RefreshCw size={11} /> : <Tag size={11} />} {k}</span>}
-                          {shown.map((f) => (
-                            <span key={f.id} className="crm-info-item">
-                              <small>{f.label.replace(/\s*\(.*\)$/, "")}:</small> {fmtField(f, l.custom[f.id])}
-                              {f.alert && <DueBadge date={l.custom[f.id]} />}
-                            </span>
-                          ))}
-                        </div>
+                        <>
+                          <div className="cc-head">
+                            <button type="button" className="cc-menu" title="Abrir" onClick={(e) => { e.stopPropagation(); setOpen(l); }}><MoreVertical size={15} /></button>
+                            <span className="cc-avatar">{initials(l.name)}</span>
+                            <div className="cc-id">
+                              <strong title={l.name}>{l.name}</strong>
+                              <span>{fmtPhone(l.phone) || l.company || l.email || "Sem contato"}</span>
+                            </div>
+                            <span className={`cc-value ${l.value ? "" : "empty"}`}>{l.value ? brl(l.value) : "+ Valor"}</span>
+                          </div>
+                          {(all || kind || chipsF.length > 0) && (
+                            <div className="cc-chips">
+                              {all && <span className="cc-chip pipe">{pipeById.get(l.pipelineId)?.name}</span>}
+                              {kind && <span className="cc-chip kind">{/renova/i.test(kind) ? <RefreshCw size={10} /> : <Tag size={10} />} {kind}</span>}
+                              {chipsF.map((f) => (
+                                f.alert ? <DueBadge key={f.id} date={l.custom[f.id]} /> : <span key={f.id} className="cc-chip" title={f.label}>{fmtField(f, l.custom[f.id])}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="cc-sep" />
+                          <div className="cc-tags">
+                            {tagsL.map((t) => <span key={t.id} className="cc-tag" style={{ "--c": t.color }}>{t.name}</span>)}
+                            <button type="button" className="cc-tag-add" title="Tags" onClick={(e) => { e.stopPropagation(); setOpen(l); }}><Plus size={12} /></button>
+                          </div>
+                          <div className="cc-meta">
+                            <span><Timer size={13} /> {ago(l.stageChangedAt)} na coluna</span>
+                            {l.products.length > 0 && <span><Briefcase size={13} /> {l.products.length} produto{l.products.length > 1 ? "s" : ""}</span>}
+                            <span><Clock size={13} /> Última interação há {ago(l.lastInteractionAt || l.createdAt)}</span>
+                          </div>
+                          <div className="cc-sep" />
+                          <div className="cc-foot" onClick={(e) => e.stopPropagation()}>
+                            <span className="cc-owner" title={l.ownerName || "Sem responsável"}>{l.ownerAvatar ? <img src={l.ownerAvatar} alt="" /> : initials(l.ownerName)}</span>
+                            <button type="button" className="cc-ico" title="Abrir conversa" disabled={!l.phone} onClick={() => openConv(l)}><MessageCircle size={15} /></button>
+                            {l.phone ? <a className="cc-ico" href={`tel:+${l.phone}`} title="Ligar"><Phone size={15} /></a> : <span className="cc-ico off"><Phone size={15} /></span>}
+                            {l.attachments?.length > 0 && <span className="cc-ico" title="Anexos"><Paperclip size={14} /><small>{l.attachments.length}</small></span>}
+                            <span className="cc-created">Criado há {ago(l.createdAt)}</span>
+                            {l.checklist?.length > 0 && <span className={`cc-check ${done === l.checklist.length ? "ok" : ""}`} title="Checklist"><CheckCircle2 size={14} /> {done}/{l.checklist.length}</span>}
+                            {overdue && <span className="cc-warn" title="Vigência vencida"><AlertTriangle size={13} /></span>}
+                          </div>
+                        </>
                       );
                     })()}
-                    {l.tagIds.length > 0 && (
-                      <div className="crm-tags">
-                        {l.tagIds.map((id) => tagById.get(id)).filter(Boolean).map((t) => (
-                          <span key={t.id} className="crm-tag" style={{ "--c": t.color }}>{t.name}</span>
-                        ))}
-                      </div>
-                    )}
-                    {(l.attachments?.length > 0 || l.checklist?.length > 0 || l.conversationId) && (
-                      <div className="crm-badges">
-                        {l.checklist?.length > 0 && (() => { const d = l.checklist.filter((c) => c.done).length; return <span className={d === l.checklist.length ? "ok" : ""}><CheckSquare size={12} /> {d}/{l.checklist.length}</span>; })()}
-                        {l.attachments?.length > 0 && <span><Paperclip size={12} /> {l.attachments.length}</span>}
-                        {l.conversationId && <span><MessageCircle size={12} /> Conversa</span>}
-                      </div>
-                    )}
-                    <div className="crm-meta">
-                      <span><Timer size={12} /> {ago(l.stageChangedAt)} na coluna</span>
-                      {l.products.length > 0 && <span><Briefcase size={12} /> {l.products.length} produto(s)</span>}
-                      <span><Clock size={12} /> Última interação há {ago(l.lastInteractionAt || l.createdAt)}</span>
-                    </div>
-                    <div className="crm-card-foot" onClick={(e) => e.stopPropagation()}>
-                      <span className="crm-owner" title={l.ownerName || ""}>{l.ownerAvatar ? <img src={l.ownerAvatar} alt="" /> : initials(l.ownerName)}</span>
-                      {l.phone && <button type="button" className="crm-foot-btn" title="Abrir conversa no Helora" onClick={() => openConv(l)}><MessageCircle size={15} /></button>}
-                      {l.phone && <a href={`tel:+${l.phone}`} title="Ligar"><Phone size={15} /></a>}
-                      <span className="crm-created">Criado há {ago(l.createdAt)}</span>
-                    </div>
                   </div>
                 ))}
-                <button className="crm-add" onClick={() => setOpen({ isNew: true, stage: st.id })}><Plus size={14} /> Adicionar</button>
+                {!all && <button className="crm-add" onClick={() => setOpen({ isNew: true, stage: st.id })}><Plus size={14} /> Adicionar</button>}
               </div>
             </div>
           );
@@ -498,6 +498,21 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
       ctx.onOpenConversation?.(r.conversationId);
     } catch (e) { setErr(errText(e)); }
   };
+  // Sem produtos cadastrados: cria um na hora e já vincula ao lead
+  const addProduct = async () => {
+    if (products.length) return setItems((c) => [...c, { productId: products.find((p) => p.active)?.id || products[0].id, qty: 1, price: (products.find((p) => p.active) || products[0]).price }]);
+    const name = await askPrompt("Nome do produto ou serviço", "", { okText: "Continuar" });
+    if (!name || !name.trim()) return;
+    const priceTxt = await askPrompt("Preço (R$)", "", { okText: "Adicionar" });
+    if (priceTxt === null) return;
+    const price = Number(String(priceTxt).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", ".")) || 0;
+    try {
+      const prod = await crm.createProduct({ name: name.trim(), price, active: true });
+      await ctx.loadProducts();
+      setItems((c) => [...c, { productId: prod.id, qty: 1, price }]);
+      notify(`Produto "${name.trim()}" cadastrado.`, "success");
+    } catch (e) { setErr(errText(e)); }
+  };
   const addItem = () => {
     const t = newItem.trim();
     if (!t) return;
@@ -671,7 +686,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
           </div>
         ))}
         <div style={{ padding: "8px 12px" }}>
-          <Button variant="ghost" onClick={() => setItems((c) => [...c, { productId: "", qty: 1, price: 0 }])} disabled={!products.length}><Plus size={14} /> Adicionar produto</Button>
+          <Button variant="ghost" onClick={addProduct}><Plus size={14} /> {products.length ? "Adicionar produto" : "Cadastrar e adicionar produto"}</Button>
         </div>
       </Group>
       {!isNew && (
