@@ -1,4 +1,4 @@
-import { sendWhatsAppMessage, sendWhatsAppPayload } from "./whatsapp/baileysClient.js";
+import { sendWhatsAppMessage, sendWhatsAppPayload, sendWhatsAppMediaUrl } from "./whatsapp/baileysClient.js";
 import { sendMetaMessage } from "./meta/metaClient.js";
 import { getPrimaryWhatsAppChannel, getChannelForAccount, addMessage, updateConversation, getMessage } from "./config/db.js";
 
@@ -103,6 +103,21 @@ export async function sendSpecialToConversation(accountId, conversation, extra, 
     senderName: senderName || null,
     status: "sent",
     extra
+  });
+  await updateConversation(accountId, conversation.id, { mode: "human" });
+  return message;
+}
+
+
+/** Mídia por URL (usada nas mensagens agendadas com anexo). */
+export async function sendMediaUrlToConversation(accountId, conversation, { url, mediaType, caption }, { senderName, sign = false } = {}) {
+  if (conversation.platform !== "whatsapp") throw new Error("Anexo agendado só funciona no WhatsApp.");
+  const channelId = await whatsappChannel(accountId, conversation);
+  const text = caption ? signText(caption, senderName, sign) : "";
+  const whatsappMessageId = await sendWhatsAppMediaUrl(channelId, conversation.externalId, { url, mediaType, caption: text || undefined });
+  const message = await addMessage({
+    accountId, conversationId: conversation.id, direction: "out", author: "operator",
+    text, mediaUrl: url, mediaType, whatsappMessageId, senderName: senderName || null, status: "sent"
   });
   await updateConversation(accountId, conversation.id, { mode: "human" });
   return message;
