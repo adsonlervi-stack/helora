@@ -5,6 +5,7 @@ import cors from "cors";
 import apiRoutes from "./routes/api.js";
 import adminRoutes from "./routes/admin.js";
 import crmRoutes from "./routes/crm.js";
+import aiRoutes from "./routes/ai.js";
 import { startRetentionJob } from "./retention.js";
 import metaWebhookRoutes from "./meta/webhookRoutes.js";
 import { startAllChannels } from "./whatsapp/baileysClient.js";
@@ -64,6 +65,7 @@ app.use(express.json());
 // Rotas
 app.use("/api/admin", adminRoutes);
 app.use("/api/crm", crmRoutes);
+app.use("/api/ai", aiRoutes);
 app.use("/api", apiRoutes);
 app.use("/", metaWebhookRoutes); // expõe GET/POST /webhook/meta
 
