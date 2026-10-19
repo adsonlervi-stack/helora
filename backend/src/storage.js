@@ -63,3 +63,17 @@ export async function uploadAvatar({ accountId, userId, buffer, extension, conte
   const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
   return `${data.publicUrl}?v=${Date.now()}`;
 }
+
+/** Arquivos do CRM ficam num bucket próprio (fora da limpeza de 90 dias dos anexos de chat). */
+export async function uploadCrmFile({ accountId, buffer, extension, contentType }) {
+  const bucket = "crm-files";
+  await ensureBucket(bucket);
+  const path = `${accountId}/${uuid()}.${extension}`;
+  const { error } = await supabase.storage.from(bucket).upload(path, buffer, { contentType, upsert: false });
+  if (error) throw error;
+  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}
+export async function removeCrmFile(url) {
+  const m = /\/object\/public\/crm-files\/(.+)$/.exec(String(url || "").split("?")[0]);
+  if (m) await supabase.storage.from("crm-files").remove([decodeURIComponent(m[1])]).catch(() => {});
+}
