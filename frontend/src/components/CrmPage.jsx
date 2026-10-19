@@ -111,7 +111,7 @@ function FunnelView({ ctx }) {
   const [editFields, setEditFields] = useState(false);
   const modelFields = pipeline?.fields || [];
   const cardFields = modelFields.filter((f) => f.card).slice(0, 4);
-  const kindLabel = KIND_BY_TEMPLATE[pipeline?.template];
+  const kindField = modelFields.find((f) => f.kind);
 
   const load = () => pipelineId && crm.leads({ pipelineId }).then(setLeads).catch(() => setLeads([]));
   useEffect(() => { setLeads(null); load(); }, [pipelineId]);
@@ -213,7 +213,10 @@ function FunnelView({ ctx }) {
                     {modelFields.length > 0 ? (
                       <div className="crm-mcard" style={{ "--band": st.color }}>
                         <div className="crm-mcard-band">
-                          <span><RefreshCw size={13} /> {(l.source && l.source !== "Importação" ? l.source : kindLabel || st.name).toUpperCase()}</span>
+                          {(() => {
+                            const k = (kindField && l.custom?.[kindField.id]) || (!kindField && l.source && l.source !== "Importação" ? l.source : null);
+                            return <span>{/renova/i.test(k || "") ? <RefreshCw size={13} /> : <Tag size={13} />} {(k || st.name).toUpperCase()}</span>;
+                          })()}
                           <span><Clock size={13} /> Há {ago(l.stageChangedAt)}</span>
                         </div>
                         <div className="crm-mcard-grid">
@@ -356,7 +359,7 @@ function ColorPicker({ value, onChange }) {
 function NewPipelineSheet({ onClose, onCreated }) {
   const [name, setName] = useState("");
   const [templates, setTemplates] = useState([]);
-  const [tpl, setTpl] = useState("blank");
+  const [tpl, setTpl] = useState("corretora");
   const [err, setErr] = useState(null);
   useEffect(() => { crm.templates().then(setTemplates).catch(() => {}); }, []);
   const cur = templates.find((t) => t.key === tpl);
@@ -404,7 +407,7 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
     setBusy(false);
   };
   return (
-    <Sheet title={`Campos · ${pipeline.name}`} subtitle="Campos personalizados dos cards deste funil. Marque “No card” para mostrar na frente do card (até 4)." onClose={onClose} width={640}
+    <Sheet title={`Campos · ${pipeline.name}`} subtitle="Campos dos cards deste funil. “No card” mostra o campo na frente do card (até 4). “Etiqueta no topo” vira o tipo do card (ex.: Renovação, Venda nova)." onClose={onClose} width={640}
       footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar campos"}</Button></>}>
       <Group>
         {list.map((f, i) => (
@@ -424,6 +427,7 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
             <div className="crm-field-flags">
               <label><Switch checked={!!f.card} onChange={(v) => upd(i, { card: v })} /> No card</label>
               {f.type === "date" && <label><Switch checked={!!f.alert} onChange={(v) => upd(i, { alert: v })} /> Contagem de vencimento</label>}
+              {f.type === "select" && <label><Switch checked={!!f.kind} onChange={(v) => setList((l) => l.map((x, j) => ({ ...x, kind: j === i ? v : false })))} /> Etiqueta no topo do card</label>}
             </div>
           </div>
         ))}
@@ -845,7 +849,7 @@ function ImportSheet({ ctx, onClose, onDone }) {
             <Row label="Tipo">
               <select value={kind} onChange={(e) => setKind(e.target.value)}>
                 <option value="">Não definir</option>
-                {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                {((customFields.find((f) => f.kind)?.options) || KINDS).map((k) => <option key={k} value={k}>{k}</option>)}
               </select>
             </Row>
           </Group>
