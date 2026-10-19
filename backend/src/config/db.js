@@ -919,6 +919,9 @@ export async function addMessage({
   if (direction === "in" && author === "user") {
     import("../push.js").then((m) => m.pushIncoming(accountId, conversationId, preview)).catch(() => {});
   }
+  import("../webhooks.js").then((m) => m.emitEvent(accountId, direction === "in" ? "mensagem.recebida" : "mensagem.enviada", {
+    atendimentoId: conversationId, mensagemId: msgRow.id, texto: msgRow.text || "", midiaUrl: msgRow.media_url || null, tipoMidia: msgRow.media_type || null, autor: author
+  })).catch(() => {});
   if (direction === "in") {
     const { data: conv } = await supabase
       .from("conversations")
@@ -2880,6 +2883,8 @@ export async function closeTasksForScheduled(scheduledId) {
 /** Registra um evento no histórico da conversa (aparece como etiqueta centralizada no chat). */
 export async function logConversationEvent(accountId, conversationId, kind, text, by = null) {
   try {
+    const EV = { closed: "atendimento.finalizado", reopened: "atendimento.reaberto", transferred: "atendimento.transferido", assigned: "atendimento.atribuido" };
+    if (EV[kind]) import("../webhooks.js").then((m) => m.emitEvent(accountId, EV[kind], { atendimentoId: conversationId, descricao: text, por: by })).catch(() => {});
     return await addMessage({ accountId, conversationId, direction: "out", author: "system", text, senderName: by, extra: { type: "event", kind } });
   } catch (err) {
     console.warn("[Evento] não registrado:", err.message);
