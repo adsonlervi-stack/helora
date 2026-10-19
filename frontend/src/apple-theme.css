@@ -1586,3 +1586,9 @@ img, video { max-width: 100%; }
 .crm-col .crm-cards, .crm-col .crm-card, .crm-col-head { min-width: 0; }
 .crm-col-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 720px) { .crm-board > .crm-col { flex-basis: 84vw !important; width: 84vw; min-width: 84vw; max-width: 84vw; } }
+
+/* Cabeçalho da coluna: botões de editar só aparecem no hover e não roubam espaço do nome */
+.crm-col-head { position: relative; }
+.crm-col-tools { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: #ececf0; border-radius: 8px; padding: 1px 2px; opacity: 0; pointer-events: none; }
+.crm-col:hover .crm-col-tools { opacity: 1; pointer-events: auto; }
+.crm-col:hover .crm-sum { visibility: hidden; }
