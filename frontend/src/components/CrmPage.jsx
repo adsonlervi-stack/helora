@@ -163,7 +163,7 @@ function FunnelView({ ctx }) {
               onDrop={(e) => { e.preventDefault(); setOver(null); dragId && move(dragId, st.id); setDragId(null); }}>
               <div className="crm-col-head">
                 <span className="crm-dot" style={{ background: st.color }} />
-                <strong>{st.name}</strong>
+                <strong title={st.name}>{st.name}</strong>
                 <span className="crm-count">{items.length}</span>
                 {isManager && (
                   <span className="crm-col-tools">
@@ -446,13 +446,18 @@ const FIELD_GUESS = {
   value: ["valor", "value", "preço", "preco", "ticket"],
   tags: ["tags", "tag", "etiquetas", "segmento"],
   source: ["origem", "source", "canal", "fonte"],
-  notes: ["obs", "observação", "observacoes", "notas", "notes"]
+  notes: ["obs", "observação", "observacoes", "notas", "notes"],
+  due: ["vencimento", "vigência", "vigencia", "renovação", "renovacao", "validade"],
+  owner: ["responsável", "responsavel", "vendedor", "corretor", "consultor", "atendente"]
 };
-const FIELD_LABEL = { name: "Nome", phone: "Telefone", email: "E-mail", company: "Empresa", value: "Valor", tags: "Tags", source: "Origem", notes: "Observações" };
+const FIELD_LABEL = { name: "Nome", phone: "Telefone", email: "E-mail", company: "Empresa", value: "Valor", tags: "Tags", source: "Origem", notes: "Observações", due: "Vencimento", owner: "Responsável (por linha)" };
+const KINDS = ["Venda nova", "Renovação", "Indicação"];
 
 function ImportSheet({ ctx, onClose, onDone }) {
-  const { pipelines, pipeline } = ctx;
+  const { pipelines, pipeline, team = [] } = ctx;
   const [rows, setRows] = useState(null);
+  const [ownerId, setOwnerId] = useState("");
+  const [kind, setKind] = useState("");
   const [headers, setHeaders] = useState([]);
   const [map, setMap] = useState({});
   const [pipeId, setPipeId] = useState(pipeline?.id || pipelines[0]?.id);
@@ -485,7 +490,7 @@ function ImportSheet({ ctx, onClose, onDone }) {
     setErr(null);
     try {
       const out = rows.map((r) => Object.fromEntries(Object.entries(map).filter(([, h]) => h).map(([f, h]) => [f, r[h]])));
-      const res = await crm.importLeads({ pipelineId: pipeId, stage, rows: out });
+      const res = await crm.importLeads({ pipelineId: pipeId, stage, rows: out, ownerId: ownerId || null, kind: kind || null });
       alert(`${res.imported} lead(s) importado(s).`);
       onDone();
     } catch (e) { setErr(errText(e)); }
@@ -513,6 +518,20 @@ function ImportSheet({ ctx, onClose, onDone }) {
                 </select>
               </Row>
             ))}
+          </Group>
+          <Group title="Responsável e tipo" hint="Vale para a lista toda. Se a planilha tiver a coluna Responsável, ela tem prioridade (busca pelo nome ou e-mail do usuário).">
+            <Row label="Responsável">
+              <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+                <option value="">Eu mesmo</option>
+                {team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </Row>
+            <Row label="Tipo">
+              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+                <option value="">Não definir</option>
+                {KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </Row>
           </Group>
           <Group title="Destino">
             <Row label="Funil">

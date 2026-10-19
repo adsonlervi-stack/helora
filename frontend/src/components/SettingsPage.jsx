@@ -11,8 +11,7 @@ import {
   Smartphone,
   Pencil,
   KeyRound,
-  Copy
-, Bell } from "lucide-react";
+  Copy, Bell, ShieldCheck, History, CalendarClock, Plug } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook } from "../api.js";
 import { AccessLogList } from "./AdminPage.jsx";
@@ -80,8 +79,8 @@ const CARDS = [
     desc: "Atalhos de texto pro atendente usar no chat",
     icon: MessagesSquare
   },
-  { key: "perms", label: "Abas do atendente", desc: "O que o atendente pode ver no menu", icon: KeyRound },
-  { key: "access", label: "Log de acessos", desc: "Quem entrou no sistema, quando e de onde (IP)", icon: Users },
+  { key: "perms", label: "Abas do atendente", desc: "O que o atendente pode ver no menu", icon: ShieldCheck },
+  { key: "access", label: "Log de acessos", desc: "Quem entrou no sistema, quando e de onde (IP)", icon: History },
   { key: "labels", label: "Etiquetas", desc: "Categorize as conversas por cor", icon: Tag },
   { key: "departments", label: "Setores", desc: "Times/filas de atendimento", icon: Building2 },
   {
@@ -94,7 +93,7 @@ const CARDS = [
     key: "scheduled",
     label: "Mensagens agendadas",
     desc: "Programe um envio pra data/hora futura",
-    icon: Clock3
+    icon: CalendarClock
   },
   {
     key: "devices",
@@ -103,7 +102,7 @@ const CARDS = [
     icon: Smartphone,
     external: true
   },
-  { key: "api", label: "API e integrações", desc: "Chave para site, landing page e sistemas", icon: KeyRound, ownerOnly: true }
+  { key: "api", label: "API e integrações", desc: "Chave, webhooks e documentação da API", icon: Plug, ownerOnly: true }
 ];
 
 export default function SettingsPage({ onGoToChannels, canManage = false, apiEnabled = false }) {

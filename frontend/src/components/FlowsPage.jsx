@@ -94,7 +94,7 @@ export default function FlowsPage({ canEdit }) {
             <div className="contact-info" onClick={() => setOpenId(f.id)} style={{ cursor: "pointer" }}>
               <strong>{f.name}</strong>
               <span>
-                {f.graph?.nodes?.length || 0} blocos · v{f.version} · atualizado em {when(f.updatedAt)}
+                {f.graph?.nodes?.length || 0} {(f.graph?.nodes?.length || 0) === 1 ? "bloco" : "blocos"} · v{f.version} · atualizado em {when(f.updatedAt)}
               </span>
             </div>
             <button className={`pill-btn ${f.active ? "on" : ""}`} onClick={() => canEdit && toggle(f)} disabled={!canEdit}>

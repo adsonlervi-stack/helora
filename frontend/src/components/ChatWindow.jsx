@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2,
@@ -279,7 +280,7 @@ function ForwardModal({ message, conversations, onClose, onSend }) {
       setBusy(false);
     }
   };
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal lg-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header"><h3>Encaminhar mensagem</h3><button className="icon-btn" onClick={onClose}><X size={16} /></button></div>
@@ -300,7 +301,7 @@ function ForwardModal({ message, conversations, onClose, onSend }) {
         </button>
       </div>
     </div>
-  );
+  , document.body);
 }
 
 function ScheduleModal({ conversation, initialText, onClose, defaultSign }) {
@@ -338,7 +339,7 @@ function ScheduleModal({ conversation, initialText, onClose, defaultSign }) {
       setErr(e2.response?.data?.error || e2.message);
     }
   };
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <form className="modal lg-modal" onClick={(e) => e.stopPropagation()} onSubmit={save}>
         <div className="modal-header"><h3>Agendar mensagem</h3><button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button></div>
@@ -378,7 +379,7 @@ function ScheduleModal({ conversation, initialText, onClose, defaultSign }) {
         )}
       </form>
     </div>
-  );
+  , document.body);
 }
 
 function StickerPicker({ onPick, onUpload, onClose }) {
@@ -440,7 +441,7 @@ function SpecialModal({ kind, onClose, onSend }) {
     }
     onClose();
   };
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <form className="modal lg-modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <div className="modal-header"><h3>{kind === "contact" ? "Enviar contato" : "Enviar localização"}</h3><button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button></div>
@@ -471,7 +472,7 @@ function SpecialModal({ kind, onClose, onSend }) {
         <button className="connect-btn">Enviar</button>
       </form>
     </div>
-  );
+  , document.body);
 }
 
 const DRAFTS = new Map();
@@ -949,7 +950,7 @@ export default function ChatWindow({
                 ))}
               </div>
             )}
-            {pendingFile && (
+            {pendingFile && createPortal(
               <div className="modal-backdrop" onClick={() => setPendingFile(null)}>
                 <div className="modal lg-modal media-preview" onClick={(e) => e.stopPropagation()}>
                   <div className="modal-header"><h3>Enviar arquivo</h3><button type="button" className="icon-btn" onClick={() => setPendingFile(null)}><X size={16} /></button></div>
@@ -969,7 +970,7 @@ export default function ChatWindow({
                     <button type="button" className="connect-btn" style={{ width: "auto", padding: "0 22px" }} onClick={confirmPendingFile}><Send size={15} /> Enviar</button>
                   </div>
                 </div>
-              </div>
+              </div>, document.body
             )}
             {spell.length > 0 && text === spell[0].base && (
               <div className="spell-bar">

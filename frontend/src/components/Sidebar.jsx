@@ -216,7 +216,7 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
                 </div>
                 <div className="cv-row">
                   <span className="cv-preview">
-                    {c.lastMessagePreview || (c.mode === "bot" ? "Bot em atendimento" : "Atendimento humano")}
+                    {(c.lastMessagePreview || "").replace(/^\*([^*\n]{1,60}):\*\s*/, "$1: ").replace(/\*([^*\n]+)\*/g, "$1") || (c.mode === "bot" ? "Bot em atendimento" : "Atendimento humano")}
                   </span>
                   {c.unread > 0 && <span className="cv-unread">{c.unread}</span>}
                 </div>

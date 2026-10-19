@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import React, { useEffect } from "react";
 import { X } from "lucide-react";
 
@@ -8,11 +9,11 @@ export function Sheet({ title, subtitle, onClose, children, footer, width = 620 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  return (
+  return createPortal(
     <div className="ap-sheet-backdrop" onMouseDown={onClose}>
       <div className="ap-sheet" style={{ maxWidth: width }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="ap-sheet-head">
-          <div>
+          <div className="ap-sheet-titles">
             <h2>{title}</h2>
             {subtitle && <p>{subtitle}</p>}
           </div>
@@ -21,7 +22,8 @@ export function Sheet({ title, subtitle, onClose, children, footer, width = 620 
         <div className="ap-sheet-body">{children}</div>
         {footer && <div className="ap-sheet-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

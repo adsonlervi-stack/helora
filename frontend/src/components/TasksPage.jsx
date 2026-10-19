@@ -64,7 +64,7 @@ export default function TasksPage({ profile }) {
             Mensagens agendadas{pendingAttach.length ? ` · ⚠️ ${pendingAttach.length}` : ""}
           </button>
         </div>
-        {view === "tasks" && <button className="connect-btn" style={{ width: "auto", padding: "0 18px" }} onClick={() => setShowNew(true)}><Plus size={15} /> Nova tarefa</button>}
+        {view === "tasks" && <button className="ap-btn primary" onClick={() => setShowNew(true)}><Plus size={15} /> Nova tarefa</button>}
       </div>
 
       {msg && <div className={`admin-feedback ${msg.type}`} style={{ marginBottom: 12 }}>{msg.text}</div>}
@@ -130,7 +130,7 @@ export default function TasksPage({ profile }) {
               </div>
             );
           })}
-          {tasks && !shown.length && <div className="cv-muted" style={{ padding: "10px 0" }}>Nenhuma tarefa aqui.</div>}
+          {tasks && !shown.length && <div className="ap-empty" style={{ padding: "28px 0" }}>Nenhuma tarefa aqui.</div>}
         </div>
       ) : (
         <div className="card">
