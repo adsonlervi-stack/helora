@@ -354,6 +354,7 @@ export const crm = {
   createEvent: (d) => api.post("/crm/events", d).then((r) => r.data),
   updateEvent: (id, d) => api.patch(`/crm/events/${id}`, d).then((r) => r.data),
   deleteEvent: (id) => api.delete(`/crm/events/${id}`),
+  templates: () => api.get("/crm/templates").then((r) => r.data),
   openLeadConversation: (id, d = {}) => api.post(`/crm/leads/${id}/conversation`, d).then((r) => r.data),
   uploadLeadFile: (id, file) => { const fd = new FormData(); fd.append("file", file); return api.post(`/crm/leads/${id}/files`, fd).then((r) => r.data); },
   deleteLeadFile: (id, fileId) => api.delete(`/crm/leads/${id}/files/${fileId}`).then((r) => r.data)
