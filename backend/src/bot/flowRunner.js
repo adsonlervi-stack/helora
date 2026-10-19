@@ -27,41 +27,69 @@ import { aiChat, aiConfigured } from "../aiClient.js";
 const HUMAN_TAG = "[[HUMANO]]";
 const DONE_TAG = "[[FIM]]";
 
-/** Atendente IA: responde o cliente usando as instruções do bloco. Devolve { text, port } (port = null continua conversando). */
+/** Atendente IA: responde o cliente com base no Prompt escolhido no bloco. Devolve { text, port, prompt }. */
 async function aiTurn({ accountId, conversation, node, vars, dryRun, text }) {
   const d = node.data || {};
   const { data: acc } = await supabase.from("accounts").select("name, enabled_tabs").eq("id", accountId).maybeSingle();
   if (!aiConfigured() || (Array.isArray(acc?.enabled_tabs) && !acc.enabled_tabs.includes("ai"))) {
-    return { text: "", port: "human" }; // sem IA disponível → passa para humano
+    return { text: "", port: "human", prompt: null }; // sem IA disponível → passa para humano
   }
+  let prompt = null;
+  if (d.promptId) {
+    const { data } = await supabase.from("ai_prompts").select("*").eq("id", d.promptId).eq("account_id", accountId).maybeSingle();
+    prompt = data || null;
+  }
+  const historySize = prompt?.history_size || 20;
   let history = [];
+  let lastIn = null;
   if (dryRun) history = [{ role: "user", content: String(text || "Olá") }];
   else {
     const msgs = await listMessages(accountId, conversation.id).catch(() => []);
-    const recent = msgs.filter((m) => m.author !== "system" && m.text).slice(-24);
+    const recent = msgs.filter((m) => m.author !== "system" && (m.text || m.mediaType)).slice(-historySize);
+    lastIn = [...recent].reverse().find((m) => m.direction === "in") || null;
+    // Mídia que a IA não processa → mensagem padrão, sem gastar IA
+    if (lastIn && !String(lastIn.text || "").trim() && lastIn.mediaType) {
+      const canImage = lastIn.mediaType === "image" && prompt?.process_images && lastIn.mediaUrl;
+      if (!canImage) {
+        return { text: prompt?.unsupported_media_message || "No momento eu só consigo entender mensagens de texto. Pode me escrever por aqui? 😊", port: null, prompt };
+      }
+    }
     for (const m of recent) {
       const role = m.direction === "in" ? "user" : "assistant";
+      let content;
+      if (role === "user" && m.mediaType === "image" && prompt?.process_images && m.mediaUrl && m === lastIn) {
+        content = [{ type: "image", source: { type: "url", url: m.mediaUrl } }, { type: "text", text: m.text || "(o cliente enviou esta imagem)" }];
+      } else {
+        content = m.text || (m.mediaType ? `[${m.mediaType}]` : "");
+      }
+      if (!content) continue;
       const last = history[history.length - 1];
-      if (last && last.role === role) last.content += `\n${m.text}`;
-      else history.push({ role, content: m.text });
+      if (last && last.role === role && typeof last.content === "string" && typeof content === "string") last.content += `\n${content}`;
+      else history.push({ role, content });
     }
     while (history.length && history[0].role !== "user") history.shift();
     if (!history.length) history = [{ role: "user", content: String(text || "Olá") }];
   }
+  const instructions = prompt?.prompt || d.instructions || "";
   const system = [
-    `Você é o atendente virtual de ${acc?.name || "uma empresa"} no WhatsApp. Responda em português do Brasil, de forma curta, cordial e humana (no máximo 3 frases por mensagem, sem markdown além de *negrito*).`,
-    d.instructions ? `Instruções da empresa:\n${d.instructions}` : "",
-    d.knowledge ? `Base de conhecimento (use só isto para informações da empresa; não invente preços, prazos ou políticas):\n${d.knowledge}` : "Não invente preços, prazos ou políticas.",
+    `Você é o atendente virtual de ${acc?.name || "uma empresa"} no WhatsApp. Responda em português do Brasil, de forma natural, curta e humana (sem markdown além de *negrito*).`,
+    instructions ? `PROMPT DA EMPRESA (siga à risca):\n${instructions}` : "",
+    d.knowledge ? `Base de conhecimento:\n${d.knowledge}` : "",
+    "Não invente preços, prazos ou políticas que não estejam no prompt.",
     vars?.nome ? `Nome do cliente: ${vars.nome}.` : "",
-    `Se o cliente pedir para falar com uma pessoa, estiver irritado, ou você não souber responder com segurança, escreva uma frase avisando que vai chamar um atendente e termine a mensagem com ${HUMAN_TAG}.`,
+    `Se o cliente pedir para falar com uma pessoa, estiver irritado, ou você não souber responder com segurança, avise que vai transferir para um atendente e termine a mensagem com ${HUMAN_TAG}.`,
     `Se a dúvida do cliente foi resolvida e ele se despediu ou agradeceu, responda e termine com ${DONE_TAG}.`
   ].filter(Boolean).join("\n\n");
-  let out = await aiChat({ system, messages: history, maxTokens: 400 });
+  let out = await aiChat({ system, messages: history, maxTokens: 500 });
   let port = null;
   if (out.includes(HUMAN_TAG)) port = "human";
   else if (out.includes(DONE_TAG)) port = "done";
   out = out.replaceAll(HUMAN_TAG, "").replaceAll(DONE_TAG, "").trim();
-  return { text: out, port };
+  if (port === "human" && prompt) {
+    if (prompt.transfer_message_enabled === false) out = "";
+    else if (prompt.transfer_message) out = prompt.transfer_message;
+  }
+  return { text: out, port, prompt };
 }
 
 const MAX_STEPS = 40;
@@ -174,7 +202,7 @@ export async function runGraph(ctx) {
   const waitingNode = conversation.botNodeId ? nodeById(graph, conversation.botNodeId) : null;
   if (waitingNode && waitingNode.type === "ai") {
     const turns = (vars.__aiTurns || 0) + 1;
-    const max = parseInt(waitingNode.data?.maxTurns, 10) || 12;
+    const max = parseInt(waitingNode.data?.maxTurns, 10) || 20;
     let r;
     try {
       r = turns > max ? { text: "", port: "human" } : await aiTurn({ accountId, conversation, node: waitingNode, vars, dryRun, text });
@@ -190,6 +218,7 @@ export async function runGraph(ctx) {
     }
     delete vars.__aiTurns;
     currentId = nextOf(graph, waitingNode.id, r.port);
+    if (r.port === "human" && r.prompt?.transfer_department_id) patch.departmentId = r.prompt.transfer_department_id;
     if (!currentId && r.port === "human") {
       patch.mode = "human";
       return { handled: true, state: { botNodeId: null, flowVars: { ...vars, __ended: true }, ...patch }, log };
@@ -304,6 +333,7 @@ export async function runGraph(ctx) {
         return { handled: true, state: { botNodeId: node.id, flowVars: vars }, log };
       }
       currentId = nextOf(graph, node.id, r.port);
+      if (r.port === "human" && r.prompt?.transfer_department_id) patch.departmentId = r.prompt.transfer_department_id;
       if (!currentId && r.port === "human") {
         patch.mode = "human";
         return { handled: true, state: { botNodeId: null, flowVars: { ...vars, __ended: true }, ...patch }, log };
