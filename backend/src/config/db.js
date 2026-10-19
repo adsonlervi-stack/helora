@@ -2632,7 +2632,7 @@ export async function getBilling(accountId) {
     usage: { users: users || 0, numbers: numbers || 0 },
     invoices: (invoices || []).map((i) => ({
       id: i.id, reference: i.reference, amount: Number(i.amount || 0), dueDate: i.due_date, status: i.status,
-      paidAt: i.paid_at, paymentLink: i.payment_link || i.link || null, notes: i.notes || null
+      paidAt: i.paid_at, paymentLink: i.payment_link || i.link || null, notes: i.notes || null, boletoUrl: i.boleto_url || null
     })),
     credits: { balance, ledger }
   };
