@@ -291,16 +291,22 @@ function ForwardModal({ message, conversations, onClose, onSend }) {
   );
 }
 
-function ScheduleModal({ conversation, initialText, onClose }) {
+function ScheduleModal({ conversation, initialText, onClose, defaultSign }) {
   const pad = (n) => String(n).padStart(2, "0");
   const d = new Date(Date.now() + 60 * 60 * 1000);
   const [text, setText] = useState(initialText || "");
   const [when, setWhen] = useState(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
   const [list, setList] = useState([]);
   const [err, setErr] = useState(null);
+  const [sign, setSign] = useState(!!defaultSign);
+  const [recurrence, setRecurrence] = useState("none");
+  const [recurDay, setRecurDay] = useState(d.getDate() > 28 ? 28 : d.getDate());
+  const [recurEvery, setRecurEvery] = useState(15);
+  const [needsAttachment, setNeedsAttachment] = useState(false);
+  const [file, setFile] = useState(null);
   const load = () =>
     getScheduledMessages()
-      .then((all) => setList(all.filter((m) => m.conversationId === conversation.id && m.status === "pending")))
+      .then((all) => setList(all.filter((m) => m.conversationId === conversation.id && ["pending", "waiting_attachment"].includes(m.status))))
       .catch(() => {});
   useEffect(() => {
     load();
@@ -308,8 +314,12 @@ function ScheduleModal({ conversation, initialText, onClose }) {
   const save = async (e) => {
     e.preventDefault();
     try {
-      await createScheduledMessageApi({ conversationId: conversation.id, text: text.trim(), sendAt: new Date(when).toISOString() });
+      await createScheduledMessageApi({
+        conversationId: conversation.id, text: text.trim(), sendAt: new Date(when).toISOString(), sign,
+        recurrence, recurDay, recurEveryDays: recurEvery, needsAttachment: recurrence !== "none" && needsAttachment
+      }, needsAttachment ? null : file);
       setText("");
+      setFile(null);
       setErr(null);
       load();
     } catch (e2) {
@@ -322,15 +332,33 @@ function ScheduleModal({ conversation, initialText, onClose }) {
         <div className="modal-header"><h3>Agendar mensagem</h3><button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button></div>
         <p className="cv-muted" style={{ margin: 0 }}>Para {conversation.name}. Enviada automaticamente no dia e hora escolhidos.</p>
         <label className="login-field"><span>Mensagem</span><textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} autoFocus /></label>
-        <label className="login-field"><span>Enviar em</span><input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} /></label>
+        <label className="login-field"><span>{recurrence === "none" ? "Enviar em" : "Primeiro envio em"}</span><input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} /></label>
+        <label className="login-field"><span>Repetir</span>
+          <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
+            <option value="none">Não repetir (envio único)</option>
+            <option value="monthly">Todo mês, num dia fixo</option>
+            <option value="interval">A cada X dias</option>
+          </select>
+        </label>
+        {recurrence === "monthly" && <label className="login-field"><span>Dia do mês</span><input type="number" min="1" max="28" value={recurDay} onChange={(e) => setRecurDay(e.target.value)} /></label>}
+        {recurrence === "interval" && <label className="login-field"><span>Repetir a cada (dias)</span><input type="number" min="1" max="365" value={recurEvery} onChange={(e) => setRecurEvery(e.target.value)} /></label>}
+        {recurrence !== "none" && (
+          <label className="bh-switch"><input type="checkbox" checked={needsAttachment} onChange={(e) => setNeedsAttachment(e.target.checked)} /> O anexo muda a cada envio (ex.: boleto) — me pedir o arquivo antes de enviar</label>
+        )}
+        {!needsAttachment && (
+          <label className="login-field"><span>Anexo (opcional)</span><input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} /></label>
+        )}
+        <label className="bh-switch"><input type="checkbox" checked={sign} onChange={(e) => setSign(e.target.checked)} /> Enviar com a minha assinatura</label>
         {err && <div className="admin-feedback error">{err}</div>}
-        <button className="connect-btn" disabled={!text.trim()}>Agendar</button>
+        <button className="connect-btn" disabled={!text.trim() && !file && !needsAttachment}>Agendar</button>
         {list.length > 0 && (
           <div className="sched-list">
             <div className="fe-field-label">Agendadas nesta conversa</div>
             {list.map((m) => (
               <div key={m.id} className="sched-item">
-                <span><strong>{new Date(m.sendAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong> · {m.text}</span>
+                <span><strong>{new Date(m.sendAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong>
+                  {m.recurrence === "monthly" ? ` · todo dia ${m.recurDay}` : m.recurrence === "interval" ? ` · a cada ${m.recurEveryDays} dias` : ""}
+                  {m.status === "waiting_attachment" ? " · ⚠️ aguardando anexo" : ""} · {m.text}{m.fileName ? ` 📎 ${m.fileName}` : ""}</span>
                 <button type="button" className="icon-btn" title="Cancelar" onClick={async () => { await cancelScheduledMessageApi(m.id); load(); }}><Trash2 size={14} /></button>
               </div>
             ))}
@@ -1014,7 +1042,7 @@ export default function ChatWindow({
           onSend={onForwardMessage}
         />
       )}
-      {showSchedule && <ScheduleModal conversation={conversation} initialText={text} onClose={() => setShowSchedule(false)} />}
+      {showSchedule && <ScheduleModal conversation={conversation} initialText={text} defaultSign={signOn} onClose={() => setShowSchedule(false)} />}
       {special && <SpecialModal kind={special} onClose={() => setSpecial(null)} onSend={onSendSpecial} />}
 
       {showTransfer && (

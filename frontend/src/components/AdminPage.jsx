@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Building2, Megaphone, Trash2, LogIn, Briefcase } from "lucide-react";
+import { Building2, Megaphone, Trash2, LogIn, Briefcase, Plus, Pause, Play } from "lucide-react";
+import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import { DashboardTab, InvoicesTab, CommercialEditor, SupportTab, CreditsTab, PlansTab, brl } from "./GestaoTabs.jsx";
 import {
   getAdminAccounts,
@@ -48,7 +49,7 @@ function AccountsTab() {
   }, []);
 
   const handleCreate = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     if (!name.trim()) return;
     if (!(parseInt(maxUsers, 10) >= 1) || maxChannels === "") {
       setFeedback({ type: "error", text: "Defina a quantidade de usuários e de canais de WhatsApp da empresa." });
@@ -81,6 +82,7 @@ function AccountsTab() {
       setMaxUsers("");
       setMaxChannels("");
       setAllowCloud(false);
+      setShowNew(false);
       load();
     } catch (err) {
       setFeedback({ type: "error", text: err.response?.data?.error || err.message });
@@ -99,72 +101,77 @@ function AccountsTab() {
     setBusyId(null);
   };
 
+  const [showNew, setShowNew] = useState(false);
+  const [q, setQ] = useState("");
+  const shown = accounts.filter((a) => a.name.toLowerCase().includes(q.toLowerCase()));
+  const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
   return (
     <>
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title">Nova empresa</div>
-        <div className="card-subtitle">
-          Só o nome é obrigatório. Depois é só clicar em <strong>Entrar</strong> para configurar
-          tudo por dentro (usuários, WhatsApp, setores). Se já quiser criar o gestor, preencha
-          e-mail e senha; sem senha, ele recebe convite por e-mail.
-        </div>
-
-        <form className="company-create-form" onSubmit={handleCreate}>
-          <label className="cc-field cc-wide"><span>Nome da empresa *</span><input value={name} onChange={(e) => setName(e.target.value)} /></label>
-          <label className="cc-field"><span>Usuários liberados *</span><input type="number" min="1" inputMode="numeric" value={maxUsers} onChange={(e) => setMaxUsers(e.target.value)} placeholder="Ex: 5" /></label>
-          <label className="cc-field"><span>Canais de WhatsApp *</span><input type="number" min="0" inputMode="numeric" value={maxChannels} onChange={(e) => setMaxChannels(e.target.value)} placeholder="Ex: 2" /></label>
-          <label className="cc-check cc-wide"><input type="checkbox" checked={allowCloud} onChange={(e) => setAllowCloud(e.target.checked)} /> Liberar integração com a API oficial do WhatsApp (Meta)</label>
-          <label className="cc-field"><span>Nome do gestor</span><input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} /></label>
-          <label className="cc-field"><span>E-mail do gestor</span><input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} /></label>
-          <label className="cc-field"><span>Senha do gestor (mín. 6)</span><input type="password" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} autoComplete="new-password" /></label>
-          <div className="cc-actions cc-wide">
-            <button type="submit" className="connect-btn" disabled={loading || !name.trim()}>
-              {loading ? "Criando..." : "Criar empresa"}
-            </button>
-          </div>
-        </form>
-
-        {feedback && <div className={`admin-feedback ${feedback.type}`}>{feedback.text}</div>}
-      </div>
-
-      <div className="card">
-        <div className="card-title">Empresas cadastradas</div>
-        <div className="card-subtitle">{accounts.length} no total</div>
-
+      <div className="ap-page-head">
         <div>
-          {accounts.map((a) => (
-            <div className="reply-item admin-account-row" key={a.id}>
-              <span className="agent-avatar" style={{ marginBottom: 0, width: 32, height: 32 }}>
-                <Building2 size={15} />
-              </span>
-              <span className="reply-response">
-                <strong>{a.name}</strong>
-                <span style={{ color: "var(--text-muted)", marginLeft: 8, fontSize: 12 }}>
-                  {a.plan_name ? `${a.plan_name} · ` : ""}{brl(a.monthly_price)}/mês · vence dia {a.due_day ?? 10} ·{" "}
-                  {a.usersCount} usuário(s) · desde {formatDate(a.created_at)}
-                </span>
-              </span>
-              <span className={`account-status-badge ${a.status}`}>{STATUS_LABEL[a.status] || a.status}</span>
-              <button className="connect-btn admin-enter-btn" onClick={() => enterAccount(a)}>
-                <LogIn size={14} style={{ marginRight: 5, verticalAlign: -2 }} />
-                Entrar
-              </button>
-              <button className="resolve-btn" onClick={() => setEditing(a)}>
-                <Briefcase size={13} style={{ marginRight: 5, verticalAlign: -2 }} />
-                Comercial
-              </button>
-              <button className="resolve-btn" disabled={busyId === a.id} onClick={() => toggleStatus(a)}>
-                {a.status === "suspended" ? "Reativar" : "Suspender"}
-              </button>
-            </div>
-          ))}
-          {accounts.length === 0 && (
-            <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0" }}>
-              Nenhuma empresa cadastrada ainda.
-            </div>
-          )}
+          <p style={{ fontSize: 15 }}>{accounts.length} {accounts.length === 1 ? "empresa cadastrada" : "empresas cadastradas"}</p>
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <input className="ap-search" placeholder="Buscar empresa" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Button onClick={() => { setFeedback(null); setShowNew(true); }}><Plus size={16} /> Nova empresa</Button>
         </div>
       </div>
+
+      {feedback && !showNew && <div className={`admin-feedback ${feedback.type}`} style={{ marginBottom: 14 }}>{feedback.text}</div>}
+
+      <div className="ap-list">
+        {shown.map((a) => (
+          <div className="ap-list-row" key={a.id}>
+            <span className="ap-avatar">{initials(a.name) || <Building2 size={16} />}</span>
+            <div className="ap-list-main">
+              <strong>{a.name}</strong>
+              <span>
+                {a.plan_name || "Personalizado"} · {brl(a.monthly_price)}/mês · vence dia {a.due_day ?? 10} · {a.usersCount}/{a.max_users ?? "–"} usuários · desde {formatDate(a.created_at)}
+              </span>
+            </div>
+            <span className={`ap-pill ${a.status}`}>{STATUS_LABEL[a.status] || a.status}</span>
+            <div className="ap-list-actions">
+              <Button onClick={() => enterAccount(a)}><LogIn size={14} /> Entrar</Button>
+              <Button variant="secondary" onClick={() => setEditing(a)}><Briefcase size={14} /> Editar</Button>
+              <Button variant={a.status === "suspended" ? "secondary" : "danger"} disabled={busyId === a.id} onClick={() => toggleStatus(a)}
+                title={a.status === "suspended" ? "Reativar" : "Suspender"}>
+                {a.status === "suspended" ? <Play size={14} /> : <Pause size={14} />}
+              </Button>
+            </div>
+          </div>
+        ))}
+        {!shown.length && <div className="ap-empty">{accounts.length ? "Nenhuma empresa encontrada." : "Nenhuma empresa ainda. Clique em Nova empresa para começar."}</div>}
+      </div>
+
+      {showNew && (
+        <Sheet
+          title="Nova empresa"
+          subtitle="Depois de criar, clique em Entrar para configurar WhatsApp, setores e equipe."
+          onClose={() => setShowNew(false)}
+          footer={<>
+            <Button variant="secondary" onClick={() => setShowNew(false)}>Cancelar</Button>
+            <Button disabled={loading || !name.trim() || !maxUsers || maxChannels === ""} onClick={async (e) => { await handleCreate(e); }}>
+              {loading ? "Criando…" : "Criar empresa"}
+            </Button>
+          </>}
+        >
+          <Group title="Empresa">
+            <Row label="Nome"><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Obrigatório" /></Row>
+          </Group>
+          <Group title="Limites do contrato" hint="Obrigatório. Dá para alterar depois em Editar.">
+            <Row label="Usuários"><input type="number" min="1" inputMode="numeric" value={maxUsers} onChange={(e) => setMaxUsers(e.target.value)} placeholder="Ex: 5" /></Row>
+            <Row label="Números de WhatsApp"><input type="number" min="0" inputMode="numeric" value={maxChannels} onChange={(e) => setMaxChannels(e.target.value)} placeholder="Ex: 2" /></Row>
+            <Row label="API oficial do WhatsApp"><Switch checked={allowCloud} onChange={setAllowCloud} /></Row>
+          </Group>
+          <Group title="Gestor (opcional)" hint="Com senha, o gestor já entra direto. Sem senha, ele recebe um convite por e-mail.">
+            <Row label="Nome"><input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Nome do gestor" /></Row>
+            <Row label="E-mail"><input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="gestor@empresa.com" /></Row>
+            <Row label="Senha"><input type="password" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} placeholder="Mínimo 6 caracteres" autoComplete="new-password" /></Row>
+          </Group>
+          {feedback && <div className={`admin-feedback ${feedback.type}`} style={{ marginTop: 14 }}>{feedback.text}</div>}
+        </Sheet>
+      )}
       {editing && <CommercialEditor account={editing} onClose={() => setEditing(null)} onSaved={load} />}
     </>
   );

@@ -1,3 +1,4 @@
+import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Building2, TrendingUp, AlertTriangle, Wallet, CheckCircle2, Plus } from "lucide-react";
 import { useTyping } from "./useTyping.js";
@@ -125,59 +126,59 @@ export function CommercialEditor({ account, onClose, onSaved }) {
     setBusy(false);
   };
 
+  const toggleTab = (k) => setF((p) => ({ ...p, enabledTabs: p.enabledTabs.includes(k) ? p.enabledTabs.filter((x) => x !== k) : [...p.enabledTabs, k] }));
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card deal-modal team-editor gestao-editor" onClick={(e) => e.stopPropagation()}>
-        <h3>{account.name}</h3>
-        <div className="gestao-form-grid">
-          <label className="login-field">
-            <span>Plano</span>
-            <select className="deal-stage-select" value={planId} onChange={(e) => pickPlan(e.target.value)}>
-              <option value="">Personalizado (sem plano)</option>
-              {plans.map((p) => <option key={p.id} value={p.id}>{p.name} · {brl(p.price)}</option>)}
-            </select>
-          </label>
-          {!planId && <label className="login-field"><span>Nome do plano</span><input value={f.planName} onChange={set("planName")} placeholder="Ex: Personalizado" /></label>}
-          <label className="login-field"><span>Mensalidade (R$)</span><input value={f.monthlyPrice} onChange={set("monthlyPrice")} inputMode="decimal" /></label>
-          <label className="login-field"><span>Dia de vencimento</span><input type="number" min="1" max="28" value={f.dueDay} onChange={set("dueDay")} /></label>
-          <label className="login-field"><span>Números de WhatsApp liberados</span><input type="number" min="0" max="50" value={f.maxWhatsappChannels} onChange={set("maxWhatsappChannels")} /><small className="cv-muted">Messenger e Instagram: 1 de cada.</small></label>
-          <label className="login-field"><span>Usuários liberados</span><input type="number" min="1" max="500" value={f.maxUsers} onChange={set("maxUsers")} /></label>
-          <label className="login-field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" style={{ width: 18, height: 18 }} checked={f.allowCloudApi} onChange={(e) => setF((p) => ({ ...p, allowCloudApi: e.target.checked }))} />
-            <span>Acesso à API oficial do WhatsApp</span>
-          </label>
-          <div className="login-field" style={{ gridColumn: "1 / -1" }}>
-            <span>Abas liberadas para a empresa</span>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", marginTop: 4 }}>
-              {COMPANY_TABS.map(([k, label]) => (
-                <label key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}>
-                  <input type="checkbox" checked={f.enabledTabs.includes(k)}
-                    onChange={() => setF((p) => ({ ...p, enabledTabs: p.enabledTabs.includes(k) ? p.enabledTabs.filter((x) => x !== k) : [...p.enabledTabs, k] }))} />
-                  {label}
-                </label>
-              ))}
-            </div>
-            <small className="cv-muted">Início, Conversas, Config. e Financeiro ficam sempre liberados.</small>
-          </div>
-          <label className="login-field">
-            <span>Situação</span>
-            <select className="deal-stage-select" value={f.status} onChange={set("status")}>
-              <option value="active">Ativa</option>
-              <option value="trial">Em teste</option>
-              <option value="suspended">Suspensa</option>
-            </select>
-          </label>
-          <label className="login-field"><span>CNPJ / CPF</span><input value={f.document} onChange={set("document")} /></label>
-          <label className="login-field"><span>Responsável</span><input value={f.contactName} onChange={set("contactName")} /></label>
-          <label className="login-field"><span>Telefone</span><input value={f.contactPhone} onChange={set("contactPhone")} /></label>
-          <label className="login-field"><span>E-mail financeiro</span><input value={f.contactEmail} onChange={set("contactEmail")} /></label>
+    <Sheet
+      title={account.name}
+      subtitle="Plano, limites, módulos e dados de cobrança da empresa."
+      onClose={onClose}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+        <Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar alterações"}</Button>
+      </>}
+    >
+      <Group title="Plano e cobrança">
+        <Row label="Plano">
+          <select value={planId} onChange={(e) => pickPlan(e.target.value)}>
+            <option value="">Personalizado</option>
+            {plans.map((p) => <option key={p.id} value={p.id}>{p.name} · {brl(p.price)}</option>)}
+          </select>
+        </Row>
+        {!planId && <Row label="Nome do plano"><input value={f.planName} onChange={set("planName")} placeholder="Personalizado" /></Row>}
+        <Row label="Mensalidade (R$)"><input value={f.monthlyPrice} onChange={set("monthlyPrice")} inputMode="decimal" /></Row>
+        <Row label="Dia de vencimento"><input type="number" min="1" max="28" value={f.dueDay} onChange={set("dueDay")} /></Row>
+        <Row label="Situação">
+          <select value={f.status} onChange={set("status")}>
+            <option value="active">Ativa</option>
+            <option value="trial">Em teste</option>
+            <option value="suspended">Suspensa</option>
+          </select>
+        </Row>
+      </Group>
+
+      <Group title="Limites" hint="Messenger e Instagram: 1 canal de cada, sempre.">
+        <Row label="Usuários"><input type="number" min="1" max="500" value={f.maxUsers} onChange={set("maxUsers")} /></Row>
+        <Row label="Números de WhatsApp"><input type="number" min="0" max="50" value={f.maxWhatsappChannels} onChange={set("maxWhatsappChannels")} /></Row>
+        <Row label="API oficial do WhatsApp"><Switch checked={f.allowCloudApi} onChange={(v) => setF((p) => ({ ...p, allowCloudApi: v }))} /></Row>
+      </Group>
+
+      <Group title="Módulos liberados" hint="Início, Conversas, Config. e Financeiro ficam sempre disponíveis.">
+        <div className="ap-chips">
+          {COMPANY_TABS.map(([k, label]) => (
+            <button type="button" key={k} className={`ap-chip ${f.enabledTabs.includes(k) ? "on" : ""}`} onClick={() => toggleTab(k)}>{label}</button>
+          ))}
         </div>
-        <label className="login-field"><span>Observações</span><textarea rows={3} value={f.notes} onChange={set("notes")} /></label>
-        {error && <div className="admin-feedback error">{error}</div>}
-        <button className="connect-btn" disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>
-        <button className="modal-close" onClick={onClose}>Cancelar</button>
-      </div>
-    </div>
+      </Group>
+
+      <Group title="Dados da empresa">
+        <Row label="CNPJ / CPF"><input value={f.document} onChange={set("document")} placeholder="Obrigatório para PIX" /></Row>
+        <Row label="Responsável"><input value={f.contactName} onChange={set("contactName")} placeholder="Nome" /></Row>
+        <Row label="Telefone"><input value={f.contactPhone} onChange={set("contactPhone")} placeholder="(00) 00000-0000" inputMode="tel" /></Row>
+        <Row label="E-mail financeiro"><input value={f.contactEmail} onChange={set("contactEmail")} placeholder="financeiro@empresa.com" inputMode="email" /></Row>
+        <Row label="Observações" stack><textarea rows={3} value={f.notes} onChange={set("notes")} placeholder="Anotações internas" /></Row>
+      </Group>
+      {error && <div className="admin-feedback error" style={{ marginTop: 14 }}>{error}</div>}
+    </Sheet>
   );
 }
 
