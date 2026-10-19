@@ -91,6 +91,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
     maxWhatsappChannels: account.max_whatsapp_channels ?? 1,
     maxUsers: account.max_users ?? 3,
     allowCloudApi: !!account.allow_cloud_api,
+    billingMethod: account.billing_method || "manual",
     enabledTabs: Array.isArray(account.enabled_tabs) ? account.enabled_tabs : COMPANY_TABS.map(([k]) => k),
     status: account.status,
     document: account.document || "",
@@ -138,7 +139,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
         <Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar alterações"}</Button>
       </>}
     >
-      <Group title="Plano e cobrança">
+      <Group title="Plano e cobrança" hint={f.billingMethod === "asaas" ? "Automática: o sistema gera a fatura, cobra por PIX no Asaas, manda os e-mails e bloqueia 2 dias após o vencimento sem pagamento." : "Manual: crie a cobrança em Gestão → Cobranças e anexe o boleto. Nada é cobrado ou bloqueado automaticamente."}>
         <Row label="Plano">
           <select value={planId} onChange={(e) => pickPlan(e.target.value)}>
             <option value="">Personalizado</option>
@@ -148,6 +149,12 @@ export function CommercialEditor({ account, onClose, onSaved }) {
         {!planId && <Row label="Nome do plano"><input value={f.planName} onChange={set("planName")} placeholder="Personalizado" /></Row>}
         <Row label="Mensalidade (R$)"><input value={f.monthlyPrice} onChange={set("monthlyPrice")} inputMode="decimal" /></Row>
         <Row label="Dia de vencimento"><input type="number" min="1" max="28" value={f.dueDay} onChange={set("dueDay")} /></Row>
+        <Row label="Forma de cobrança">
+          <select value={f.billingMethod} onChange={set("billingMethod")}>
+            <option value="asaas">Recorrente automática (Asaas · PIX)</option>
+            <option value="manual">Manual (você anexa o boleto)</option>
+          </select>
+        </Row>
         <Row label="Situação">
           <select value={f.status} onChange={set("status")}>
             <option value="active">Ativa</option>

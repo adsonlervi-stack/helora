@@ -71,7 +71,7 @@ export default function FinancePage() {
                     <td>{i.reference}</td><td>{brl(i.amount)}</td><td>{date(i.dueDate)}</td>
                     <td><span className={`invoice-badge ${cls}`}>{label}</span></td>
                     <td>{i.paidAt ? date(i.paidAt) : "—"}</td>
-                    <td>{(i.status === "pending" || i.status === "overdue") && <button className="pill-btn primary" onClick={() => setPixFor(i)}>Pagar com PIX</button>}
+                    <td>{(i.status === "pending" || i.status === "overdue") && d.account.billingMethod === "asaas" && <button className="pill-btn primary" onClick={() => setPixFor(i)}>Pagar com PIX</button>}
                       {i.boletoUrl && <a className="pill-btn" href={i.boletoUrl} target="_blank" rel="noreferrer">Boleto</a>}
                       {i.paymentLink && i.status === "pending" && <a className="pill-btn" href={i.paymentLink} target="_blank" rel="noreferrer"><ExternalLink size={13} /></a>}</td>
                   </tr>

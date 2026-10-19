@@ -808,7 +808,7 @@ export default function ChatWindow({
           <button className="back-btn" onClick={onBack}>
             <ArrowLeft size={20} />
           </button>
-          <button className="chat-who" onClick={() => setPanelOpen(true)} title="Ver dados do cliente">
+          <button className="chat-who" onClick={() => setPanelOpen((v) => !v)} title="Abrir / fechar dados do cliente">
           <Avatar name={conversation.name} url={conversation.avatarUrl} size={40} />
           <div>
             <div className="chat-header-name">{conversation.name}</div>
