@@ -25,6 +25,8 @@ export const invalidateWebhooks = (accountId) => cache.delete(accountId);
 
 export async function emitEvent(accountId, event, data) {
   try {
+    const { apiEnabled } = await import("./governance.js");
+    if (!(await apiEnabled(accountId))) return;
     const hooks = (await hooksFor(accountId)).filter((h) => event === "teste" || !h.events?.length || h.events.includes(event));
     for (const h of hooks) {
       const body = JSON.stringify({ evento: event, empresaId: accountId, data: new Date().toISOString(), dados: data });

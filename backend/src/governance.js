@@ -14,7 +14,8 @@ const TAB_BY_PATH = [
   [/^\/api\/(flows|bot-flow|agents)(\/|$)/, "agents"],
   [/^\/api\/reports(\/|$)/, "reports"],
   [/^\/api\/deals(\/|$)/, "deals"],
-  [/^\/api\/tasks(\/|$)/, "tasks"]
+  [/^\/api\/tasks(\/|$)/, "tasks"],
+  [/^\/api\/(api-keys|webhooks)(\/|$)/, "api"]
 ];
 const tabCache = new Map(); // accountId -> { at, enabled, agent }
 
@@ -30,6 +31,11 @@ async function accountTabs(accountId) {
   tabCache.set(accountId, v);
   return v;
 }
+/** API/integrações: só para empresas liberadas explicitamente pela Gestora. */
+export async function apiEnabled(accountId) {
+  const t = await accountTabs(accountId);
+  return !!t.enabled?.includes("api");
+}
 export const invalidateTabs = (accountId) => tabCache.delete(accountId);
 
 /** Bloqueia no servidor as abas que a empresa não contratou ou que o atendente não pode ver. */
@@ -41,6 +47,7 @@ export async function enforceTabs(req, res, next) {
     if (!rule) return next();
     const tab = rule[1];
     const t = await accountTabs(req.accountId);
+    if (tab === "api") return t.enabled?.includes("api") ? next() : res.status(403).json({ error: "API e integrações não estão liberadas para a sua empresa. Fale com o suporte." });
     if (t.enabled && !t.enabled.includes(tab)) return res.status(403).json({ error: "Este módulo não está liberado para a sua empresa." });
     // Atendente: leitura de relatórios/pipeline/tarefas só se a aba estiver liberada a ele
     if (req.role === "agent" && !t.agent.includes(tab)) {
