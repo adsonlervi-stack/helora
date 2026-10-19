@@ -36,6 +36,8 @@ const DEFAULT_STAGES = [
   { id: "perdido", name: "Perdido", color: "#ff453a" }
 ];
 const onlyDigits = (v) => String(v || "").replace(/\D/g, "");
+// "1.500,00", "1500.5", 1500 → número
+const money = (v) => { if (typeof v === "number") return v; const t = String(v ?? "").replace(/[^\d,.-]/g, ""); return Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t) || 0; };
 
 // ---------------------------------------------------------------- Automações por coluna
 // Rodam quando um lead ENTRA na coluna: mensagem no WhatsApp, tarefa, follow-up na agenda, trocar responsável.
@@ -172,7 +174,7 @@ function leadRow(b) {
     if (b[k] !== undefined) row[col] = b[k] === "" ? null : b[k];
   }
   if (row.phone) row.phone = onlyDigits(row.phone);
-  if (b.value !== undefined) row.value = b.value === "" || b.value === null ? null : Number(String(b.value).replace(/\./g, "").replace(",", ".")) || 0;
+  if (b.value !== undefined) row.value = b.value === "" || b.value === null ? null : money(b.value);
   if (b.ownerId !== undefined) row.owner_id = b.ownerId || null;
   if (b.tagIds !== undefined) row.tag_ids = Array.isArray(b.tagIds) ? b.tagIds : [];
   if (b.conversationId !== undefined) row.conversation_id = b.conversationId || null;
@@ -341,11 +343,11 @@ router.put("/leads/:id/products", async (req, res) => {
     await supabase.from("crm_lead_products").delete().eq("lead_id", req.params.id).eq("account_id", req.accountId);
     if (items.length) {
       const { error } = await supabase.from("crm_lead_products").insert(items.map((i) => ({
-        account_id: req.accountId, lead_id: req.params.id, product_id: i.productId, qty: Number(i.qty) || 1, price: Number(i.price) || 0
+        account_id: req.accountId, lead_id: req.params.id, product_id: i.productId, qty: Number(i.qty) || 1, price: money(i.price)
       })));
       if (error) throw error;
     }
-    const total = items.reduce((s, i) => s + (Number(i.qty) || 1) * (Number(i.price) || 0), 0);
+    const total = items.reduce((s, i) => s + (Number(i.qty) || 1) * money(i.price), 0);
     const { data, error } = await supabase.from("crm_leads").update({ value: items.length ? total : null }).eq("account_id", req.accountId).eq("id", req.params.id).select(LEAD_SELECT).single();
     if (error) throw error;
     res.json(mapLead(data));
@@ -401,7 +403,7 @@ router.post("/products", async (req, res) => {
     if (!String(b.name || "").trim()) return res.status(400).json({ error: "Dê um nome ao produto." });
     const { data, error } = await supabase.from("crm_products").insert({
       account_id: req.accountId, name: String(b.name).trim().slice(0, 120), description: b.description || null,
-      price: Number(String(b.price || 0).replace(",", ".")) || 0, recurring: !!b.recurring, active: b.active !== false
+      price: money(b.price), recurring: !!b.recurring, active: b.active !== false
     }).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -413,7 +415,7 @@ router.patch("/products/:id", async (req, res) => {
     const patch = {};
     if (b.name !== undefined) patch.name = String(b.name).slice(0, 120);
     if (b.description !== undefined) patch.description = b.description;
-    if (b.price !== undefined) patch.price = Number(String(b.price).replace(",", ".")) || 0;
+    if (b.price !== undefined) patch.price = money(b.price);
     if (b.recurring !== undefined) patch.recurring = !!b.recurring;
     if (b.active !== undefined) patch.active = !!b.active;
     const { data, error } = await supabase.from("crm_products").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
