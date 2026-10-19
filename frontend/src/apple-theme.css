@@ -1568,3 +1568,21 @@ img, video { max-width: 100%; }
 .crm-cards::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
 .crm-col:hover .crm-cards::-webkit-scrollbar-thumb { background: rgba(0,0,0,.16); }
 .crm-col { flex-basis: 300px; }
+
+/* ===== Densidade de tela: em computador o sistema aparece como no zoom de 90% =====
+   (o navegador continua em 100%; alturas baseadas na tela são compensadas) */
+@media (min-width: 1100px) {
+  html { zoom: .9; }
+  .shell { height: calc(100vh / .9) !important; }
+  .auth-loading, .login-shell { height: calc(100vh / .9); }
+  .login2, .login2-left { min-height: calc(100vh / .9); }
+  .fe { height: calc(100vh / .9 - 64px); }
+  .crm-col, .kanban-col { max-height: calc(100vh / .9 - 230px); }
+  .ap-sheet { max-height: min(calc(88vh / .9), 900px); }
+}
+
+/* ===== CRM: todas as colunas com a mesma largura ===== */
+.crm-board > .crm-col { flex: 0 0 300px !important; width: 300px; min-width: 300px; max-width: 300px; box-sizing: border-box; }
+.crm-col .crm-cards, .crm-col .crm-card, .crm-col-head { min-width: 0; }
+.crm-col-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) { .crm-board > .crm-col { flex-basis: 84vw !important; width: 84vw; min-width: 84vw; max-width: 84vw; } }
