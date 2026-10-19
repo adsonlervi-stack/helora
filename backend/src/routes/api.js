@@ -161,6 +161,7 @@ import { sendMetaMessage } from "../meta/metaClient.js";
 import { CSAT_PROMPT_TEXT } from "../bot/engine.js";
 import { sendTextToConversation, sendSpecialToConversation, baileysQuoted } from "../messaging.js";
 import { requireAuth, requireOwner } from "../middleware/auth.js";
+import { enforceTabs, logAccess, listConversationAudit, notifySupport, emailContract, invalidateTabs, listAccessLogs } from "../governance.js";
 import { uploadMedia, uploadAvatar } from "../storage.js";
 import { convertToOggOpus } from "../audio.js";
 
@@ -170,6 +171,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 
 // Todas as rotas abaixo exigem login — cada uma só enxerga/edita dados
 // da própria conta (req.accountId, preenchido pelo middleware).
 router.use(requireAuth);
+router.use(enforceTabs);
 
 // Um atendente (role 'agent') só pode agir numa conversa do próprio setor
 // ou atribuída a ele — a "visão de túnel" do PRD. Gestor/owner e super
@@ -275,9 +277,31 @@ router.get("/legal/status", async (req, res) => {
     res.json({ termsAccepted: true, contractRequired: false });
   }
 });
+router.post("/session/login", async (req, res) => {
+  await logAccess(req, "login");
+  res.sendStatus(204);
+});
+
+router.get("/access-logs", requireOwner, async (req, res) => {
+  try {
+    res.json(await listAccessLogs({ accountId: req.accountId, limit: 300 }));
+  } catch (err) {
+    res.status(500).json({ error: /access_logs/.test(err.message) ? "Rode a migration 024 no Supabase." : err.message });
+  }
+});
+
+router.get("/conversations/:id/audit", requireOwner, async (req, res) => {
+  try {
+    res.json(await listConversationAudit(req.accountId, req.params.id));
+  } catch (err) {
+    res.status(500).json({ error: /message_audit/.test(err.message) ? "Rode a migration 024 no Supabase." : err.message });
+  }
+});
+
 router.post("/legal/accept", async (req, res) => {
   try {
     await acceptLegal(req.userId, req.accountId, { contract: !!req.body?.contract && req.role === "owner" });
+    if (req.body?.contract && req.role === "owner") emailContract({ userId: req.userId, accountId: req.accountId });
     res.sendStatus(204);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -770,6 +794,7 @@ router.post("/support/messages", async (req, res) => {
         text
       })
     );
+    notifySupport({ accountId: req.accountId, userName: req.userName, text });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1712,6 +1737,7 @@ router.get("/account/tabs", async (req, res) => {
 
 router.put("/account/agent-tabs", requireOwner, async (req, res) => {
   try {
+    invalidateTabs(req.accountId);
     res.json({ agentTabs: await setAgentTabs(req.accountId, req.body?.tabs) });
   } catch (err) {
     res.status(500).json({ error: err.message });

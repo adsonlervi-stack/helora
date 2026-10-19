@@ -43,6 +43,10 @@ import { mailWelcomeCompany } from "../emails.js";
 import { ensureAsaasCharge, runBillingCycle, markInvoicePaid } from "../billing.js";
 import { sendMail } from "../email.js";
 import { asaasConfigured } from "../asaas.js";
+import multer from "multer";
+import { uploadMedia } from "../storage.js";
+import { invalidateTabs, listAccessLogs } from "../governance.js";
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -186,6 +190,7 @@ router.post("/accounts", async (req, res) => {
 // Suspender / reativar / renomear empresa.
 router.patch("/accounts/:id", async (req, res) => {
   const { status, name } = req.body || {};
+  invalidateTabs(req.params.id);
   try {
     let account = null;
     if (status) {
@@ -411,3 +416,94 @@ router.delete("/announcements/:id", async (req, res) => {
 });
 
 export default router;
+
+
+// ---------------------------------------------------------------- V6 fase 4
+// Logs de acesso (todas as empresas ou uma)
+router.get("/logs/access", async (req, res) => {
+  try {
+    res.json(await listAccessLogs({ accountId: req.query.accountId || undefined, limit: 500 }));
+  } catch (err) {
+    res.status(500).json({ error: /access_logs/.test(err.message) ? "Rode a migration 024 no Supabase." : err.message });
+  }
+});
+
+// Usuários da Gestora (Master = tudo; Suporte = sem financeiro/planos)
+router.get("/masters", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("profiles").select("id, name, admin_level, created_at").eq("is_super_admin", true).order("created_at");
+    if (error) throw error;
+    const out = [];
+    for (const p of data) {
+      const { data: u } = await supabase.auth.admin.getUserById(p.id).catch(() => ({ data: null }));
+      out.push({ id: p.id, name: p.name, level: p.admin_level || "master", email: u?.user?.email || null, createdAt: p.created_at, me: p.id === req.userId });
+    }
+    res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router.post("/masters", async (req, res) => {
+  try {
+    const { name, email, password, level } = req.body || {};
+    if (!email?.trim() || !name?.trim()) return res.status(400).json({ error: "Informe nome e e-mail." });
+    if (password && String(password).length < 6) return res.status(400).json({ error: "A senha precisa ter pelo menos 6 caracteres." });
+    const user = await createAuthUser({ email: email.trim().toLowerCase(), password: password || undefined });
+    const { data: me } = await supabase.from("profiles").select("account_id").eq("id", req.userId).maybeSingle();
+    await createProfile({ userId: user.id, accountId: me?.account_id, role: "owner", name: name.trim(), isSuperAdmin: true });
+    await supabase.from("profiles").update({ admin_level: level === "support" ? "support" : "master" }).eq("id", user.id);
+    res.status(201).json({ id: user.id, invited: !password });
+  } catch (err) {
+    res.status(400).json({ error: /already|registered|exists/i.test(err.message) ? "Já existe um usuário com esse e-mail." : err.message });
+  }
+});
+router.patch("/masters/:id", async (req, res) => {
+  try {
+    if (req.params.id === req.userId) return res.status(400).json({ error: "Você não pode alterar o seu próprio nível." });
+    const patch = {};
+    if (req.body?.level) patch.admin_level = req.body.level === "support" ? "support" : "master";
+    if (req.body?.name) patch.name = String(req.body.name).trim();
+    const { error } = await supabase.from("profiles").update(patch).eq("id", req.params.id).eq("is_super_admin", true);
+    if (error) throw error;
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router.delete("/masters/:id", async (req, res) => {
+  try {
+    if (req.params.id === req.userId) return res.status(400).json({ error: "Você não pode remover o seu próprio acesso." });
+    const { error } = await supabase.from("profiles").update({ is_super_admin: false, admin_level: null }).eq("id", req.params.id);
+    if (error) throw error;
+    await supabase.auth.admin.updateUserById(req.params.id, { ban_duration: "876000h" }).catch(() => {});
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Boleto anexado manualmente na cobrança → fica no Financeiro da empresa e vai por e-mail
+router.post("/invoices/:id/boleto", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "Envie o arquivo do boleto." });
+    const { data: inv, error } = await supabase.from("invoices").select("*, accounts(name, contact_email, contact_name)").eq("id", req.params.id).maybeSingle();
+    if (error || !inv) return res.status(404).json({ error: "Cobrança não encontrada." });
+    const ext = (req.file.originalname.split(".").pop() || "pdf").toLowerCase().slice(0, 6);
+    const url = await uploadMedia({ accountId: inv.account_id, buffer: req.file.buffer, extension: ext, contentType: req.file.mimetype || "application/pdf" });
+    const { error: upErr } = await supabase.from("invoices").update({ boleto_url: url }).eq("id", inv.id);
+    if (upErr) throw new Error(/boleto_url/.test(upErr.message) ? "Rode a migration 024 no Supabase." : upErr.message);
+    let emailed = false;
+    if (req.body?.send !== "false" && inv.accounts?.contact_email && emailConfigured()) {
+      const due = inv.due_date ? inv.due_date.split("-").reverse().join("/") : "";
+      emailed = await sendMail({
+        to: inv.accounts.contact_email, name: inv.accounts.contact_name || inv.accounts.name, label: "Fatura disponível",
+        subject: `Sua fatura Helora ${inv.reference || ""} está disponível`, title: "Seu boleto chegou",
+        message: `A fatura de ${inv.reference || "este mês"} de ${Number(inv.amount || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}${due ? `, com vencimento em ${due},` : ""} está disponível.`,
+        buttonText: "Baixar boleto", buttonLink: url, note: "O boleto também fica em Financeiro, dentro do sistema."
+      }).then(() => true).catch(() => false);
+    }
+    res.json({ url, emailed });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});

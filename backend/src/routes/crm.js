@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { supabase } from "../config/db.js";
 import { requireAuth } from "../middleware/auth.js";
+import { enforceTabs } from "../governance.js";
 
 /**
  * CRM (prospecção e qualificação), separado do Pipeline de atendimento.
@@ -8,6 +9,7 @@ import { requireAuth } from "../middleware/auth.js";
  */
 const router = Router();
 router.use(requireAuth);
+router.use(enforceTabs);
 
 const isManager = (req) => req.role === "owner" || req.isSuperAdmin;
 const fail = (res, err) => {
