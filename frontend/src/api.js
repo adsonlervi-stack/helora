@@ -372,3 +372,9 @@ export const aiStatusApi = () => api.get("/ai/status").then((r) => r.data).catch
 export const googleStatusApi = () => api.get("/google/status").then((r) => r.data).catch(() => ({ configured: false, connected: false }));
 export const googleAuthUrlApi = () => api.get("/google/auth-url").then((r) => r.data.url);
 export const googleDisconnectApi = () => api.delete("/google");
+export const aiPrompts = {
+  list: () => api.get("/ai/prompts").then((r) => r.data),
+  create: (d) => api.post("/ai/prompts", d).then((r) => r.data),
+  update: (id, d) => api.patch(`/ai/prompts/${id}`, d).then((r) => r.data),
+  remove: (id) => api.delete(`/ai/prompts/${id}`)
+};

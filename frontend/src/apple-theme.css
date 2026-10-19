@@ -1303,3 +1303,7 @@ img, video { max-width: 100%; }
 .crm-toolbar strong { white-space: nowrap; }
 /* selects das folhas não cortam o texto */
 .ap-row-control select { text-overflow: ellipsis; max-width: 100%; }
+
+/* Menus e botões não selecionam texto com duplo clique */
+.sidebar, .icon-rail, .bottom-tab-bar, nav, button, .crm-tabs, .dash-presets, .kanban-col-head, .crm-col-head, .ap-list-row, .newconv-row { -webkit-user-select: none; user-select: none; }
+.prompt-area { font-family: inherit; font-size: 14px !important; line-height: 1.55; }
