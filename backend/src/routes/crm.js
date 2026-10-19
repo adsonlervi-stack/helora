@@ -7,6 +7,7 @@ import { emitEvent } from "../webhooks.js";
 import multer from "multer";
 import { randomUUID } from "crypto";
 import { uploadCrmFile, removeCrmFile } from "../storage.js";
+import { TEMPLATES, cleanFields, cleanCustom } from "../crmTemplates.js";
 import { getPrimaryWhatsAppChannel, findOrCreateConversation, updateConversation, createTask } from "../config/db.js";
 import { sendTextToConversation } from "../messaging.js";
 import { resolveWhatsAppNumber } from "../whatsapp/baileysClient.js";
@@ -24,7 +25,7 @@ router.use(enforceTabs);
 const isManager = (req) => req.role === "owner" || req.isSuperAdmin;
 const fail = (res, err) => {
   const msg = err?.message || String(err);
-  res.status(500).json({ error: /crm_/.test(msg) && /does not exist|schema cache/.test(msg) ? (/attachments|checklist/.test(msg) ? "Rode a migration 030 no Supabase." : "Rode a migration 022 (CRM) no Supabase.") : msg });
+  res.status(500).json({ error: /crm_/.test(msg) && /does not exist|schema cache/.test(msg) ? (/custom|fields|template/.test(msg) ? "Rode a migration 031 no Supabase." : /attachments|checklist/.test(msg) ? "Rode a migration 030 no Supabase." : "Rode a migration 022 (CRM) no Supabase.") : msg });
 };
 const DEFAULT_STAGES = [
   { id: "novos", name: "Leads novos", color: "#0a84ff" },
@@ -48,7 +49,10 @@ function cleanAutomations(list) {
     departmentId: a.departmentId || undefined, ownerId: a.ownerId || undefined
   }));
 }
-const fill = (t, lead) => String(t || "").replace(/\{nome\}/g, String(lead.name || "").split(" ")[0]).replace(/\{nome_completo\}/g, lead.name || "").replace(/\{empresa\}/g, lead.company || "");
+const fmtVal = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v).split("-").reverse().join("/") : String(v ?? ""));
+const fill = (t, lead) => String(t || "")
+  .replace(/\{nome\}/g, String(lead.name || "").split(" ")[0]).replace(/\{nome_completo\}/g, lead.name || "").replace(/\{empresa\}/g, lead.company || "")
+  .replace(/\{([a-z0-9_]+)\}/g, (m, k) => (lead.custom && lead.custom[k] != null ? fmtVal(lead.custom[k]) : m));
 
 /** Abre (ou reaproveita) a conversa de WhatsApp do lead e devolve a conversa. */
 export async function leadConversation(accountId, lead, { departmentId, agentId } = {}) {
@@ -112,7 +116,13 @@ router.post("/pipelines", async (req, res) => {
   try {
     if (!isManager(req)) return res.status(403).json({ error: "Só o gestor cria funis." });
     const { data, error } = await supabase.from("crm_pipelines")
-      .insert({ account_id: req.accountId, name: String(req.body?.name || "Novo funil").slice(0, 60), stages: req.body?.stages || DEFAULT_STAGES }).select().single();
+      .insert((() => {
+        const t = TEMPLATES.find((x) => x.key === req.body?.template);
+        return {
+          account_id: req.accountId, name: String(req.body?.name || t?.name || "Novo funil").slice(0, 60),
+          stages: req.body?.stages || t?.stages || DEFAULT_STAGES, fields: t ? t.fields : [], template: t?.key || null
+        };
+      })()).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { fail(res, err); }
@@ -122,6 +132,7 @@ router.patch("/pipelines/:id", async (req, res) => {
     if (!isManager(req)) return res.status(403).json({ error: "Só o gestor edita funis." });
     const patch = {};
     if (req.body?.name !== undefined) patch.name = String(req.body.name).slice(0, 60);
+    if (Array.isArray(req.body?.fields)) patch.fields = cleanFields(req.body.fields);
     if (Array.isArray(req.body?.stages)) patch.stages = req.body.stages.filter((s) => s?.id && s?.name).map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff", automations: cleanAutomations(s.automations) }));
     const { data, error } = await supabase.from("crm_pipelines").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
@@ -139,6 +150,10 @@ router.delete("/pipelines/:id", async (req, res) => {
   } catch (err) { fail(res, err); }
 });
 
+router.get("/templates", (req, res) => {
+  res.json(TEMPLATES.map((t) => ({ key: t.key, name: t.name, group: t.group, description: t.description, stages: t.stages.map((s) => ({ name: s.name, color: s.color })), fields: t.fields.map((f) => f.label) })));
+});
+
 // ---------------------------------------------------------------- Leads
 const LEAD_SELECT = "*, owner:profiles!crm_leads_owner_id_fkey(name, avatar_url), crm_lead_products(id, qty, price, product_id, crm_products(name))";
 function mapLead(l) {
@@ -147,7 +162,7 @@ function mapLead(l) {
     value: l.value != null ? Number(l.value) : null, ownerId: l.owner_id, ownerName: l.owner?.name || null, ownerAvatar: l.owner?.avatar_url || null,
     tagIds: l.tag_ids || [], source: l.source, notes: l.notes, stageChangedAt: l.stage_changed_at, lastInteractionAt: l.last_interaction_at,
     createdAt: l.created_at, conversationId: l.conversation_id,
-    attachments: l.attachments || [], checklist: l.checklist || [],
+    attachments: l.attachments || [], checklist: l.checklist || [], custom: l.custom || {},
     products: (l.crm_lead_products || []).map((p) => ({ id: p.id, productId: p.product_id, name: p.crm_products?.name || "Produto", qty: Number(p.qty), price: Number(p.price) }))
   };
 }
@@ -161,6 +176,7 @@ function leadRow(b) {
   if (b.ownerId !== undefined) row.owner_id = b.ownerId || null;
   if (b.tagIds !== undefined) row.tag_ids = Array.isArray(b.tagIds) ? b.tagIds : [];
   if (b.conversationId !== undefined) row.conversation_id = b.conversationId || null;
+  if (b.custom !== undefined) row.custom = cleanCustom(b.custom);
   if (Array.isArray(b.checklist)) row.checklist = b.checklist.slice(0, 50).map((c) => ({ id: String(c.id || randomUUID()).slice(0, 40), text: String(c.text || "").slice(0, 200), done: !!c.done })).filter((c) => c.text);
   return row;
 }
@@ -258,6 +274,14 @@ router.delete("/leads/:id/files/:fileId", async (req, res) => {
   } catch (err) { fail(res, err); }
 });
 
+// Datas vindas do Excel ("21/10/2026" ou "2026-10-21") viram AAAA-MM-DD
+function normDate(v) {
+  const s = String(v ?? "").trim();
+  const m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/.exec(s);
+  if (m) { const y = m[3].length === 2 ? `20${m[3]}` : m[3]; return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+  return s;
+}
+
 // Importação em massa (planilha Excel já convertida em linhas no navegador)
 router.post("/leads/import", async (req, res) => {
   try {
@@ -291,6 +315,7 @@ router.post("/leads/import", async (req, res) => {
         company: r.company || null, source: r.source || kind || "Importação",
         notes: [r.due ? `Vencimento: ${r.due}` : null, r.notes || null].filter(Boolean).join("\n") || null,
         value: r.value ? Number(String(r.value).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", ".")) || null : null,
+        custom: cleanCustom(Object.fromEntries(Object.entries(r).filter(([k]) => k.startsWith("custom.")).map(([k, v]) => [k.slice(7), normDate(v)]))),
         tag_ids: String(r.tags || "").split(/[,;|]/).map((t) => tagMap.get(t.trim().toLowerCase())).filter(Boolean),
         stage_changed_at: now
       }));
