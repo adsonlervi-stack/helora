@@ -7,7 +7,7 @@ const errText = (e) => e?.response?.data?.error || e?.message || "Erro";
 const BLANK = {
   name: "", prompt: "", historySize: 20, maxTurns: 20, transferDepartmentId: "", transferMessageEnabled: true,
   transferMessage: "Vou te transferir para um dos nossos atendentes, só um instante! 😊", processImages: false,
-  unsupportedMediaMessage: "Ah, que pena! 😅 No momento eu só consigo entender mensagens de texto. Se quiser, pode me escrever por aqui que vou te ajudar com o maior prazer!"
+  unsupportedMediaMessage: "Ah, que pena! 😅 No momento, eu só consigo compreender mensagens de texto e áudios. Se quiser, pode me escrever por aqui que vou te ajudar com o maior prazer!"
 };
 
 /** Prompts de IA: o "cérebro" do bloco Atendente IA dos fluxos (estilo ClickMassa). */
@@ -77,7 +77,6 @@ export default function PromptsPage({ canEdit }) {
           <Group title="Comportamento">
             <Row label="Tamanho do histórico"><input type="number" min="2" max="50" value={edit.historySize} onChange={set("historySize")} /></Row>
             <Row label="Máximo de respostas da IA"><input type="number" min="1" max="100" value={edit.maxTurns} onChange={set("maxTurns")} /></Row>
-            <Row label="Processar imagens com IA"><Switch checked={!!edit.processImages} onChange={(v) => setEdit((c) => ({ ...c, processImages: v }))} /></Row>
           </Group>
           <Group title="Transferência para humano">
             <Row label="Departamento padrão">
@@ -89,7 +88,7 @@ export default function PromptsPage({ canEdit }) {
             <Row label="Enviar mensagem ao transferir"><Switch checked={!!edit.transferMessageEnabled} onChange={(v) => setEdit((c) => ({ ...c, transferMessageEnabled: v }))} /></Row>
             {edit.transferMessageEnabled && <Row label="" stack><textarea rows={2} value={edit.transferMessage} onChange={set("transferMessage")} placeholder="Vazio = a IA escreve a mensagem" /></Row>}
           </Group>
-          <Group title="Mensagem para mídias não suportadas" hint="Enviada quando o cliente manda vídeo, áudio, documento (ou imagem, se o processamento estiver desligado).">
+          <Group title="Mensagem para mídias não suportadas" hint="Enviada quando o cliente manda imagem, vídeo ou documento. Áudios a IA entende (são transcritos); ela sempre responde em texto.">
             <Row label="" stack><textarea rows={2} maxLength={500} value={edit.unsupportedMediaMessage} onChange={set("unsupportedMediaMessage")} /></Row>
           </Group>
         </Sheet>
