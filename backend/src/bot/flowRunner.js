@@ -16,11 +16,53 @@
  *   wait      → out                       data: { seconds }
  *   action    → out                       data: { action: transfer|assign|label|close|human, departmentId, agentId, labelId, text }
  *   end       → (nenhuma)                 data: { text }
+ *   ai        → human, done               data: { instructions, knowledge, maxTurns }  (Atendente IA: conversa até resolver ou passar para humano)
  *
  * Estado da conversa: conversation.botNodeId = bloco que está esperando resposta
  * (question/options); conversation.flowVars = respostas salvas ({nome}, {email}...).
  */
-import { updateConversation, recordFlowEvent, addLabelToConversation } from "../config/db.js";
+import { updateConversation, recordFlowEvent, addLabelToConversation, listMessages, supabase } from "../config/db.js";
+import { aiChat, aiConfigured } from "../aiClient.js";
+
+const HUMAN_TAG = "[[HUMANO]]";
+const DONE_TAG = "[[FIM]]";
+
+/** Atendente IA: responde o cliente usando as instruções do bloco. Devolve { text, port } (port = null continua conversando). */
+async function aiTurn({ accountId, conversation, node, vars, dryRun, text }) {
+  const d = node.data || {};
+  const { data: acc } = await supabase.from("accounts").select("name, enabled_tabs").eq("id", accountId).maybeSingle();
+  if (!aiConfigured() || (Array.isArray(acc?.enabled_tabs) && !acc.enabled_tabs.includes("ai"))) {
+    return { text: "", port: "human" }; // sem IA disponível → passa para humano
+  }
+  let history = [];
+  if (dryRun) history = [{ role: "user", content: String(text || "Olá") }];
+  else {
+    const msgs = await listMessages(accountId, conversation.id).catch(() => []);
+    const recent = msgs.filter((m) => m.author !== "system" && m.text).slice(-24);
+    for (const m of recent) {
+      const role = m.direction === "in" ? "user" : "assistant";
+      const last = history[history.length - 1];
+      if (last && last.role === role) last.content += `\n${m.text}`;
+      else history.push({ role, content: m.text });
+    }
+    while (history.length && history[0].role !== "user") history.shift();
+    if (!history.length) history = [{ role: "user", content: String(text || "Olá") }];
+  }
+  const system = [
+    `Você é o atendente virtual de ${acc?.name || "uma empresa"} no WhatsApp. Responda em português do Brasil, de forma curta, cordial e humana (no máximo 3 frases por mensagem, sem markdown além de *negrito*).`,
+    d.instructions ? `Instruções da empresa:\n${d.instructions}` : "",
+    d.knowledge ? `Base de conhecimento (use só isto para informações da empresa; não invente preços, prazos ou políticas):\n${d.knowledge}` : "Não invente preços, prazos ou políticas.",
+    vars?.nome ? `Nome do cliente: ${vars.nome}.` : "",
+    `Se o cliente pedir para falar com uma pessoa, estiver irritado, ou você não souber responder com segurança, escreva uma frase avisando que vai chamar um atendente e termine a mensagem com ${HUMAN_TAG}.`,
+    `Se a dúvida do cliente foi resolvida e ele se despediu ou agradeceu, responda e termine com ${DONE_TAG}.`
+  ].filter(Boolean).join("\n\n");
+  let out = await aiChat({ system, messages: history, maxTokens: 400 });
+  let port = null;
+  if (out.includes(HUMAN_TAG)) port = "human";
+  else if (out.includes(DONE_TAG)) port = "done";
+  out = out.replaceAll(HUMAN_TAG, "").replaceAll(DONE_TAG, "").trim();
+  return { text: out, port };
+}
 
 const MAX_STEPS = 40;
 const MAX_WAIT_SECONDS = 600; // esperas maiores que 10 min são encurtadas
@@ -130,7 +172,29 @@ export async function runGraph(ctx) {
 
   // 1) Está esperando a resposta de uma pergunta/menu?
   const waitingNode = conversation.botNodeId ? nodeById(graph, conversation.botNodeId) : null;
-  if (waitingNode && (waitingNode.type === "question" || waitingNode.type === "options")) {
+  if (waitingNode && waitingNode.type === "ai") {
+    const turns = (vars.__aiTurns || 0) + 1;
+    const max = parseInt(waitingNode.data?.maxTurns, 10) || 12;
+    let r;
+    try {
+      r = turns > max ? { text: "", port: "human" } : await aiTurn({ accountId, conversation, node: waitingNode, vars, dryRun, text });
+    } catch (err) {
+      console.error("[IA] falhou:", err.message);
+      r = { text: "", port: "human" };
+    }
+    track(waitingNode.id, "reply", r.port || undefined);
+    if (r.text) await send(r.text);
+    if (!r.port) {
+      vars.__aiTurns = turns;
+      return { handled: true, state: { botNodeId: waitingNode.id, flowVars: vars }, log };
+    }
+    delete vars.__aiTurns;
+    currentId = nextOf(graph, waitingNode.id, r.port);
+    if (!currentId && r.port === "human") {
+      patch.mode = "human";
+      return { handled: true, state: { botNodeId: null, flowVars: { ...vars, __ended: true }, ...patch }, log };
+    }
+  } else   if (waitingNode && (waitingNode.type === "question" || waitingNode.type === "options")) {
     if (waitingNode.type === "question") {
       if (!validate(waitingNode.data?.validation, text)) {
         track(waitingNode.id, "invalid");
@@ -226,6 +290,24 @@ export async function runGraph(ctx) {
         return { handled: true, state: { botNodeId: null, flowVars: {}, ...patch }, log };
       }
       currentId = nextOf(graph, node.id);
+    } else if (node.type === "ai") {
+      let r;
+      try {
+        r = await aiTurn({ accountId, conversation, node, vars, dryRun, text });
+      } catch (err) {
+        console.error("[IA] falhou:", err.message);
+        r = { text: "", port: "human" };
+      }
+      if (r.text) await send(r.text);
+      if (!r.port) {
+        vars.__aiTurns = 1;
+        return { handled: true, state: { botNodeId: node.id, flowVars: vars }, log };
+      }
+      currentId = nextOf(graph, node.id, r.port);
+      if (!currentId && r.port === "human") {
+        patch.mode = "human";
+        return { handled: true, state: { botNodeId: null, flowVars: { ...vars, __ended: true }, ...patch }, log };
+      }
     } else if (node.type === "end") {
       if (d.text) await send(d.text);
       break;
