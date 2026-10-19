@@ -70,6 +70,7 @@ export async function runBillingCycle() {
   // 1) Gera as faturas que vencem nos próximos N dias
   const { data: accounts } = await supabase.from("accounts").select("*").in("status", ["active", "suspended"]).gt("monthly_price", 0);
   for (const a of accounts || []) {
+    if ((a.billing_method || "manual") !== "asaas") continue; // cobrança manual: a Gestora cria a fatura e anexa o boleto
     const due = nextDueDate(a.due_day || 10, today);
     if (due > addDays(today, DAYS_BEFORE())) continue;
     const reference = due.slice(0, 7);
@@ -88,7 +89,7 @@ export async function runBillingCycle() {
   const { data: open } = await supabase.from("invoices").select("*, accounts(*)").eq("status", "pending");
   for (const inv of open || []) {
     const acc = inv.accounts;
-    if (!acc) continue;
+    if (!acc || (acc.billing_method || "manual") !== "asaas") continue;
     const contacts = await billingContacts(acc);
     try {
       if (!inv.available_sent_at && inv.due_date >= today) {
