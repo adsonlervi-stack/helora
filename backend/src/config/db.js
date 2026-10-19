@@ -1496,7 +1496,8 @@ const ACCOUNT_COMMERCIAL_FIELDS = {
   maxUsers: "max_users",
   allowCloudApi: "allow_cloud_api",
   enabledTabs: "enabled_tabs",
-  billingMethod: "billing_method"
+  billingMethod: "billing_method",
+  serverId: "server_id"
 };
 
 export async function updateAccountCommercial(accountId, body) {
@@ -1511,6 +1512,7 @@ export async function updateAccountCommercial(accountId, body) {
     if (key === "allowCloudApi") v = v === true || v === "true" || v === 1;
     if (key === "enabledTabs") v = Array.isArray(v) ? v.map(String) : null;
     if (key === "billingMethod") v = v === "asaas" ? "asaas" : "manual";
+    if (key === "serverId") v = String(v || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30) || "main";
     if (typeof v === "string") v = v.trim() || null;
     patch[col] = v;
   }
