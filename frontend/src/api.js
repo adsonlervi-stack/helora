@@ -186,7 +186,22 @@ export const removeAdminAnnouncement = (id) => api.delete(`/admin/announcements/
 
 // ---- Mensagens agendadas ----
 export const getScheduledMessages = () => api.get("/scheduled-messages").then((r) => r.data);
-export const createScheduledMessageApi = (data) => api.post("/scheduled-messages", data).then((r) => r.data);
+export const createScheduledMessageApi = (data, file) => {
+  if (!file) return api.post("/scheduled-messages", data).then((r) => r.data);
+  const fd = new FormData();
+  Object.entries(data).forEach(([k, v]) => v !== undefined && v !== null && fd.append(k, String(v)));
+  fd.append("file", file);
+  return api.post("/scheduled-messages", fd).then((r) => r.data);
+};
+export const attachScheduledFileApi = (id, file) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  return api.post(`/scheduled-messages/${id}/attachment`, fd).then((r) => r.data);
+};
+export const getTasksApi = (scope) => api.get("/tasks", { params: scope ? { scope } : {} }).then((r) => r.data);
+export const createTaskApi = (data) => api.post("/tasks", data).then((r) => r.data);
+export const updateTaskApi = (id, data) => api.patch(`/tasks/${id}`, data).then((r) => r.data);
+export const deleteTaskApi = (id) => api.delete(`/tasks/${id}`);
 export const cancelScheduledMessageApi = (id) => api.delete(`/scheduled-messages/${id}`);
 
 // ---- Conta (rodapé editável) ----

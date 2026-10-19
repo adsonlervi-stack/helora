@@ -17,7 +17,8 @@ import {
   Users,
   Layers,
   BarChart3,
-  Wallet
+  Wallet,
+  ListChecks
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -28,6 +29,7 @@ export const NAV_ITEMS = [
   { key: "agents", label: "Fluxos", icon: Workflow },
   { key: "contacts", label: "Contatos", icon: Contact },
   { key: "campaigns", label: "Campanhas", icon: Megaphone },
+  { key: "tasks", label: "Tarefas", icon: ListChecks },
   { key: "reports", label: "Relatórios", icon: BarChart3 },
   { key: "channels", label: "Canais", icon: Smartphone },
   { key: "finance", label: "Financeiro", icon: Wallet, ownerOnly: true },
@@ -67,6 +69,7 @@ export const SECTION_TITLES = {
   g_credits: "Créditos",
   g_plans: "Planos",
   reports: "Relatórios",
+  tasks: "Tarefas",
   finance: "Financeiro",
   g_support: "Suporte",
   g_announcements: "Comunicados",
