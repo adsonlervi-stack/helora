@@ -126,8 +126,11 @@ startAllChannels().catch((err) => {
 });
 
 // Cobrança automática das mensalidades (PIX/Asaas + e-mails + bloqueio)
-startBillingScheduler();
-startRetentionJob();
+// Tarefas gerais (cobrança, limpeza) rodam em um servidor só. Nos servidores extras use RUN_JOBS=0.
+if (process.env.RUN_JOBS !== "0") {
+  startBillingScheduler();
+  startRetentionJob();
+}
 
 // Migração de banco (só roda se OLD_SUPABASE_* estiver configurado e o banco atual vazio)
 autoMigrateIfNeeded().catch((err) => console.error("[Migração]", err.message));
