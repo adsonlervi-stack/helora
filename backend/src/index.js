@@ -8,6 +8,7 @@ import crmRoutes from "./routes/crm.js";
 import aiRoutes from "./routes/ai.js";
 import { googleRouter, googleCallbackRouter } from "./google.js";
 import { pushRouter } from "./push.js";
+import { startCrmReminders } from "./crmReminders.js";
 import { startRetentionJob } from "./retention.js";
 import metaWebhookRoutes from "./meta/webhookRoutes.js";
 import { startAllChannels } from "./whatsapp/baileysClient.js";
@@ -140,3 +141,6 @@ startScheduledMessagesDispatcher();
 
 // Campanhas (disparo em massa): verifica a cada 30s o que precisa rodar.
 startCampaignDispatcher();
+
+// Lembretes por data do CRM (ex.: "faltam 3 dias para a viagem")
+startCrmReminders();

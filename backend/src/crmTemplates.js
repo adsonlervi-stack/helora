@@ -54,7 +54,9 @@ export const TEMPLATES = [
     fields: [
       { id: "tipo_viagem", label: "Tipo de viagem", type: "select", options: ["Nacional", "Internacional", "Cruzeiro", "Pacote", "Só aéreo", "Só hotel", "Corporativa", "Lua de mel"] },
       { id: "destino", label: "Destino", type: "text", card: true },
-      { id: "ida", label: "Data de ida", type: "date", card: true, alert: true },
+      { id: "ida", label: "Data de ida", type: "date", card: true, alert: true, reminders: [
+        { days: 3, text: "Olá, {nome}! Faltam 3 dias para sua viagem para {destino}. ✈️\nVoo: {voo_ida}\nLocalizador: {localizador}\nHotel: {hotel}\n\nSeguem seus vouchers. Boa viagem!", sendFiles: true }
+      ] },
       { id: "volta", label: "Data de volta", type: "date" },
       { id: "passageiros", label: "Passageiros", type: "number" },
       { id: "localizador", label: "Localizador (reserva)", type: "text", card: true },
@@ -166,7 +168,12 @@ export function cleanFields(list) {
     return {
       id, label: String(f.label || id).slice(0, 60), type,
       ...(type === "select" ? { options: (Array.isArray(f.options) ? f.options : String(f.options || "").split(/[\n,;]/)).map((o) => String(o).trim()).filter(Boolean).slice(0, 50) } : {}),
-      card: !!f.card, ...(type === "date" && f.alert ? { alert: true } : {}), ...(type === "select" && f.kind ? { kind: true } : {})
+      card: !!f.card, ...(type === "date" && f.alert ? { alert: true } : {}), ...(type === "select" && f.kind ? { kind: true } : {}),
+      ...(type === "date" && Array.isArray(f.reminders) && f.reminders.length ? {
+        reminders: f.reminders.slice(0, 5).map((r) => ({
+          days: Math.max(-60, Math.min(365, parseInt(r.days, 10) || 0)), text: String(r.text || "").slice(0, 2000), sendFiles: !!r.sendFiles
+        })).filter((r) => r.text.trim())
+      } : {})
     };
   }).filter((f) => f.label);
 }
