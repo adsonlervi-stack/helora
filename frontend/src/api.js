@@ -21,11 +21,41 @@ api.interceptors.request.use(async (config) => {
 });
 
 // Empresa bloqueada por falta de pagamento: o backend responde 402 e o app mostra o Financeiro.
+// Sessão expirada (401): renova o token uma vez e repete a chamada. Se não
+// der, volta para o login com um aviso amigável — nunca mostra "sessão inválida".
+let refreshing = null;
+let expiredShown = false;
 api.interceptors.response.use(
   (r) => r,
-  (err) => {
+  async (err) => {
     if (err.response?.status === 402 && err.response.data?.billingBlocked) {
       window.dispatchEvent(new CustomEvent("helora:billing-blocked"));
+    }
+    const cfg = err.config;
+    if (err.response?.status === 503 && err.response.data?.transient && cfg && !cfg.__retry503) {
+      cfg.__retry503 = true;
+      await new Promise((r) => setTimeout(r, 1200));
+      return api.request(cfg);
+    }
+    if (err.response?.status === 401 && cfg && !cfg.__retried) {
+      cfg.__retried = true;
+      try {
+        refreshing = refreshing || supabase.auth.refreshSession().finally(() => setTimeout(() => (refreshing = null), 2000));
+        const { data, error } = await refreshing;
+        if (!error && data?.session) {
+          cfg.headers = { ...(cfg.headers || {}), Authorization: `Bearer ${data.session.access_token}` };
+          return api.request(cfg);
+        }
+        // Sem internet / Supabase fora: não desloga, só devolve o erro
+        if (error && (!error.status || error.status >= 500)) return Promise.reject(err);
+      } catch { return Promise.reject(err); }
+      if (!expiredShown) {
+        expiredShown = true;
+        try { sessionStorage.setItem("helora_session_expired", "1"); } catch {}
+        await supabase.auth.signOut().catch(() => {});
+        window.location.reload();
+      }
+      return new Promise(() => {}); // segura a tela até recarregar (não mostra erro)
     }
     return Promise.reject(err);
   }
@@ -202,6 +232,10 @@ export const getTasksApi = (scope) => api.get("/tasks", { params: scope ? { scop
 export const createTaskApi = (data) => api.post("/tasks", data).then((r) => r.data);
 export const updateTaskApi = (id, data) => api.patch(`/tasks/${id}`, data).then((r) => r.data);
 export const deleteTaskApi = (id) => api.delete(`/tasks/${id}`);
+export const addTaskCommentApi = (id, text) => api.post(`/tasks/${id}/comments`, { text }).then((r) => r.data);
+export const deleteTaskCommentApi = (id, cid) => api.delete(`/tasks/${id}/comments/${cid}`).then((r) => r.data);
+export const uploadTaskFileApi = (id, file) => { const fd = new FormData(); fd.append("file", file); return api.post(`/tasks/${id}/files`, fd).then((r) => r.data); };
+export const deleteTaskFileApi = (id, fid) => api.delete(`/tasks/${id}/files/${fid}`).then((r) => r.data);
 export const cancelScheduledMessageApi = (id) => api.delete(`/scheduled-messages/${id}`);
 
 // ---- Conta (rodapé editável) ----
