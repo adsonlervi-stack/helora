@@ -17,7 +17,19 @@ export async function requireAuth(req, res, next) {
     return res.status(401).json({ error: "Token de autenticação ausente." });
   }
 
-  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  // Falha de rede/instabilidade do Supabase NÃO é sessão expirada: tenta de
+  // novo e, se continuar, responde 503 (o app tenta outra vez sem deslogar).
+  let userData = null, userError = null;
+  for (let i = 0; i < 2; i++) {
+    ({ data: userData, error: userError } = await supabase.auth.getUser(token).catch((e) => ({ data: null, error: e })));
+    const transient = userError && (!userError.status || userError.status >= 500 || userError.status === 429);
+    if (!transient) break;
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  if (userError && (!userError.status || userError.status >= 500 || userError.status === 429)) {
+    console.warn("[auth] Supabase instável ao validar sessão:", userError.message);
+    return res.status(503).json({ error: "Instabilidade momentânea. Tentando de novo…", transient: true });
+  }
   if (userError || !userData?.user) {
     return res.status(401).json({ error: "Sessão inválida ou expirada." });
   }
