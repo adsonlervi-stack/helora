@@ -466,11 +466,30 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
               {f.type === "date" && <label><Switch checked={!!f.alert} onChange={(v) => upd(i, { alert: v })} /> Contagem de vencimento</label>}
               {f.type === "select" && <label><Switch checked={!!f.kind} onChange={(v) => setList((l) => l.map((x, j) => ({ ...x, kind: j === i ? v : false })))} /> Etiqueta no topo do card</label>}
             </div>
+            {f.type === "date" && (
+              <div className="crm-reminders">
+                {(f.reminders || []).map((r, k) => (
+                  <div key={k} className="crm-rem">
+                    <div className="crm-rem-head">
+                      <span>Enviar no WhatsApp</span>
+                      <input type="number" value={r.days} min="-60" max="365" onChange={(e) => upd(i, { reminders: f.reminders.map((x, n) => (n === k ? { ...x, days: e.target.value } : x)) })} />
+                      <span>{Number(r.days) < 0 ? "dia(s) depois" : "dia(s) antes"} de “{f.label || "data"}”</span>
+                      <button type="button" className="fi-icon" onClick={() => upd(i, { reminders: f.reminders.filter((_, n) => n !== k) })} title="Remover"><Trash2 size={13} /></button>
+                    </div>
+                    <textarea rows={3} value={r.text} onChange={(e) => upd(i, { reminders: f.reminders.map((x, n) => (n === k ? { ...x, text: e.target.value } : x)) })} placeholder={`Olá, {nome}! Faltam ${r.days || 3} dias. Segue seu voucher.`} />
+                    <label className="crm-rem-files"><input type="checkbox" checked={!!r.sendFiles} onChange={(e) => upd(i, { reminders: f.reminders.map((x, n) => (n === k ? { ...x, sendFiles: e.target.checked } : x)) })} /> Enviar também os anexos do card</label>
+                  </div>
+                ))}
+                {(f.reminders || []).length < 5 && (
+                  <button type="button" className="fi-add" onClick={() => upd(i, { reminders: [...(f.reminders || []), { days: 3, text: "", sendFiles: false }] })}><Bell size={14} /> Lembrete automático por esta data</button>
+                )}
+              </div>
+            )}
           </div>
         ))}
         <button type="button" className="fi-add" onClick={() => setList((l) => [...l, { id: "", label: "", type: "text", card: false }])}><Plus size={15} /> Adicionar campo</button>
       </Group>
-      <p className="cv-muted" style={{ margin: "12px 4px 0", fontSize: 12.5 }}>Dica: use os campos nas mensagens automáticas das colunas, ex.: “Sua apólice {"{apolice}"} vence em {"{vigencia}"}”.</p>
+      <p className="cv-muted" style={{ margin: "12px 4px 0", fontSize: 12.5 }}>Lembretes saem sozinhos, das 8h às 20h, uma vez por card. Use 0 para o próprio dia e número negativo para depois da data (ex.: -1 = pesquisa no dia seguinte). Dica: use os campos nas mensagens automáticas das colunas, ex.: “Sua apólice {"{apolice}"} vence em {"{vigencia}"}”.</p>
       {err && <div className="admin-feedback error" style={{ marginTop: 12 }}>{err}</div>}
     </Sheet>
   );

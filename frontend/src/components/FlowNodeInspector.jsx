@@ -141,6 +141,50 @@ export default function NodeInspector({ node, ctx, onChange, disabled, stats }) 
         </Section>
       )}
 
+      {node.type === "http" && (
+        <>
+          <p className="fi-note">
+            Consulta a API do sistema da empresa (reservas, pedidos, boletos…) e guarda os dados da resposta em variáveis para usar nas mensagens. Use {"{telefone}"} ou respostas salvas (ex.: {"{cpf}"}) no endereço.
+          </p>
+          <Section title="Requisição">
+            <Field label="Método">
+              <select value={d.method || "GET"} onChange={set("method")} disabled={disabled}>
+                <option value="GET">GET (buscar)</option>
+                <option value="POST">POST (enviar dados)</option>
+              </select>
+            </Field>
+            <Field label="Endereço (URL)" hint="Ex.: https://api.suaagencia.com/reservas?telefone={telefone}">
+              <input value={d.url || ""} onChange={set("url")} disabled={disabled} placeholder="https://" />
+            </Field>
+            <Field label="Cabeçalhos (um por linha)" hint="Ex.: Authorization: Bearer SEU_TOKEN">
+              <textarea className="fi-textarea" rows={2} value={d.headers || ""} onChange={set("headers")} disabled={disabled} placeholder="Authorization: Bearer …" />
+            </Field>
+            {d.method === "POST" && (
+              <Field label="Corpo (JSON)">
+                <textarea className="fi-textarea" rows={3} value={d.body || ""} onChange={set("body")} disabled={disabled} placeholder={'{"cpf": "{cpf}"}'} />
+              </Field>
+            )}
+          </Section>
+          <Section title="Guardar da resposta" footer="Caminho no JSON da resposta. Ex.: reserva.voo.numero ou itens[0].nome">
+            {(d.map || []).map((m, i) => (
+              <div key={i} className="fi-map">
+                <input value={m.var || ""} placeholder="variável (ex.: voo)" disabled={disabled} onChange={(e) => onChange({ map: d.map.map((x, j) => (j === i ? { ...x, var: e.target.value.replace(/[^\w]/g, "").toLowerCase() } : x)) })} />
+                <span>=</span>
+                <input value={m.path || ""} placeholder="caminho (ex.: dados.voo)" disabled={disabled} onChange={(e) => onChange({ map: d.map.map((x, j) => (j === i ? { ...x, path: e.target.value } : x)) })} />
+                <button type="button" className="fi-icon" disabled={disabled} onClick={() => onChange({ map: d.map.filter((_, j) => j !== i) })}><Trash2 size={13} /></button>
+              </div>
+            ))}
+            <button type="button" className="fi-add" disabled={disabled} onClick={() => onChange({ map: [...(d.map || []), { var: "", path: "" }] })}><Plus size={14} /> Guardar outro dado</button>
+          </Section>
+          <Section title="Mensagem quando der certo" footer={VAR_HINT}>
+            <textarea className="fi-textarea" rows={4} value={d.text || ""} onChange={set("text")} disabled={disabled} placeholder="Sua reserva {localizador}: voo {voo} saindo às {horario}." />
+          </Section>
+          <Section title="Mensagem se falhar">
+            <textarea className="fi-textarea" rows={2} value={d.errorText || ""} onChange={set("errorText")} disabled={disabled} />
+          </Section>
+        </>
+      )}
+
       {node.type === "lookup" && (
         <>
           <p className="fi-note">
