@@ -25,7 +25,7 @@ router.use(enforceTabs);
 const isManager = (req) => req.role === "owner" || req.isSuperAdmin;
 const fail = (res, err) => {
   const msg = err?.message || String(err);
-  res.status(500).json({ error: /crm_/.test(msg) && /does not exist|schema cache/.test(msg) ? (/custom|fields|template/.test(msg) ? "Rode a migration 031 no Supabase." : /attachments|checklist/.test(msg) ? "Rode a migration 030 no Supabase." : "Rode a migration 022 (CRM) no Supabase.") : msg });
+  res.status(500).json({ error: /history|outcome|lost_reason|expected_close/.test(msg) ? "Rode a migration 035 no Supabase." : /crm_/.test(msg) && /does not exist|schema cache/.test(msg) ? (/custom|fields|template/.test(msg) ? "Rode a migration 031 no Supabase." : /attachments|checklist/.test(msg) ? "Rode a migration 030 no Supabase." : "Rode a migration 022 (CRM) no Supabase.") : msg });
 };
 const DEFAULT_STAGES = [
   { id: "novos", name: "Leads novos", color: "#0a84ff" },
@@ -135,6 +135,7 @@ router.patch("/pipelines/:id", async (req, res) => {
     const patch = {};
     if (req.body?.name !== undefined) patch.name = String(req.body.name).slice(0, 60);
     if (Array.isArray(req.body?.fields)) patch.fields = cleanFields(req.body.fields);
+    if (Array.isArray(req.body?.messages)) patch.messages = req.body.messages.slice(0, 30).map((m) => ({ id: String(m.id || randomUUID()).slice(0, 40), title: String(m.title || "").slice(0, 60), text: String(m.text || "").slice(0, 2000) })).filter((m) => m.title && m.text);
     if (Array.isArray(req.body?.stages)) patch.stages = req.body.stages.filter((s) => s?.id && s?.name).map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff", automations: cleanAutomations(s.automations) }));
     const { data, error } = await supabase.from("crm_pipelines").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
@@ -165,6 +166,7 @@ function mapLead(l) {
     tagIds: l.tag_ids || [], source: l.source, notes: l.notes, stageChangedAt: l.stage_changed_at, lastInteractionAt: l.last_interaction_at,
     createdAt: l.created_at, conversationId: l.conversation_id,
     attachments: l.attachments || [], checklist: l.checklist || [], custom: l.custom || {},
+    history: l.history || [], outcome: l.outcome || null, outcomeAt: l.outcome_at || null, lostReason: l.lost_reason || null, expectedClose: l.expected_close || null,
     products: (l.crm_lead_products || []).map((p) => ({ id: p.id, productId: p.product_id, name: p.crm_products?.name || "Produto", qty: Number(p.qty), price: Number(p.price) }))
   };
 }
@@ -178,6 +180,9 @@ function leadRow(b) {
   if (b.ownerId !== undefined) row.owner_id = b.ownerId || null;
   if (b.tagIds !== undefined) row.tag_ids = Array.isArray(b.tagIds) ? b.tagIds : [];
   if (b.conversationId !== undefined) row.conversation_id = b.conversationId || null;
+  if (b.outcome !== undefined) { row.outcome = ["won", "lost"].includes(b.outcome) ? b.outcome : null; row.outcome_at = row.outcome ? new Date().toISOString() : null; }
+  if (b.lostReason !== undefined) row.lost_reason = b.lostReason ? String(b.lostReason).slice(0, 300) : null;
+  if (b.expectedClose !== undefined) row.expected_close = b.expectedClose || null;
   if (b.custom !== undefined) row.custom = cleanCustom(b.custom);
   if (Array.isArray(b.checklist)) row.checklist = b.checklist.slice(0, 50).map((c) => ({ id: String(c.id || randomUUID()).slice(0, 40), text: String(c.text || "").slice(0, 200), done: !!c.done })).filter((c) => c.text);
   return row;
@@ -209,15 +214,31 @@ router.post("/leads", async (req, res) => {
     res.status(201).json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
+// Histórico do card (mudanças, anotações). Falha silenciosa se a migration 035 não rodou.
+async function pushHistory(leadId, entries) {
+  if (!entries.length) return;
+  try {
+    const { data } = await supabase.from("crm_leads").select("history").eq("id", leadId).maybeSingle();
+    if (!data) return;
+    const at = new Date().toISOString();
+    const list = [...(data.history || []), ...entries.map((e) => ({ id: randomUUID(), at, ...e }))].slice(-300);
+    await supabase.from("crm_leads").update({ history: list }).eq("id", leadId);
+  } catch {}
+}
 router.patch("/leads/:id", async (req, res) => {
   try {
     const row = leadRow(req.body || {});
-    let before = null;
+    const { data: before } = await supabase.from("crm_leads").select("stage, pipeline_id, owner_id, value").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
     if (row.stage) {
-      ({ data: before } = await supabase.from("crm_leads").select("stage, pipeline_id").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle());
       if (before && before.stage === row.stage && (!row.pipeline_id || row.pipeline_id === before.pipeline_id)) delete row.stage;
       else row.stage_changed_at = new Date().toISOString();
     }
+    const hist = [];
+    const by = req.userName || null;
+    if (before && row.stage) hist.push({ type: "stage", from: before.stage, to: row.stage, fromPipeline: before.pipeline_id, toPipeline: row.pipeline_id || before.pipeline_id, by });
+    if (before && row.owner_id !== undefined && row.owner_id !== before.owner_id) hist.push({ type: "owner", to: row.owner_id, by });
+    if (before && row.value !== undefined && Number(row.value || 0) !== Number(before.value || 0)) hist.push({ type: "value", from: before.value, to: row.value, by });
+    if (row.outcome !== undefined) hist.push({ type: "outcome", to: row.outcome, reason: row.lost_reason || null, by });
     row.last_interaction_at = new Date().toISOString();
     let q = supabase.from("crm_leads").update(row).eq("account_id", req.accountId).eq("id", req.params.id);
     if (!isManager(req)) q = q.eq("owner_id", req.userId);
@@ -225,6 +246,7 @@ router.patch("/leads/:id", async (req, res) => {
     if (error) throw error;
     emitEvent(req.accountId, "lead.atualizado", mapLead(data));
     if (row.stage) runStageAutomations(req.accountId, data, req.userName);
+    if (hist.length) { await pushHistory(data.id, hist); data.history = [...(data.history || []), ...hist.map((h) => ({ ...h, at: new Date().toISOString() }))]; }
     res.json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
@@ -253,6 +275,97 @@ router.post("/leads/:id/conversation", async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+// ---- Card do CRM ligado a uma conversa (painel do cliente) ----
+async function leadForConversation(accountId, convId) {
+  const { data: conv } = await supabase.from("conversations").select("id, name, phone, external_id").eq("account_id", accountId).eq("id", convId).maybeSingle();
+  if (!conv) return { conv: null, lead: null };
+  let { data: lead } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", accountId).eq("conversation_id", convId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const phone = onlyDigits(conv.phone || String(conv.external_id || "").split("@")[0]);
+  if (!lead && phone.length >= 10) {
+    const tail = phone.slice(-8);
+    ({ data: lead } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", accountId).ilike("phone", `%${tail}`).order("created_at", { ascending: false }).limit(1).maybeSingle());
+  }
+  return { conv, lead, phone };
+}
+router.get("/by-conversation/:convId", async (req, res) => {
+  try {
+    const { lead } = await leadForConversation(req.accountId, req.params.convId);
+    res.json({ lead: lead ? mapLead(lead) : null });
+  } catch (err) { fail(res, err); }
+});
+router.post("/by-conversation/:convId", async (req, res) => {
+  try {
+    const { pipelineId, stage } = req.body || {};
+    if (!pipelineId || !stage) return res.status(400).json({ error: "Escolha o funil e a etapa." });
+    const { conv, lead, phone } = await leadForConversation(req.accountId, req.params.convId);
+    if (!conv) return res.status(404).json({ error: "Conversa não encontrada." });
+    let data;
+    if (lead) {
+      const changedStage = lead.stage !== stage || lead.pipeline_id !== pipelineId;
+      ({ data } = await supabase.from("crm_leads").update({ pipeline_id: pipelineId, stage, conversation_id: conv.id, ...(changedStage ? { stage_changed_at: new Date().toISOString() } : {}) }).eq("id", lead.id).select(LEAD_SELECT).single());
+      if (changedStage) { await pushHistory(lead.id, [{ type: "stage", from: lead.stage, to: stage, fromPipeline: lead.pipeline_id, toPipeline: pipelineId, by: req.userName || null }]); runStageAutomations(req.accountId, data, req.userName); }
+    } else {
+      const { data: created, error } = await supabase.from("crm_leads").insert({
+        account_id: req.accountId, pipeline_id: pipelineId, stage, name: conv.name || phone || "Contato", phone: phone || null,
+        conversation_id: conv.id, owner_id: req.userId, source: "WhatsApp", stage_changed_at: new Date().toISOString()
+      }).select(LEAD_SELECT).single();
+      if (error) throw error;
+      data = created;
+      emitEvent(req.accountId, "lead.criado", mapLead(data));
+      runStageAutomations(req.accountId, data, req.userName);
+    }
+    res.json({ lead: mapLead(data) });
+  } catch (err) { fail(res, err); }
+});
+
+// Enviar mensagem (pronta ou livre) para o cliente do card pelo WhatsApp
+router.post("/leads/:id/message", async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim().slice(0, 4000);
+    if (!text) return res.status(400).json({ error: "Escreva a mensagem." });
+    const { data: lead } = await supabase.from("crm_leads").select("*").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
+    const conv = await leadConversation(req.accountId, lead, { agentId: req.userId });
+    await sendTextToConversation(req.accountId, conv, text, { senderName: req.userName || null });
+    await pushHistory(lead.id, [{ type: "whats", text, by: req.userName || null }]);
+    await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", lead.id);
+    const { data } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("id", lead.id).single();
+    res.json({ conversationId: conv.id, lead: mapLead(data) });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+// Anotações do card (ficam no histórico)
+router.post("/leads/:id/notes", async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim().slice(0, 4000);
+    if (!text) return res.status(400).json({ error: "Escreva a anotação." });
+    const { data: lead } = await supabase.from("crm_leads").select("id").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
+    await pushHistory(lead.id, [{ type: "note", text, by: req.userName || null, byId: req.userId }]);
+    const { data, error } = await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", lead.id).select(LEAD_SELECT).single();
+    if (error) throw error;
+    if (!data.history) return res.status(500).json({ error: "Rode a migration 035 no Supabase." });
+    res.status(201).json(mapLead(data));
+  } catch (err) { fail(res, err); }
+});
+router.delete("/leads/:id/notes/:noteId", async (req, res) => {
+  try {
+    const { data: lead } = await supabase.from("crm_leads").select("id, history").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
+    const { data, error } = await supabase.from("crm_leads").update({ history: (lead.history || []).filter((h) => h.id !== req.params.noteId) }).eq("id", lead.id).select(LEAD_SELECT).single();
+    if (error) throw error;
+    res.json(mapLead(data));
+  } catch (err) { fail(res, err); }
+});
+router.get("/leads/:id", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: "Lead não encontrado." });
+    res.json(mapLead(data));
+  } catch (err) { fail(res, err); }
+});
+
 // Anexos do card
 router.post("/leads/:id/files", upload.single("file"), async (req, res) => {
   try {
@@ -266,6 +379,8 @@ router.post("/leads/:id/files", upload.single("file"), async (req, res) => {
     const file = { id: randomUUID(), name, url, size: req.file.size, type: req.file.mimetype || null, at: new Date().toISOString(), by: req.userName || null };
     const { data, error } = await supabase.from("crm_leads").update({ attachments: [...(lead.attachments || []), file], last_interaction_at: file.at }).eq("id", lead.id).select(LEAD_SELECT).single();
     if (error) throw error;
+    await pushHistory(lead.id, [{ type: "file", text: name, url, by: req.userName || null }]);
+    if (data.history) data.history = [...data.history, { type: "file", text: name, url, by: req.userName || null, at: file.at }];
     res.status(201).json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
