@@ -141,6 +141,35 @@ export default function NodeInspector({ node, ctx, onChange, disabled, stats }) 
         </Section>
       )}
 
+      {node.type === "lookup" && (
+        <>
+          <p className="fi-note">
+            Procura no CRM o card do cliente pelo número do WhatsApp dele e responde com os dados do card. Os campos ficam disponíveis como variáveis para os próximos blocos também.
+          </p>
+          <Section title="Onde procurar">
+            <Field label="Funil do CRM" hint="Deixe em “Todos” para procurar em qualquer funil.">
+              <select value={d.pipelineId || ""} onChange={set("pipelineId")} disabled={disabled}>
+                <option value="">Todos os funis</option>
+                {(ctx.pipelines || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+          </Section>
+          <Section title="Resposta quando encontrar" footer="Clique numa variável para inserir no texto.">
+            <textarea className="fi-textarea" rows={6} value={d.text || ""} onChange={set("text")} disabled={disabled} />
+            <div className="fi-vars">
+              {[["nome", "Nome"], ["nome_completo", "Nome completo"], ["empresa", "Empresa"], ["valor", "Valor"], ["etapa", "Etapa"], ["responsavel", "Responsável"],
+                ...(((ctx.pipelines || []).find((p) => p.id === d.pipelineId)?.fields) || ((ctx.pipelines || []).flatMap((p) => p.fields || []))).map((f) => [f.id, f.label])]
+                .filter((v, i, a) => a.findIndex((x) => x[0] === v[0]) === i)
+                .map(([k, l]) => <button type="button" key={k} disabled={disabled} onClick={() => onChange({ text: `${d.text || ""}{${k}}` })}>{l}</button>)}
+            </div>
+            <label className="fi-check"><input type="checkbox" checked={!!d.sendFiles} onChange={(e) => onChange({ sendFiles: e.target.checked })} disabled={disabled} /> Enviar também os anexos do card (vouchers, apólices, PDFs)</label>
+          </Section>
+          <Section title="Quando não encontrar">
+            <textarea className="fi-textarea" rows={3} value={d.notFoundText || ""} onChange={set("notFoundText")} disabled={disabled} />
+          </Section>
+        </>
+      )}
+
       {node.type === "ai" && (
         <>
           <p className="fi-note">

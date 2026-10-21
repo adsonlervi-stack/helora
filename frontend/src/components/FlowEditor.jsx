@@ -2,7 +2,7 @@ import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Save, Play, Plus, Minus, Maximize2, Trash2, Copy, X, RotateCcw, Send, Clock3 } from "lucide-react";
 import BusinessHoursEditor from "./BusinessHoursEditor.jsx";
-import { getFlowApi, saveFlowApi, setFlowActiveApi, simulateFlowApi, getDepartments, getTeam, getLabels, aiPrompts } from "../api.js";
+import { crm, getFlowApi, saveFlowApi, setFlowActiveApi, simulateFlowApi, getDepartments, getTeam, getLabels, aiPrompts } from "../api.js";
 import {
   TYPES, PALETTE_GROUPS, NODE_W, HEAD_H, BODY_H, PORT_H, PORT_TOP_PAD,
   portsOf, nodeHeight, portPoint, inputPoint, summary, newNode, uid
@@ -48,8 +48,8 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
 
   useEffect(load, [load]);
   useEffect(() => {
-    Promise.all([getDepartments().catch(() => []), getTeam().catch(() => []), getLabels().catch(() => []), aiPrompts.list().catch(() => [])]).then(
-      ([departments, team, labels, prompts]) => setCtx({ departments, team, labels, prompts })
+    Promise.all([getDepartments().catch(() => []), getTeam().catch(() => []), getLabels().catch(() => []), aiPrompts.list().catch(() => []), crm.pipelines().catch(() => [])]).then(
+      ([departments, team, labels, prompts, pipelines]) => setCtx({ departments, team, labels, prompts, pipelines })
     );
   }, []);
 

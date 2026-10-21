@@ -1,4 +1,4 @@
-import { Zap, MessageSquare, HelpCircle, ListOrdered, Clock, GitBranch, Timer, Bolt, Flag, Sparkles } from "lucide-react";
+import { Zap, MessageSquare, HelpCircle, ListOrdered, Clock, GitBranch, Timer, Bolt, Flag, Sparkles, UserSearch } from "lucide-react";
 
 export const NODE_W = 248;
 export const HEAD_H = 40;
@@ -15,6 +15,7 @@ export const TYPES = {
   condition: { label: "Condição", color: "#ff2d55", icon: GitBranch, group: "Lógica", desc: "Se a resposta for…" },
   wait: { label: "Espera", color: "#8e8e93", icon: Timer, group: "Lógica", desc: "Pausa antes de seguir" },
   ai: { label: "Atendente IA", color: "#bf5af2", icon: Sparkles, group: "Mensagens", desc: "A IA conversa até resolver ou chamar humano" },
+  lookup: { label: "Consultar cliente", color: "#0a84ff", icon: UserSearch, group: "Lógica", desc: "Busca o card do CRM pelo número e responde com os dados" },
   action: { label: "Ação", color: "#ff3b30", icon: Bolt, group: "Ações", desc: "Transferir, etiquetar, encerrar" },
   end: { label: "Fim", color: "#1d1d1f", icon: Flag, group: "Ações", desc: "Encerra o roteiro do bot" }
 };
@@ -55,6 +56,7 @@ export function portsOf(node) {
     case "hours": return [{ id: "open", label: "Aberto" }, { id: "closed", label: "Fechado" }];
     case "condition": return [{ id: "true", label: "Sim" }, { id: "false", label: "Não" }];
     case "ai": return [{ id: "done", label: "Resolveu" }, { id: "human", label: "Precisa de humano" }];
+    case "lookup": return [{ id: "found", label: "Encontrou o cliente" }, { id: "notfound", label: "Não encontrou", muted: true }];
     case "end": return [];
     default: return [{ id: "out", label: "Depois" }];
   }
@@ -90,6 +92,7 @@ export function summary(node, ctx = {}) {
       return extra ? `${base}: ${extra}` : base;
     }
     case "end": return d.text || "Encerra sem mensagem";
+    case "lookup": return `${ctx.pipelines?.find((p) => p.id === d.pipelineId)?.name || "Todos os funis"}${d.sendFiles ? " · envia anexos" : ""}`;
     case "ai": return ctx.prompts?.find((p) => p.id === d.promptId)?.name ? `Prompt: ${ctx.prompts.find((p) => p.id === d.promptId).name}` : "Escolha o prompt de IA…";
     default: return "";
   }
@@ -107,6 +110,7 @@ export function newNode(type, x, y) {
   if (type === "wait") base.data = { seconds: 5 };
   if (type === "action") base.data = { action: "transfer", text: "" };
   if (type === "end") base.data = { text: "" };
+  if (type === "lookup") base.data = { pipelineId: "", text: "Olá, {nome}! Encontrei seus dados:\n\n", sendFiles: true, notFoundText: "Não encontrei seu cadastro por este número. Vou te passar para um atendente." };
   if (type === "ai") base.data = { promptId: "", maxTurns: 20 };
   return base;
 }
