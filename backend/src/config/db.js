@@ -780,12 +780,19 @@ async function applySavedNames(accountId, list) {
 }
 
 export async function listConversations(accountId, scope) {
-  const { data, error } = await supabase
-    .from("conversations")
-    .select(CONVERSATION_SELECT)
-    .eq("account_id", accountId)
-    .order("last_message_at", { ascending: false });
-  if (error) throw error;
+  // O Supabase devolve no máximo 1000 linhas por consulta: busca em páginas
+  const data = [];
+  for (let from = 0; from < 5000; from += 1000) {
+    const { data: page, error } = await supabase
+      .from("conversations")
+      .select(CONVERSATION_SELECT)
+      .eq("account_id", accountId)
+      .order("last_message_at", { ascending: false })
+      .range(from, from + 999);
+    if (error) throw error;
+    data.push(...page);
+    if (page.length < 1000) break;
+  }
   const all = await applySavedNames(accountId, data.map(mapConversation));
   if (!scope || scope.role !== "agent") return all;
   const access = await getAgentAccess(accountId, scope.userId, scope.departmentIds);
@@ -2841,9 +2848,13 @@ function mapTask(t) {
     id: t.id, title: t.title, description: t.description || "", assigneeId: t.assignee_id, assigneeName: t.assignee?.name || null,
     createdById: t.created_by, createdByName: t.creator?.name || null, dueAt: t.due_at, status: t.status, kind: t.kind,
     scheduledMessageId: t.scheduled_message_id, conversationId: t.conversation_id, conversationName: t.conversations?.name || null,
-    createdAt: t.created_at, doneAt: t.done_at
+    createdAt: t.created_at, doneAt: t.done_at,
+    stage: t.stage || (t.status === "done" ? "done" : "todo"), priority: t.priority || "normal",
+    checklist: t.checklist || [], attachments: t.attachments || [], comments: t.comments || [], labels: t.labels || [],
+    position: t.position ?? null
   };
 }
+const TASK_STAGES = ["todo", "doing", "review", "done"];
 const TASK_SELECT = "*, assignee:profiles!tasks_assignee_id_fkey(name), creator:profiles!tasks_created_by_fkey(name), conversations(name)";
 export async function listTasks(accountId, { userId, all } = {}) {
   let q = supabase.from("tasks").select(TASK_SELECT).eq("account_id", accountId).order("status").order("due_at", { ascending: true, nullsFirst: false }).limit(500);
@@ -2868,10 +2879,49 @@ export async function updateTask(accountId, id, b) {
   if (b.description !== undefined) patch.description = b.description;
   if (b.assigneeId !== undefined) patch.assignee_id = b.assigneeId || null;
   if (b.dueAt !== undefined) patch.due_at = b.dueAt || null;
-  if (b.status !== undefined) { patch.status = b.status === "done" ? "done" : "open"; patch.done_at = b.status === "done" ? new Date().toISOString() : null; }
+  if (b.status !== undefined) {
+    patch.status = b.status === "done" ? "done" : "open";
+    patch.done_at = b.status === "done" ? new Date().toISOString() : null;
+    if (b.stage === undefined) patch.stage = b.status === "done" ? "done" : "todo";
+  }
+  if (b.stage !== undefined && TASK_STAGES.includes(b.stage)) {
+    patch.stage = b.stage;
+    patch.status = b.stage === "done" ? "done" : "open";
+    patch.done_at = b.stage === "done" ? new Date().toISOString() : null;
+  }
+  if (b.priority !== undefined) patch.priority = ["low", "normal", "high", "urgent"].includes(b.priority) ? b.priority : "normal";
+  if (b.position !== undefined) patch.position = Number(b.position) || null;
+  if (Array.isArray(b.checklist)) patch.checklist = b.checklist.slice(0, 100).map((i) => ({ id: String(i.id || randomId()), text: String(i.text || "").slice(0, 300), done: !!i.done }));
+  if (Array.isArray(b.labels)) patch.labels = b.labels.slice(0, 10).map((l) => ({ text: String(l.text || "").slice(0, 30), color: String(l.color || "#0071e3").slice(0, 9) }));
+  if (b.conversationId !== undefined) patch.conversation_id = b.conversationId || null;
   const { data, error } = await supabase.from("tasks").update(patch).eq("account_id", accountId).eq("id", id).select(TASK_SELECT).single();
   if (error) throw error;
   return mapTask(data);
+}
+const randomId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+export async function getTask(accountId, id) {
+  const { data, error } = await supabase.from("tasks").select(TASK_SELECT).eq("account_id", accountId).eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? mapTask(data) : null;
+}
+/** Anexos e comentários: lista jsonb na própria tarefa. */
+export async function pushTaskItem(accountId, id, field, item) {
+  const { data: t, error } = await supabase.from("tasks").select(`id, ${field}`).eq("account_id", accountId).eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!t) return null;
+  const list = [...(t[field] || []), { id: randomId(), at: new Date().toISOString(), ...item }].slice(-200);
+  const { data, error: e2 } = await supabase.from("tasks").update({ [field]: list }).eq("id", id).select(TASK_SELECT).single();
+  if (e2) throw e2;
+  return mapTask(data);
+}
+export async function removeTaskItem(accountId, id, field, itemId) {
+  const { data: t, error } = await supabase.from("tasks").select(`id, ${field}`).eq("account_id", accountId).eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!t) return { task: null, removed: null };
+  const removed = (t[field] || []).find((x) => x.id === itemId) || null;
+  const { data, error: e2 } = await supabase.from("tasks").update({ [field]: (t[field] || []).filter((x) => x.id !== itemId) }).eq("id", id).select(TASK_SELECT).single();
+  if (e2) throw e2;
+  return { task: mapTask(data), removed };
 }
 export async function deleteTask(accountId, id) {
   const { error } = await supabase.from("tasks").delete().eq("account_id", accountId).eq("id", id);
