@@ -36,6 +36,37 @@ export const TEMPLATES = [
     ]
   },
   {
+    key: "agencia_viagens",
+    name: "Agência de viagens",
+    group: "Por tipo de empresa",
+    kindField: "tipo_viagem",
+    description: "Do orçamento ao retorno da viagem. O cliente consulta voo, hotel e vouchers pelo WhatsApp com o bloco “Consultar cliente” do robô.",
+    stages: [
+      { id: "orcamento", name: "Orçamento", color: "#0a84ff" },
+      { id: "proposta", name: "Proposta enviada", color: "#ffcc00",
+        automations: [{ id: "a1", type: "task", active: true, title: "Retornar proposta de viagem de {nome_completo}", days: 2 }] },
+      { id: "fechada", name: "Viagem fechada", color: "#30d158" },
+      { id: "embarque", name: "Pré-embarque", color: "#bf5af2" },
+      { id: "viajando", name: "Viajando", color: "#5ac8fa" },
+      { id: "concluida", name: "Concluída", color: "#248a3d" },
+      { id: "perdido", name: "Perdidos", color: "#ff453a" }
+    ],
+    fields: [
+      { id: "tipo_viagem", label: "Tipo de viagem", type: "select", options: ["Nacional", "Internacional", "Cruzeiro", "Pacote", "Só aéreo", "Só hotel", "Corporativa", "Lua de mel"] },
+      { id: "destino", label: "Destino", type: "text", card: true },
+      { id: "ida", label: "Data de ida", type: "date", card: true, alert: true },
+      { id: "volta", label: "Data de volta", type: "date" },
+      { id: "passageiros", label: "Passageiros", type: "number" },
+      { id: "localizador", label: "Localizador (reserva)", type: "text", card: true },
+      { id: "voo_ida", label: "Voo de ida (cia, nº e horário)", type: "text" },
+      { id: "voo_volta", label: "Voo de volta (cia, nº e horário)", type: "text" },
+      { id: "hotel", label: "Hotel", type: "text" },
+      { id: "transfer", label: "Transfer", type: "text" },
+      { id: "seguro_viagem", label: "Seguro viagem", type: "select", options: ["Incluído", "Não contratado"] },
+      { id: "observacoes", label: "Observações para o cliente", type: "textarea" }
+    ]
+  },
+  {
     key: "consorcio",
     name: "Consórcio",
     group: "Por tipo de empresa",
