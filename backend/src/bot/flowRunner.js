@@ -17,6 +17,7 @@
  *   action    → out                       data: { action: transfer|assign|label|close|human, departmentId, agentId, labelId, text }
  *   end       → (nenhuma)                 data: { text }
  *   lookup    → found, notfound           data: { pipelineId, text, sendFiles, notFoundText }  (Consultar cliente no CRM pelo número do WhatsApp)
+ *   http      → ok, error                 data: { method, url, headers, body, map:[{var,path}], text }  (Consultar sistema externo)
  *   ai        → human, done               data: { instructions, knowledge, maxTurns }  (Atendente IA: conversa até resolver ou passar para humano)
  *
  * Estado da conversa: conversation.botNodeId = bloco que está esperando resposta
@@ -117,6 +118,43 @@ function leadVars(lead) {
   };
   for (const f of pipe.fields || []) out[f.id] = fmt(f, (lead.custom || {})[f.id]);
   return out;
+}
+
+// ---- Consultar sistema externo (API da empresa) ----
+import dns from "dns/promises";
+import net from "net";
+function privateIp(ip) {
+  if (net.isIPv6(ip)) { const x = ip.toLowerCase(); return x === "::1" || x.startsWith("fc") || x.startsWith("fd") || x.startsWith("fe80") || x.startsWith("::ffff:127.") || x.startsWith("::ffff:10.") || x.startsWith("::ffff:192.168."); }
+  const [a, b] = ip.split(".").map(Number);
+  return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+}
+function pickPath(obj, path) {
+  return String(path || "").replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean).reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+async function httpCall(d, vars) {
+  const url = interpolate(d.url || "", Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, encodeURIComponent(String(v))])));
+  let u;
+  try { u = new URL(url); } catch { throw new Error("URL inválida"); }
+  if (!/^https?:$/.test(u.protocol)) throw new Error("Só http/https");
+  const addrs = await dns.lookup(u.hostname, { all: true });
+  if (addrs.some((a) => privateIp(a.address))) throw new Error("Endereço interno bloqueado");
+  const headers = { Accept: "application/json" };
+  for (const line of String(d.headers || "").split("\n")) {
+    const i = line.indexOf(":");
+    if (i > 0) headers[line.slice(0, i).trim()] = interpolate(line.slice(i + 1).trim(), vars);
+  }
+  const method = (d.method || "GET").toUpperCase() === "POST" ? "POST" : "GET";
+  let body;
+  if (method === "POST" && d.body) { body = interpolate(d.body, vars); headers["Content-Type"] = headers["Content-Type"] || "application/json"; }
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 8000);
+  try {
+    const r = await fetch(u, { method, headers, body, signal: ctl.signal, redirect: "error" });
+    const txt = (await r.text()).slice(0, 200000);
+    let json = null;
+    try { json = JSON.parse(txt); } catch {}
+    return { ok: r.ok, status: r.status, json, txt };
+  } finally { clearTimeout(t); }
 }
 
 const MAX_STEPS = 40;
@@ -365,6 +403,28 @@ export async function runGraph(ctx) {
         patch.mode = "human";
         return { handled: true, state: { botNodeId: null, flowVars: { ...vars, __ended: true }, ...patch }, log };
       }
+    } else if (node.type === "http") {
+      let port = "error";
+      try {
+        const r = await httpCall(d, vars);
+        vars.api_status = String(r.status);
+        if (r.ok) {
+          for (const m of d.map || []) {
+            if (!m?.var) continue;
+            const v = r.json != null ? pickPath(r.json, m.path) : undefined;
+            vars[String(m.var).replace(/[^\w]/g, "")] = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+          }
+          port = "ok";
+        }
+        if (dryRun) log.push(`🌐 (consulta externa: HTTP ${r.status})`);
+      } catch (err) {
+        if (dryRun) log.push(`🌐 (consulta externa falhou: ${err.message})`);
+        else console.warn("[Fluxo] consulta externa:", err.message);
+      }
+      track(node.id, "reply", port);
+      if (port === "ok" && d.text) await send(d.text);
+      if (port === "error" && d.errorText) await send(d.errorText);
+      currentId = nextOf(graph, node.id, port);
     } else if (node.type === "lookup") {
       let lead = null;
       try { lead = await findLeadByPhone(accountId, vars.telefone, d.pipelineId || null); } catch (err) { console.warn("[Fluxo] consulta CRM:", err.message); }
