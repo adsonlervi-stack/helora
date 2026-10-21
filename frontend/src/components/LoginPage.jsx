@@ -7,7 +7,15 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
-  const [info, setInfo] = useState(null);
+  const [info, setInfo] = useState(() => {
+    try {
+      if (sessionStorage.getItem("helora_session_expired")) {
+        sessionStorage.removeItem("helora_session_expired");
+        return "Sua sessão expirou por segurança. Entre novamente para continuar.";
+      }
+    } catch {}
+    return null;
+  });
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {

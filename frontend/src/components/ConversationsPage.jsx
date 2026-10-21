@@ -51,13 +51,19 @@ export default function ConversationsPage({
     setTimeout(() => setToast(null), 4000);
   };
 
+  // Conversa aberta de fora (CRM, tarefas) que ainda não está na lista carregada
+  const [extraConv, setExtraConv] = useState(null);
   const loadMessages = useCallback((id) => {
-    getConversationMessages(id).then((data) =>
+    getConversationMessages(id).then((data) => {
+      if (data.conversation) setExtraConv(data.conversation);
       setMessages((prev) => {
         const pending = prev.filter((m) => String(m.id).startsWith("tmp-") && m.conversationId !== "x");
         return pending.length && prev[0]?.conversationId === id ? [...data.messages, ...pending] : data.messages;
-      })
-    );
+      });
+    }).catch((e) => {
+      const st = e?.response?.status;
+      alertMsg(st === 403 ? "Você não tem acesso a esta conversa." : st === 404 ? "Conversa não encontrada." : "Não foi possível abrir a conversa.");
+    });
   }, []);
 
   // Quando outra tela pede pra abrir uma conversa específica (ex: painel
@@ -66,8 +72,9 @@ export default function ConversationsPage({
     if (!openConversationId) return;
     setSelectedId(openConversationId);
     loadMessages(openConversationId);
+    refreshConversations?.();
     onOpenConversationHandled?.();
-  }, [openConversationId, loadMessages, onOpenConversationHandled]);
+  }, [openConversationId, loadMessages, onOpenConversationHandled, refreshConversations]);
 
   // Escuta só as mensagens da conversa aberta no momento — muda de
   // inscrição sempre que o usuário troca de conversa.
@@ -245,7 +252,8 @@ export default function ConversationsPage({
     refreshConversations();
   };
 
-  const selectedConversation = conversations.find((c) => c.id === selectedId) || null;
+  const selectedConversation =
+    conversations.find((c) => c.id === selectedId) || (extraConv?.id === selectedId ? extraConv : null);
 
   return (
     <div className="conversations-page">

@@ -1,4 +1,5 @@
-import { askConfirm, askPrompt } from "../dialogs.js";
+import { askConfirm, askPrompt, notify } from "../dialogs.js";
+import TaskBoard from "./TaskBoard.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, CheckCircle2, Circle, Paperclip, CalendarClock, AlertTriangle, X } from "lucide-react";
 import {
@@ -12,9 +13,12 @@ const recurLabel = (m) =>
   m.recurrence === "monthly" ? `Todo mês, dia ${m.recurDay}` : m.recurrence === "interval" ? `A cada ${m.recurEveryDays} dias` : "Envio único";
 
 /** Aba Tarefas: tarefas da equipe + o que o sistema agendou e as pendências (ex.: anexar boleto). */
-export default function TasksPage({ profile }) {
+export default function TasksPage({ profile, onOpenConversation }) {
   const isManager = profile?.role === "owner" || profile?.isSuperAdmin;
   const [view, setView] = useState("tasks");
+  const [layout, setLayout] = useState(() => { try { return localStorage.getItem("helora_tasks_layout") || "board"; } catch { return "board"; } });
+  const [openId, setOpenId] = useState(null);
+  const pickLayout = (l) => { setLayout(l); try { localStorage.setItem("helora_tasks_layout", l); } catch {} };
   const [tasks, setTasks] = useState(null);
   const [scheduled, setScheduled] = useState(null);
   const [team, setTeam] = useState([]);
@@ -88,7 +92,14 @@ export default function TasksPage({ profile }) {
         </div>
       )}
 
-      {view === "tasks" ? (
+      {view === "tasks" && layout === "board" ? (
+        <TaskBoard
+          tasks={tasks} setTasks={setTasks} team={team} profile={profile} isManager={isManager}
+          scope={scope} setScope={setScope} layout={layout} setLayout={pickLayout}
+          openId={openId} setOpenId={setOpenId} reload={loadTasks} onOpenConversation={onOpenConversation}
+          onAttachScheduled={attach}
+        />
+      ) : view === "tasks" ? (
         <div className="card">
           <div className="gestao-row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             <div className="dash-presets">
@@ -102,6 +113,10 @@ export default function TasksPage({ profile }) {
                 <button className={scope === "mine" ? "active" : ""} onClick={() => setScope("mine")}>Minhas</button>
               </div>
             )}
+            <div className="dash-presets" style={{ marginLeft: "auto" }}>
+              <button onClick={() => pickLayout("board")}>Quadro</button>
+              <button className="active">Lista</button>
+            </div>
           </div>
           {tasks === null && <div className="cv-muted">Carregando…</div>}
           {shown.map((t) => {
@@ -111,7 +126,7 @@ export default function TasksPage({ profile }) {
                 <button className="task-check" onClick={() => toggle(t)} title={t.status === "done" ? "Reabrir" : "Concluir"}>
                   {t.status === "done" ? <CheckCircle2 size={20} color="#34c759" /> : <Circle size={20} />}
                 </button>
-                <div className="task-main">
+                <div className="task-main" style={{ cursor: "pointer" }} onClick={() => { pickLayout("board"); setOpenId(t.id); }}>
                   <strong>{t.kind === "attachment" ? "📎 " : ""}{t.title}</strong>
                   {t.description && <span className="cv-muted">{t.description}</span>}
                   <span className="task-meta">
@@ -152,7 +167,7 @@ export default function TasksPage({ profile }) {
         </div>
       )}
 
-      {showNew && <NewTaskModal team={team} profile={profile} isManager={isManager} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); loadTasks(); }} />}
+      {showNew && <NewTaskModal team={team} profile={profile} isManager={isManager} onClose={() => setShowNew(false)} onSaved={(t) => { setShowNew(false); loadTasks(); if (t?.id) { pickLayout("board"); setOpenId(t.id); } }} />}
     </div>
   );
 }
@@ -164,8 +179,8 @@ function NewTaskModal({ team, profile, isManager, onClose, onSaved }) {
   const save = async (e) => {
     e.preventDefault();
     try {
-      await createTaskApi({ ...f, dueAt: f.dueAt ? new Date(f.dueAt).toISOString() : null, assigneeId: f.assigneeId || null });
-      onSaved();
+      const t = await createTaskApi({ ...f, dueAt: f.dueAt ? new Date(f.dueAt).toISOString() : null, assigneeId: f.assigneeId || null });
+      onSaved(t);
     } catch (e2) {
       setErr(errText(e2));
     }

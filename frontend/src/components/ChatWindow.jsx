@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2,
   RotateCcw, Users, Check, CheckCheck, Clock, AlertCircle, Forward, Reply, Copy, Trash2, Ban, UserRound, MapPin, X,
-  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles
+  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles, Bot, Headset
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
@@ -811,7 +811,7 @@ export default function ChatWindow({
             <ArrowLeft size={20} />
           </button>
           <button className="chat-who" onClick={() => setPanelOpen((v) => !v)} title="Abrir / fechar dados do cliente">
-          <Avatar name={conversation.name} url={conversation.avatarUrl} size={40} />
+          <Avatar name={conversation.name} url={conversation.avatarUrl} size={40} zoomable />
           <div>
             <div className="chat-header-name">{conversation.name}</div>
             <div className="chat-header-platform">
@@ -830,12 +830,12 @@ export default function ChatWindow({
         <div className="chat-header-right">
           {conversation.status !== "resolved" && conversation.assignedAgentId !== currentUserId && (
             <button className="pill-btn primary" onClick={onTakeOver} title="Assumir este atendimento">
-              <Hand size={15} /> Assumir
+              <Hand size={15} /><span className="pb-lbl">Assumir</span>
             </button>
           )}
           {conversation.status !== "resolved" && (
             <button className="pill-btn" onClick={() => setShowTransfer(true)} title="Transferir para setor ou atendente">
-              <ArrowRightLeft size={15} /> Transferir
+              <ArrowRightLeft size={15} /><span className="pb-lbl">Transferir</span>
             </button>
           )}
           {conversation.status !== "resolved" && conversation.assignedAgentId && (
@@ -852,7 +852,7 @@ export default function ChatWindow({
             </button>
           ) : (
             <button className="pill-btn" onClick={() => onSetStatus("open")} title="Reabrir atendimento">
-              <RotateCcw size={15} /> Reabrir
+              <RotateCcw size={15} /><span className="pb-lbl">Reabrir</span>
             </button>
           )}
 
@@ -860,14 +860,16 @@ export default function ChatWindow({
             <button
               className={conversation.mode === "bot" ? "active" : ""}
               onClick={() => onSetMode("bot")}
+              title="Bot responde"
             >
-              Bot
+              <Bot size={14} className="mt-ico" /><span className="pb-lbl">Bot</span>
             </button>
             <button
               className={conversation.mode === "human" ? "active" : ""}
               onClick={() => onSetMode("human")}
+              title="Atendente responde"
             >
-              Atendente
+              <Headset size={14} className="mt-ico" /><span className="pb-lbl">Atendente</span>
             </button>
           </div>}
 

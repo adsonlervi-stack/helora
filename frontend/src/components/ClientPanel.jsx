@@ -73,7 +73,7 @@ export default function ClientPanel({ conversation, departments = [], team = [],
       </div>
 
       <div className="client-identity">
-        <Avatar name={conversation.name} url={conversation.avatarUrl} size={56} />
+        <Avatar name={conversation.name} url={conversation.avatarUrl} size={56} zoomable />
         <div>
           <strong>{contact?.name || conversation.name}</strong>
           <span>{conversation.isGroup ? "Grupo de WhatsApp" : fmtPhone(contact?.phone || conversation.phone || "") || "Número não informado"}</span>

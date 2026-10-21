@@ -169,9 +169,9 @@ function FunnelView({ ctx }) {
   };
   const openConv = async (l) => {
     try {
-      const r = l.conversationId ? { conversationId: l.conversationId } : await crm.openLeadConversation(l.id);
+      const r = await crm.openLeadConversation(l.id);
       ctx.onOpenConversation?.(r.conversationId);
-    } catch (e) { alert(errText(e)); }
+    } catch (e) { notify(errText(e), "error"); }
   };
   const saveStages = async (next) => {
     try {
@@ -498,10 +498,10 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
   };
   const openConversation = async () => {
     try {
-      const r = lead.conversationId ? { conversationId: lead.conversationId } : await crm.openLeadConversation(lead.id);
+      const r = await crm.openLeadConversation(lead.id);
       onClose();
       ctx.onOpenConversation?.(r.conversationId);
-    } catch (e) { setErr(errText(e)); }
+    } catch (e) { notify(errText(e), "error"); }
   };
   // Sem produtos cadastrados: cria um na hora e já vincula ao lead
   const addProduct = async () => {
@@ -581,13 +581,6 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
           <input ref={fileRef} type="file" multiple hidden onChange={(e) => { const l = [...(e.target.files || [])]; e.target.value = ""; l.length && addFiles(l); }} />
         </div>
       )}
-      <Group title="Contato">
-        <Row label="Nome"><input autoFocus={isNew} value={f.name} onChange={set("name")} placeholder="Obrigatório" /></Row>
-        <Row label="Empresa"><input value={f.company} onChange={set("company")} placeholder="Opcional" /></Row>
-        <Row label="WhatsApp"><input value={f.phone} onChange={set("phone")} placeholder="55 61 99999-9999" inputMode="tel" /></Row>
-        <Row label="E-mail"><input value={f.email} onChange={set("email")} placeholder="email@empresa.com" inputMode="email" /></Row>
-        <Row label="Origem"><input value={f.source} onChange={set("source")} placeholder="Instagram, indicação…" /></Row>
-      </Group>
       <Group title="Negócio">
         <Row label="Funil">
           <select value={f.pipelineId} onChange={(e) => { const p = pipelines.find((x) => x.id === e.target.value); setF((c) => ({ ...c, pipelineId: e.target.value, stage: p?.stages?.[0]?.id })); }}>
@@ -634,6 +627,13 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
           })}
         </Group>
       )}
+      <Group title="Contato">
+        <Row label="Nome"><input autoFocus={isNew} value={f.name} onChange={set("name")} placeholder="Obrigatório" /></Row>
+        <Row label="Empresa"><input value={f.company} onChange={set("company")} placeholder="Opcional" /></Row>
+        <Row label="WhatsApp"><input value={f.phone} onChange={set("phone")} placeholder="55 61 99999-9999" inputMode="tel" /></Row>
+        <Row label="E-mail"><input value={f.email} onChange={set("email")} placeholder="email@empresa.com" inputMode="email" /></Row>
+        <Row label="Origem"><input value={f.source} onChange={set("source")} placeholder="Instagram, indicação…" /></Row>
+      </Group>
       <Group title={`Checklist${checklist.length ? ` · ${doneCount}/${checklist.length}` : ""}`}>
         {checklist.length > 0 && (
           <div className="crm-progress"><span style={{ width: `${Math.round((doneCount / checklist.length) * 100)}%` }} /></div>
