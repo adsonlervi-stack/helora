@@ -163,3 +163,36 @@ export async function emailContract({ userId, accountId }) {
     console.warn("[Contrato] e-mail não enviado:", err.message);
   }
 }
+
+// ---------------------------------------------------------------- Queda do WhatsApp
+const REASONS = {
+  401: "desconectado pelo celular", 403: "bloqueado pelo WhatsApp", 408: "sem resposta (rede)", 411: "dispositivo incompatível",
+  428: "conexão encerrada", 440: "aberto em outro lugar", 500: "sessão corrompida", 503: "WhatsApp fora do ar", 515: "reinício solicitado"
+};
+export function dropReason(code) { return REASONS[code] || (code ? `código ${code}` : "queda de rede"); }
+const lastDropAlert = new Map();
+/** Registra a queda (aparece no histórico da Gestão) e, se for grave, avisa os donos por e-mail (máx. 1/h por canal). */
+export async function logChannelDrop({ accountId, channelId, code, critical = false }) {
+  try {
+    const { data: ch } = await supabase.from("channels").select("name").eq("id", channelId).maybeSingle();
+    await supabase.from("access_logs").insert({
+      account_id: accountId, user_name: ch?.name || "WhatsApp", event: `whatsapp_caiu: ${dropReason(code)}${critical ? " (precisa reconectar)" : ""}`
+    });
+    if (!critical || !emailConfigured()) return;
+    if (Date.now() - (lastDropAlert.get(channelId) || 0) < 60 * 60 * 1000) return;
+    lastDropAlert.set(channelId, Date.now());
+    const { data: owners } = await supabase.from("profiles").select("id, name").eq("account_id", accountId).eq("role", "owner");
+    for (const o of owners || []) {
+      const { data: u } = await supabase.auth.admin.getUserById(o.id).catch(() => ({ data: null }));
+      if (!u?.user?.email) continue;
+      await sendMail({
+        to: u.user.email, name: o.name || "", label: "WhatsApp", subject: "Seu WhatsApp foi desconectado do Helora",
+        title: "O WhatsApp da sua empresa desconectou",
+        message: `O número "${ch?.name || "WhatsApp"}" foi desconectado (${dropReason(code)}). Enquanto isso, as mensagens não chegam no Helora.\n\nPara voltar, entre em Canais e leia o QR Code de novo.`,
+        buttonText: "Reconectar agora", buttonLink: `${appUrl()}/`, note: "Se foi você que desconectou pelo celular, pode ignorar."
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("[WhatsApp] registro de queda falhou:", err.message);
+  }
+}
