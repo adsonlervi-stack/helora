@@ -16,6 +16,7 @@
  *   wait      → out                       data: { seconds }
  *   action    → out                       data: { action: transfer|assign|label|close|human, departmentId, agentId, labelId, text }
  *   end       → (nenhuma)                 data: { text }
+ *   lookup    → found, notfound           data: { pipelineId, text, sendFiles, notFoundText }  (Consultar cliente no CRM pelo número do WhatsApp)
  *   ai        → human, done               data: { instructions, knowledge, maxTurns }  (Atendente IA: conversa até resolver ou passar para humano)
  *
  * Estado da conversa: conversation.botNodeId = bloco que está esperando resposta
@@ -89,6 +90,33 @@ async function aiTurn({ accountId, conversation, node, vars, dryRun, text }) {
     else if (prompt.transfer_message) out = prompt.transfer_message;
   }
   return { text: out, port, prompt };
+}
+
+/** Acha o card do CRM do cliente pelo número do WhatsApp (últimos 8 dígitos). */
+async function findLeadByPhone(accountId, phone, pipelineId) {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length < 8) return null;
+  let q = supabase.from("crm_leads").select("*, crm_pipelines(name, stages, fields), owner:profiles!crm_leads_owner_id_fkey(name)")
+    .eq("account_id", accountId).ilike("phone", `%${digits.slice(-8)}`).order("created_at", { ascending: false }).limit(1);
+  if (pipelineId) q = q.eq("pipeline_id", pipelineId);
+  const { data } = await q.maybeSingle();
+  return data || null;
+}
+function leadVars(lead) {
+  const pipe = lead.crm_pipelines || {};
+  const fmt = (f, v) => {
+    if (v == null || v === "") return "";
+    if (f?.type === "date") return String(v).slice(0, 10).split("-").reverse().join("/");
+    if (f?.type === "currency") return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    return String(v);
+  };
+  const out = {
+    nome: String(lead.name || "").split(" ")[0], nome_completo: lead.name || "", empresa: lead.company || "",
+    valor: lead.value != null ? Number(lead.value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "",
+    etapa: (pipe.stages || []).find((s) => s.id === lead.stage)?.name || "", responsavel: lead.owner?.name || "", email: lead.email || ""
+  };
+  for (const f of pipe.fields || []) out[f.id] = fmt(f, (lead.custom || {})[f.id]);
+  return out;
 }
 
 const MAX_STEPS = 40;
@@ -336,6 +364,30 @@ export async function runGraph(ctx) {
       if (!currentId && r.port === "human") {
         patch.mode = "human";
         return { handled: true, state: { botNodeId: null, flowVars: { ...vars, __ended: true }, ...patch }, log };
+      }
+    } else if (node.type === "lookup") {
+      let lead = null;
+      try { lead = await findLeadByPhone(accountId, vars.telefone, d.pipelineId || null); } catch (err) { console.warn("[Fluxo] consulta CRM:", err.message); }
+      if (!lead && dryRun) log.push("🔎 (cliente não encontrado no CRM — no teste o número é fictício)");
+      if (lead) {
+        Object.assign(vars, leadVars(lead));
+        track(node.id, "reply", "found");
+        if (d.text) await send(d.text);
+        if (d.sendFiles) {
+          for (const f of (lead.attachments || []).slice(0, 10)) {
+            if (dryRun) { log.push(`📎 ${f.name}`); continue; }
+            try {
+              const { sendMediaUrlToConversation } = await import("../messaging.js");
+              const mediaType = /^image\//.test(f.type || "") ? "image" : /^video\//.test(f.type || "") ? "video" : "document";
+              await sendMediaUrlToConversation(accountId, conversation, { url: f.url, mediaType, caption: f.name }, { sign: false, fromBot: true });
+            } catch (err) { console.warn("[Fluxo] anexo:", err.message); }
+          }
+        }
+        currentId = nextOf(graph, node.id, "found");
+      } else {
+        track(node.id, "reply", "notfound");
+        if (d.notFoundText) await send(d.notFoundText);
+        currentId = nextOf(graph, node.id, "notfound");
       }
     } else if (node.type === "end") {
       if (d.text) await send(d.text);
