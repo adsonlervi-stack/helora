@@ -243,6 +243,11 @@ router.post("/leads/:id/conversation", async (req, res) => {
   try {
     const { data: lead } = await supabase.from("crm_leads").select("*").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
     if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
+    // Já tem conversa vinculada e ela ainda existe: só abre, sem reatribuir
+    if (lead.conversation_id && !req.body?.departmentId) {
+      const { data: ex } = await supabase.from("conversations").select("id").eq("account_id", req.accountId).eq("id", lead.conversation_id).maybeSingle();
+      if (ex) return res.json({ conversationId: ex.id });
+    }
     const conv = await leadConversation(req.accountId, lead, { departmentId: req.body?.departmentId, agentId: req.userId });
     res.json({ conversationId: conv.id });
   } catch (err) { res.status(400).json({ error: err.message }); }

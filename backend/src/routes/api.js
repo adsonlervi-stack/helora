@@ -127,6 +127,9 @@ import {
   updateScheduledRaw,
   listTasks,
   createTask,
+  getTask,
+  pushTaskItem,
+  removeTaskItem,
   updateTask,
   deleteTask,
   closeTasksForScheduled,
@@ -157,6 +160,7 @@ import {
   markWhatsAppRead
 } from "../whatsapp/baileysClient.js";
 import { toJpeg, toWebp } from "../imageTools.js";
+import { uploadCrmFile, removeCrmFile } from "../storage.js";
 import { getInvoicePix } from "../billing.js";
 import { mailWelcomeUser } from "../emails.js";
 import { sendMetaMessage } from "../meta/metaClient.js";
@@ -1595,8 +1599,45 @@ router.patch("/tasks/:id", async (req, res) => {
   try {
     res.json(await updateTask(req.accountId, req.params.id, req.body || {}));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    taskMigErr(res, err);
   }
+});
+const taskMigErr = (res, err) => res.status(500).json({ error: /checklist|attachments|comments|stage|priority|labels|position/.test(err.message) ? "Rode a migration 034 no Supabase (tarefas em quadro)." : err.message });
+router.post("/tasks/:id/comments", async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim().slice(0, 2000);
+    if (!text) return res.status(400).json({ error: "Escreva o comentário." });
+    const t = await pushTaskItem(req.accountId, req.params.id, "comments", { text, by: req.userName || null, byId: req.userId });
+    if (!t) return res.status(404).json({ error: "Tarefa não encontrada." });
+    res.status(201).json(t);
+  } catch (err) { taskMigErr(res, err); }
+});
+router.delete("/tasks/:id/comments/:itemId", async (req, res) => {
+  try {
+    const { task, removed } = await removeTaskItem(req.accountId, req.params.id, "comments", req.params.itemId);
+    if (!task) return res.status(404).json({ error: "Tarefa não encontrada." });
+    res.json(task);
+  } catch (err) { taskMigErr(res, err); }
+});
+router.post("/tasks/:id/files", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "Envie um arquivo." });
+    const cur = await getTask(req.accountId, req.params.id);
+    if (!cur) return res.status(404).json({ error: "Tarefa não encontrada." });
+    if ((cur.attachments || []).length >= 30) return res.status(400).json({ error: "Máximo de 30 anexos por tarefa." });
+    const name = Buffer.from(req.file.originalname || "arquivo", "latin1").toString("utf8").slice(0, 120);
+    const ext = (name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
+    const url = await uploadCrmFile({ accountId: req.accountId, buffer: req.file.buffer, extension: ext, contentType: req.file.mimetype || "application/octet-stream" });
+    res.status(201).json(await pushTaskItem(req.accountId, req.params.id, "attachments", { name, url, size: req.file.size, type: req.file.mimetype || null, by: req.userName || null }));
+  } catch (err) { taskMigErr(res, err); }
+});
+router.delete("/tasks/:id/files/:itemId", async (req, res) => {
+  try {
+    const { task, removed } = await removeTaskItem(req.accountId, req.params.id, "attachments", req.params.itemId);
+    if (!task) return res.status(404).json({ error: "Tarefa não encontrada." });
+    if (removed?.url) removeCrmFile(removed.url).catch(() => {});
+    res.json(task);
+  } catch (err) { taskMigErr(res, err); }
 });
 router.delete("/tasks/:id", async (req, res) => {
   try {
