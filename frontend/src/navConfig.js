@@ -82,4 +82,4 @@ export const SECTION_TITLES = {
 };
 
 // No celular o Helora funciona como app: só Conversas e Pipeline.
-export const MOBILE_NAV_KEYS = ["conversations", "deals"];
+export const MOBILE_NAV_KEYS = ["conversations", "deals", "crm"];

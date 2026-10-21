@@ -391,6 +391,12 @@ export const crm = {
   templates: () => api.get("/crm/templates").then((r) => r.data),
   openLeadConversation: (id, d = {}) => api.post(`/crm/leads/${id}/conversation`, d).then((r) => r.data),
   uploadLeadFile: (id, file) => { const fd = new FormData(); fd.append("file", file); return api.post(`/crm/leads/${id}/files`, fd).then((r) => r.data); },
+  lead: (id) => api.get(`/crm/leads/${id}`).then((r) => r.data),
+  leadByConversation: (convId) => api.get(`/crm/by-conversation/${convId}`).then((r) => r.data),
+  setConversationLead: (convId, d) => api.post(`/crm/by-conversation/${convId}`, d).then((r) => r.data),
+  sendLeadMessage: (id, text) => api.post(`/crm/leads/${id}/message`, { text }).then((r) => r.data),
+  addLeadNote: (id, text) => api.post(`/crm/leads/${id}/notes`, { text }).then((r) => r.data),
+  deleteLeadNote: (id, noteId) => api.delete(`/crm/leads/${id}/notes/${noteId}`).then((r) => r.data),
   deleteLeadFile: (id, fileId) => api.delete(`/crm/leads/${id}/files/${fileId}`).then((r) => r.data)
 };
 

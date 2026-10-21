@@ -11,14 +11,26 @@ export function notifyEnabled() {
   }
 }
 
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
 export async function enableNotify() {
+  if (isIOS() && !isStandalone()) {
+    import("./dialogs.js").then((d) => d.notify("No iPhone, as notificações só funcionam com o Helora na Tela de Início: toque em Compartilhar → “Adicionar à Tela de Início” e abra por lá.", "info")).catch(() => {});
+    if (!notifySupported()) return false;
+  }
   if (!notifySupported()) return false;
   const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   const ok = perm === "granted";
   try {
     localStorage.setItem(KEY, ok ? "on" : "off");
   } catch {}
-  if (ok) { playPing(); subscribePush(); }
+  if (ok) {
+    playPing();
+    subscribePush().then(async (subOk) => {
+      if (!subOk) return;
+      try { const { api } = await import("./api.js"); await api.post("/push/test"); } catch {}
+    });
+  }
   return ok;
 }
 

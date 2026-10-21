@@ -90,7 +90,7 @@ export default function App() {
   const [footerNote, setFooterNote] = useState(null);
   const [profileError, setProfileError] = useState(null);
   const [profileRetryKey, setProfileRetryKey] = useState(0);
-  const [pendingConversationId, setPendingConversationId] = useState(null);
+  const [pendingConversationId, setPendingConversationId] = useState(() => { try { const c = new URLSearchParams(window.location.search).get("c"); if (c) window.history.replaceState(null, "", window.location.pathname); return c || null; } catch { return null; } });
   const [newConversationContact, setNewConversationContact] = useState(null);
   const [showSupport, setShowSupport] = useState(false);
   // Veio do link "recuperar senha" do e-mail?
