@@ -28,6 +28,7 @@ import {
 } from "../config/db.js";
 import { cloudSendText, cloudSendMediaLink, cloudSendLocation, cloudSendContact, cloudReact } from "../meta/cloudClient.js";
 import { toWebp } from "../imageTools.js";
+import { logChannelDrop } from "../governance.js";
 
 // Status do WhatsApp (proto WebMessageInfo.Status) -> tiques do painel
 const WA_STATUS = { 1: "pending", 2: "sent", 3: "delivered", 4: "read", 5: "read" };
@@ -404,6 +405,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       //    próximo "Conectar" gere um QR novo sem ninguém mexer no servidor.
       if (statusCode === DisconnectReason.loggedOut) {
         console.log(`[WhatsApp] Dispositivo ${channelId}: logout pelo celular. Sessão limpa.`);
+        logChannelDrop({ accountId, channelId, code: statusCode, critical: true });
         await stopWhatsAppForChannel(channelId, { wipe: true });
         return;
       }
@@ -424,6 +426,9 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       conn.status = "connecting";
       await publishStatus(channelId);
       console.log(`[WhatsApp] Dispositivo ${channelId}: caiu (código ${statusCode}). Reconectando em ${delay}ms.`);
+      // Registra só a 1ª queda de uma sequência; se não voltar em 5 tentativas, avisa os donos
+      if (conn.retries === 0) logChannelDrop({ accountId, channelId, code: statusCode });
+      if (nextRetries === 6) logChannelDrop({ accountId, channelId, code: statusCode, critical: true });
       conn.reconnectTimer = setTimeout(() => {
         if (conn.stopped) return;
         startWhatsAppForChannel(channelId, accountId, { retries: nextRetries }).catch((err) =>
