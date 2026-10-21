@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
+import CrmLeadPage from "./CrmLeadPage.jsx";
 
 const COLORS = ["#0a84ff", "#5ac8fa", "#bf5af2", "#ff375f", "#ff9f0a", "#ffcc00", "#30d158", "#64d2ff", "#8e8e93", "#ac8e68"];
 const brl = (v) => (v == null ? "R$ 0" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }));
@@ -79,7 +80,7 @@ export default function CrmPage({ profile, onOpenConversation }) {
     getDepartments().then(setDepartments).catch(() => {});
   }, []);
   const pipeline = pipelines.find((p) => p.id === pipelineId);
-  const ctx = { isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, allMode, setAllMode, loadPipelines, loadTags, loadProducts, setPipelines };
+  const ctx = { profile, isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, allMode, setAllMode, loadPipelines, loadTags, loadProducts, setPipelines };
 
   return (
     <div className="page crm-page">
@@ -310,7 +311,9 @@ function FunnelView({ ctx }) {
         })}
       </div>
 
-      {open && <LeadSheet ctx={ctx} lead={open} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); load(); }} />}
+      {open && (open.isNew
+        ? <LeadSheet ctx={ctx} lead={open} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); load(); }} />
+        : <CrmLeadPage ctx={ctx} lead={open} onClose={() => { setOpen(null); load(); }} />)}
       {editCol && (
         <Sheet title={editCol.id ? "Editar coluna" : "Nova coluna"} subtitle="Automações rodam sempre que um card entra nesta coluna." onClose={() => setEditCol(null)} width={560}
           footer={<><Button variant="secondary" onClick={() => setEditCol(null)}>Cancelar</Button><Button onClick={saveCol}>Salvar</Button></>}>
@@ -772,7 +775,9 @@ function ContactsView({ ctx }) {
         ))}
         {leads && !leads.length && <div className="ap-empty">Nenhum lead ainda. Cadastre ou importe uma planilha.</div>}
       </div>
-      {open && <LeadSheet ctx={ctx} lead={open} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); load(); }} />}
+      {open && (open.isNew
+        ? <LeadSheet ctx={ctx} lead={open} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); load(); }} />
+        : <CrmLeadPage ctx={ctx} lead={open} onClose={() => { setOpen(null); load(); }} />)}
       {importing && <ImportSheet ctx={ctx} onClose={() => setImporting(false)} onDone={() => { setImporting(false); load(); ctx.loadTags(); }} />}
     </>
   );

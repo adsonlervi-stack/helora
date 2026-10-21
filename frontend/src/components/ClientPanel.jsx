@@ -6,7 +6,9 @@ import Avatar from "./Avatar.jsx";
 import LabelPicker from "./LabelPicker.jsx";
 import PrioritySelector from "./PrioritySelector.jsx";
 import NotesSection from "./NotesSection.jsx";
-import { getConversationContact, updateContactLeadApi, createConversationDealApi } from "../api.js";
+import { getConversationContact, updateContactLeadApi, createConversationDealApi, crm, getTeam } from "../api.js";
+import CrmLeadPage from "./CrmLeadPage.jsx";
+import { KanbanSquare, Workflow, ExternalLink } from "lucide-react";
 
 const STAGES = {
   novo_lead: "Novo lead", contato: "Contato", negociacao: "Negociação",
@@ -95,17 +97,12 @@ export default function ClientPanel({ conversation, departments = [], team = [],
                   <Row label="WhatsApp"><input key={contact.phone || ""} defaultValue={fmtPhone(contact.phone || "") || ""} inputMode="tel" placeholder="5584999998888" onBlur={(e) => { const v = e.target.value.replace(/\D/g, ""); if (v && v !== contact.phone) saveField({ phone: v }); }} /></Row>
                   <Row label="E-mail"><input defaultValue={contact.email || ""} inputMode="email" placeholder="Adicionar" onBlur={(e) => e.target.value !== (contact.email || "") && saveField({ email: e.target.value })} /></Row>
                 </Group>
-                <Group title="Lead" hint="Mudar o status coloca ou move o contato no Pipeline.">
+                <FunnelBox conversation={conversation} contact={contact} saveField={saveField} />
+                <Group title="Lead">
                   <Row label="Origem">
                     <select value={contact.leadOrigin || ""} onChange={(e) => saveField({ leadOrigin: e.target.value })}>
                       <option value="">Escolher</option>
                       {ORIGINS.map((o) => <option key={o}>{o}</option>)}
-                    </select>
-                  </Row>
-                  <Row label="Status">
-                    <select value={contact.leadStatus || ""} onChange={(e) => saveField({ leadStatus: e.target.value })}>
-                      <option value="">Escolher</option>
-                      {STATUSES.map((o) => <option key={o}>{o}</option>)}
                     </select>
                   </Row>
                   <Row label="Atendente padrão">
@@ -230,5 +227,85 @@ function AuditButton({ conversationId }) {
         </Sheet>
       )}
     </>
+  );
+}
+
+/** Onde o cliente está: Pipeline (atendimento) ou CRM (funil e etapa). Se veio do CRM, já mostra o card. */
+function FunnelBox({ conversation, contact, saveField }) {
+  const [mode, setMode] = useState(null);
+  const [pipes, setPipes] = useState(null);
+  const [lead, setLead] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [openCard, setOpenCard] = useState(null);
+
+  useEffect(() => {
+    setMode(null); setLead(null); setErr(null);
+    Promise.all([crm.pipelines().catch(() => null), crm.leadByConversation(conversation.id).catch(() => ({ lead: null }))]).then(([p, r]) => {
+      setPipes(p);
+      setLead(r?.lead || null);
+      setMode(r?.lead ? "crm" : "pipeline");
+    });
+  }, [conversation.id]);
+
+  const pipe = pipes?.find((p) => p.id === lead?.pipelineId) || null;
+  const move = async (pipelineId, stage) => {
+    setBusy(true); setErr(null);
+    try { const r = await crm.setConversationLead(conversation.id, { pipelineId, stage }); setLead(r.lead); }
+    catch (e) { setErr(e?.response?.data?.error || e.message); }
+    setBusy(false);
+  };
+  const showCard = async () => {
+    const [tags, products, team] = await Promise.all([crm.tags().catch(() => []), crm.products().catch(() => []), getTeam().catch(() => [])]);
+    setOpenCard({ tags, products, team });
+  };
+  const crmAvailable = Array.isArray(pipes) && pipes.length > 0;
+
+  return (
+    <Group title="Funil">
+      <div className="cp-dest">
+        <button className={mode === "pipeline" ? "on" : ""} onClick={() => setMode("pipeline")}><Workflow size={14} /> Pipeline</button>
+        <button className={mode === "crm" ? "on" : ""} onClick={() => setMode("crm")} disabled={!crmAvailable} title={crmAvailable ? "" : "CRM não liberado para esta empresa"}><KanbanSquare size={14} /> CRM</button>
+      </div>
+      {mode === "pipeline" && (
+        <Row label="Etapa">
+          <select value={contact.leadStatus || ""} onChange={(e) => saveField({ leadStatus: e.target.value })}>
+            <option value="">Escolher</option>
+            {STATUSES.map((o) => <option key={o}>{o}</option>)}
+          </select>
+        </Row>
+      )}
+      {mode === "crm" && crmAvailable && (
+        <>
+          <Row label="Funil">
+            <select value={lead?.pipelineId || ""} disabled={busy} onChange={(e) => { const p = pipes.find((x) => x.id === e.target.value); if (p) move(p.id, p.stages?.[0]?.id); }}>
+              <option value="" disabled>Escolher funil</option>
+              {pipes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </Row>
+          {lead && (
+            <Row label="Etapa">
+              <select value={lead.stage} disabled={busy} onChange={(e) => move(lead.pipelineId, e.target.value)}>
+                {(pipe?.stages || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Row>
+          )}
+          {lead ? (
+            <div className="cp-card-link">
+              <span>{lead.name}{lead.value ? ` · ${brl(lead.value)}` : ""}</span>
+              <button onClick={showCard}><ExternalLink size={13} /> Abrir card</button>
+            </div>
+          ) : <div className="cv-muted" style={{ padding: "6px 14px 10px", fontSize: 12.5 }}>Escolha o funil para criar o card deste cliente no CRM.</div>}
+        </>
+      )}
+      {err && <div className="admin-feedback error" style={{ margin: 8 }}>{err}</div>}
+      {openCard && lead && (
+        <CrmLeadPage
+          ctx={{ pipelines: pipes, tags: openCard.tags, products: openCard.products, team: openCard.team, isManager: false, loadPipelines: () => crm.pipelines().then(setPipes), loadProducts: () => crm.products(), onOpenConversation: () => {} }}
+          lead={lead}
+          onClose={() => { setOpenCard(null); crm.leadByConversation(conversation.id).then((r) => setLead(r.lead)).catch(() => {}); }}
+        />
+      )}
+    </Group>
   );
 }

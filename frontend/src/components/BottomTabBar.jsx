@@ -46,15 +46,16 @@ export default function BottomTabBar({ items, section, onChange, unreadTotal, pr
 
   return (
     <>
-      <nav className="tab-bar">
+      <nav className="tab-bar glass-tabs" style={{ "--n": primary.length + 1, "--i": Math.max(0, moreActive ? primary.length : primary.findIndex((p) => p.key === section)) }}>
+        <span className="glass-pill" aria-hidden="true" />
         {primary.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             className={`tab-btn ${section === key ? "active" : ""}`}
             onClick={() => onChange(key)}
           >
-            <Icon size={20} strokeWidth={2} />
-            {label}
+            <Icon size={21} strokeWidth={section === key ? 2.3 : 1.9} />
+            <span className="tab-lbl">{label}</span>
             {key === "conversations" && unreadTotal > 0 && (
               <span className="tab-badge">{unreadTotal > 9 ? "9+" : unreadTotal}</span>
             )}
@@ -62,8 +63,8 @@ export default function BottomTabBar({ items, section, onChange, unreadTotal, pr
         ))}
 
         <button className={`tab-btn ${moreActive ? "active" : ""}`} onClick={() => setMoreOpen(true)}>
-          <MoreHorizontal size={20} strokeWidth={2} />
-          Mais
+          <MoreHorizontal size={21} strokeWidth={2} />
+          <span className="tab-lbl">Mais</span>
         </button>
       </nav>
 
@@ -79,7 +80,7 @@ export default function BottomTabBar({ items, section, onChange, unreadTotal, pr
                 style={{ display: "none" }}
               />
               <div className="avatar-upload-wrap">
-                <Avatar name={profile?.name} url={profile?.avatarUrl} size={42} />
+                <Avatar name={profile?.name} url={profile?.avatarUrl} size={72} zoomable />
                 <button className="avatar-upload-badge" title="Trocar foto de perfil" onClick={handlePickPhoto} disabled={uploading}>
                   <Camera />
                 </button>
