@@ -138,13 +138,32 @@ async function handleOwnPhoneMessage(accountId, channelId, msg) {
   });
   if (await getMessageByWhatsAppId(accountId, msg.key.id).catch(() => null)) return;
 
+  // Foto, áudio, vídeo, documento e figurinha também ficam registrados
+  let mediaUrl = null;
+  if (mediaType) {
+    try {
+      let buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }) });
+      let ext = { image: "jpg", video: "mp4", document: "pdf", audio: "ogg", sticker: "webp" }[mediaType] || "bin";
+      let contentType = inner[mediaKey]?.mimetype || "application/octet-stream";
+      if (mediaType === "document" && inner[mediaKey]?.fileName?.includes(".")) ext = inner[mediaKey].fileName.split(".").pop();
+      if (mediaType === "image") {
+        const webp = await toWebp(buffer);
+        if (webp) { buffer = webp; ext = "webp"; contentType = "image/webp"; }
+      }
+      mediaUrl = await uploadMedia({ accountId, buffer, extension: ext, contentType });
+    } catch (err) {
+      console.error("[WhatsApp] Falha ao baixar mídia enviada pelo celular:", err.message);
+    }
+  }
+
   await addMessage({
     accountId,
     conversationId: conversation.id,
     direction: "out",
     author: "operator",
-    text: text || (mediaType === "audio" ? "🎤 Áudio enviado pelo celular" : "📎 Arquivo enviado pelo celular"),
-    mediaType: null,
+    text: text || (mediaUrl ? "" : mediaType === "audio" ? "🎤 Áudio enviado pelo celular" : "📎 Arquivo enviado pelo celular"),
+    mediaUrl,
+    mediaType: mediaUrl ? mediaType : null,
     whatsappMessageId: msg.key.id,
     senderName: "Envio externo (celular)",
     status: "sent",
