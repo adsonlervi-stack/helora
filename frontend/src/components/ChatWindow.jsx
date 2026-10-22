@@ -101,6 +101,42 @@ function EventPill({ message }) {
   );
 }
 
+/** Foto da conversa: clica e abre ampliada na própria tela (sem abrir aba nova). */
+function ChatImage({ src }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  return (
+    <>
+      <img
+        src={src}
+        alt="Anexo"
+        className="bubble-media-image"
+        loading="lazy"
+        style={{ cursor: "zoom-in" }}
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+      />
+      {open &&
+        createPortal(
+          <div className="avatar-lightbox" onClick={() => setOpen(false)}>
+            <img
+              src={src}
+              alt="Imagem"
+              style={{ maxWidth: "92vw", maxHeight: "86vh" }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button type="button" className="avatar-lightbox-x" onClick={() => setOpen(false)} aria-label="Fechar">✕</button>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+
 function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat, isGroup, onDownload }) {
   if (message.author === "system" || message.extra?.type === "event") return <EventPill message={message} />;
   const deleted = !!message.deletedAt;
@@ -162,7 +198,7 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
         ) : (
           <>
             {message.mediaUrl && message.mediaType === "image" && (
-              <a href={message.mediaUrl} target="_blank" rel="noreferrer"><img src={message.mediaUrl} alt="Anexo" className="bubble-media-image" loading="lazy" /></a>
+              <ChatImage src={message.mediaUrl} />
             )}
             {!message.mediaUrl && message.extra?.pendingMedia && <PendingMedia message={message} onDownload={onDownload} />}
             {message.mediaUrl && isSticker && <img src={message.mediaUrl} alt="Figurinha" className="bubble-sticker" loading="lazy" />}
