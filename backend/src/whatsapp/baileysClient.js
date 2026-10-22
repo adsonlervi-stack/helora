@@ -104,6 +104,65 @@ function liveSock(channelId) {
   return conn.sock;
 }
 
+/**
+ * Mensagem que a empresa mandou direto pelo celular / WhatsApp Web (fromMe).
+ * Se não foi o próprio Helora que enviou: grava na conversa como "Celular" e
+ * põe a conversa em modo atendente, para o bot não responder o cliente.
+ */
+async function handleOwnPhoneMessage(accountId, channelId, msg) {
+  const jid = msg.key.remoteJid;
+  if (!jid || jid === "status@broadcast" || jid.endsWith("@newsletter") || jid.endsWith("@broadcast")) return;
+  const ts = Number(msg.messageTimestamp || 0) * 1000;
+  if (ts && Date.now() - ts > 15 * 60 * 1000) return; // sincronização antiga: ignora
+  // Dá tempo do Helora gravar o que ele mesmo enviou (painel, bot, campanhas)
+  await new Promise((r) => setTimeout(r, 6000));
+  if (await getMessageByWhatsAppId(accountId, msg.key.id).catch(() => null)) return;
+
+  const inner = msg.message.ephemeralMessage?.message || msg.message.viewOnceMessage?.message || msg.message;
+  const mediaKey = Object.keys(inner).find((k) => MEDIA_TYPE_MAP[k]);
+  const text = inner.conversation || inner.extendedTextMessage?.text || (mediaKey ? inner[mediaKey]?.caption || "" : "");
+  const mediaType = mediaKey ? MEDIA_TYPE_MAP[mediaKey] : null;
+  if (!text && !mediaType) return;
+
+  const isGroup = jid.endsWith("@g.us");
+  const pnJid = [msg.key.remoteJidAlt, jid].find((j) => j && /@s\.whatsapp\.net$/.test(j)) || "";
+  const phone = pnJid.split("@")[0].split(":")[0];
+  const conversation = await findOrCreateConversation({
+    accountId,
+    platform: "whatsapp",
+    externalId: jid,
+    altExternalIds: isGroup ? [] : [pnJid].filter((j) => j && j !== jid),
+    phone: !isGroup && /^\d{10,15}$/.test(phone) ? phone : null,
+    name: isGroup ? jid : /^\d{10,15}$/.test(phone) ? `+${phone}` : jid,
+    channelId
+  });
+  if (await getMessageByWhatsAppId(accountId, msg.key.id).catch(() => null)) return;
+
+  await addMessage({
+    accountId,
+    conversationId: conversation.id,
+    direction: "out",
+    author: "operator",
+    text: text || (mediaType === "audio" ? "🎤 Áudio enviado pelo celular" : "📎 Arquivo enviado pelo celular"),
+    mediaType: null,
+    whatsappMessageId: msg.key.id,
+    senderName: "Envio externo (celular)",
+    status: "sent",
+    extra: { fromPhone: true }
+  });
+
+  if (isGroup) return;
+  // Empresa está falando com o cliente: bot sai do caminho.
+  const patch = {
+    mode: "human",
+    isNew: false,
+    botNodeId: null,
+    flowVars: { ...(conversation.flowVars || {}), __phoneAt: new Date().toISOString() }
+  };
+  if (conversation.status === "resolved") patch.status = "open";
+  await updateConversation(accountId, conversation.id, patch);
+}
+
 export async function sendWhatsAppMessage(channelId, jid, text, { quoted = null, forwarded = false } = {}) {
   const cloud = await getCloudChannel(channelId);
   if (cloud) return cloudSendText(cloud, jid, text, { quotedWaId: quoted?.key?.id });
@@ -462,6 +521,15 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
   });
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    // Mensagem enviada pelo CELULAR da empresa (fora do Helora): salva na conversa
+    // e tira o bot do caminho, senão o cliente responde e o robô dispara o menu.
+    for (const msg of messages || []) {
+      if (msg?.key?.fromMe && msg.message && !msg.message.protocolMessage && !msg.message.reactionMessage) {
+        handleOwnPhoneMessage(accountId, channelId, msg).catch((err) =>
+          console.error("[WhatsApp] Falha ao salvar mensagem enviada pelo celular:", err.message)
+        );
+      }
+    }
     if (type !== "notify") return;
 
     for (const msg of messages) {
