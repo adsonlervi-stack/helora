@@ -118,8 +118,9 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
     }
   }
   const isSticker = message.mediaType === "sticker";
-  const authorLabel =
-    message.author === "bot" ? "Bot" : message.author === "operator" ? message.senderName || "Atendente" : null;
+  const authorLabel = message.extra?.fromPhone
+    ? "📱 Envio externo (celular)"
+    : message.author === "bot" ? "Bot" : message.author === "operator" ? message.senderName || "Atendente" : null;
   const extra = message.extra;
   const pending = String(message.id).startsWith("tmp-");
 
