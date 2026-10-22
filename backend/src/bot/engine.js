@@ -88,7 +88,9 @@ export async function handleIncoming(accountId, conversation, rawText, send) {
     const hours = flowForHours?.graph?.hours?.enabled
       ? flowForHours.graph.hours
       : (await getAccountSettings(accountId)).businessHours;
-    if (hours?.enabled && !isOpenNow(hours)) {
+    const phoneAt = conversation.flowVars?.__phoneAt ? new Date(conversation.flowVars.__phoneAt).getTime() : 0;
+    const talkingByPhone = phoneAt && Date.now() - phoneAt < 12 * 3600 * 1000; // empresa falando pelo celular
+    if (hours?.enabled && !isOpenNow(hours) && !talkingByPhone) {
       const vars = conversation.flowVars || {};
       const last = vars.__oohAt ? new Date(vars.__oohAt).getTime() : 0;
       if (Date.now() - last < 6 * 3600 * 1000) return null;
