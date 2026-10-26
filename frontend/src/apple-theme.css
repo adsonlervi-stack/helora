@@ -1961,3 +1961,13 @@ img, video { max-width: 100%; }
 .crm-free input { flex: 1; min-width: 0; }
 .crm-free button { border: 0; background: var(--fill, rgba(120,120,128,.16)); color: inherit; border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .crm-free button.add { background: var(--accent, #0a84ff); color: #fff; }
+
+/* Tarefas: dia no topo do card e filtro por dia */
+.tb-card-day { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-2, #6e6e73); margin-bottom: 6px; }
+.tb-card-day.today { color: #0a84ff; }
+.tb-card-day.soon { color: #ff9f0a; }
+.tb-card-day.late { color: #ff3b30; }
+.tb-card-day.ok { color: #30d158; }
+.tb-days { flex-wrap: wrap; align-items: center; }
+.tb-day-pick { border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 8px; }
+.tb-day-pick.active { background: var(--accent, #0a84ff); color: #fff; }
