@@ -506,12 +506,26 @@ function TaskBox({ team, defaultOwner, leadName, onSave }) {
 function ActivityBox({ onSave }) {
   const [ev, setEv] = useState({ kind: "reuniao", title: "Reunião", startsAt: toLocalInput(new Date(Date.now() + 86400000)) });
   const [busy, setBusy] = useState(false);
+  const [custom, setCustom] = useState([]);
+  useEffect(() => { crm.activityKinds().then((l) => setCustom(Array.isArray(l) ? l : [])).catch(() => {}); }, []);
+  const label = (k) => EV_KIND[k] || k;
+  const kinds = [...Object.keys(EV_KIND).filter((k) => k !== "tarefa"), ...custom];
+  const pick = (k) => setEv((c) => ({ ...c, kind: k, title: !c.title.trim() || c.title === label(c.kind) ? label(k) : c.title }));
+  const addKind = async () => {
+    const name = await askPrompt("Nome do novo tipo de atividade", "", { okText: "Criar" });
+    const n = String(name || "").trim().slice(0, 40);
+    if (!n) return;
+    if (!kinds.some((k) => label(k).toLowerCase() === n.toLowerCase())) setCustom((l) => [...l, n]);
+    const existing = kinds.find((k) => label(k).toLowerCase() === n.toLowerCase());
+    pick(existing || n);
+  };
   return (
     <div className="lp-activity">
       <div className="lp-kinds">
-        {Object.entries(EV_KIND).filter(([k]) => k !== "tarefa").map(([k, l]) => (
-          <button key={k} className={ev.kind === k ? "on" : ""} onClick={() => setEv((c) => ({ ...c, kind: k, title: c.title === EV_KIND[c.kind] ? l : c.title }))}>{l}</button>
+        {kinds.map((k) => (
+          <button key={k} className={ev.kind === k ? "on" : ""} onClick={() => pick(k)}>{label(k)}</button>
         ))}
+        <button onClick={addKind} title="Criar outro tipo de atividade (ex.: Visita, Vistoria, Assinatura)"><Plus size={13} /> Novo tipo</button>
       </div>
       <input value={ev.title} onChange={(e) => setEv((c) => ({ ...c, title: e.target.value }))} placeholder="Título" />
       <div className="lp-row-end">
