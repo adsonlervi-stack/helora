@@ -8,6 +8,7 @@ import multer from "multer";
 import { randomUUID } from "crypto";
 import { uploadCrmFile, removeCrmFile } from "../storage.js";
 import { TEMPLATES, cleanFields, cleanCustom } from "../crmTemplates.js";
+import { RAMOS } from "../insuranceLists.js";
 import { getPrimaryWhatsAppChannel, findOrCreateConversation, updateConversation, createTask } from "../config/db.js";
 import { sendTextToConversation } from "../messaging.js";
 import { resolveWhatsAppNumber } from "../whatsapp/baileysClient.js";
@@ -523,11 +524,40 @@ router.post("/products", async (req, res) => {
     if (!String(b.name || "").trim()) return res.status(400).json({ error: "Dê um nome ao produto." });
     const { data, error } = await supabase.from("crm_products").insert({
       account_id: req.accountId, name: String(b.name).trim().slice(0, 120), description: b.description || null,
-      price: money(b.price), recurring: !!b.recurring, active: b.active !== false
+      price: money(b.price), recurring: !!b.recurring, active: b.active !== false,
+      ...(b.parentId ? { parent_id: b.parentId } : {})
     }).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { fail(res, err); }
+});
+// Importa todos os ramos de seguro como produtos, com os subprodutos dentro (não duplica)
+router.post("/products/import-ramos", async (req, res) => {
+  try {
+    const { data: cur, error } = await supabase.from("crm_products").select("id, name, parent_id").eq("account_id", req.accountId);
+    if (error) throw error;
+    const key = (n) => String(n || "").trim().toLowerCase();
+    let created = 0;
+    for (const [ramo, subs] of Object.entries(RAMOS)) {
+      let parent = cur.find((p) => !p.parent_id && key(p.name) === key(ramo));
+      if (!parent) {
+        const { data: np, error: e1 } = await supabase.from("crm_products").insert({ account_id: req.accountId, name: ramo, price: 0, active: true }).select("id, name, parent_id").single();
+        if (e1) throw e1;
+        parent = np; cur.push(np); created++;
+      }
+      const missing = subs.filter((sname) => !cur.some((p) => p.parent_id === parent.id && key(p.name) === key(sname)));
+      if (missing.length) {
+        const { data: ins, error: e2 } = await supabase.from("crm_products")
+          .insert(missing.map((sname) => ({ account_id: req.accountId, name: sname, price: 0, active: true, parent_id: parent.id }))).select("id, name, parent_id");
+        if (e2) throw e2;
+        cur.push(...ins); created += ins.length;
+      }
+    }
+    res.json({ created });
+  } catch (err) {
+    if (/parent_id/.test(err.message || "")) return res.status(500).json({ error: "Rode a migration 036 no Supabase (subprodutos)." });
+    fail(res, err);
+  }
 });
 router.patch("/products/:id", async (req, res) => {
   try {
@@ -538,6 +568,7 @@ router.patch("/products/:id", async (req, res) => {
     if (b.price !== undefined) patch.price = money(b.price);
     if (b.recurring !== undefined) patch.recurring = !!b.recurring;
     if (b.active !== undefined) patch.active = !!b.active;
+    if (b.parentId !== undefined) patch.parent_id = b.parentId && b.parentId !== req.params.id ? b.parentId : null;
     const { data, error } = await supabase.from("crm_products").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
     res.json(data);
