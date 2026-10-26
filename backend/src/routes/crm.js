@@ -599,12 +599,27 @@ router.get("/events", async (req, res) => {
     })));
   } catch (err) { fail(res, err); }
 });
+// Tipos de atividade criados pela equipe (os que já foram usados em alguma atividade)
+const BASE_KINDS = ["reuniao", "call", "followup", "tarefa"];
+router.get("/activity-kinds", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("crm_events").select("kind").eq("account_id", req.accountId).order("created_at", { ascending: false }).limit(3000);
+    if (error) throw error;
+    const seen = new Map();
+    for (const r of data || []) {
+      const k = String(r.kind || "").trim();
+      if (!k || BASE_KINDS.includes(k) || seen.has(k.toLowerCase())) continue;
+      seen.set(k.toLowerCase(), k);
+    }
+    res.json([...seen.values()].slice(0, 30));
+  } catch (err) { fail(res, err); }
+});
 router.post("/events", async (req, res) => {
   try {
     const b = req.body || {};
     if (!b.startsAt) return res.status(400).json({ error: "Escolha data e hora." });
     const { data, error } = await supabase.from("crm_events").insert({
-      account_id: req.accountId, lead_id: b.leadId || null, title: String(b.title || "Reunião").slice(0, 120), kind: b.kind || "reuniao",
+      account_id: req.accountId, lead_id: b.leadId || null, title: String(b.title || "Reunião").slice(0, 120), kind: String(b.kind || "reuniao").trim().slice(0, 40) || "reuniao",
       starts_at: b.startsAt, ends_at: b.endsAt || null, notes: b.notes || null, owner_id: b.ownerId || req.userId
     }).select().single();
     if (error) throw error;
