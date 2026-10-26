@@ -1,7 +1,7 @@
 // Modelos prontos de funil do CRM (colunas + campos personalizados + automações sugeridas).
 // Começamos pelas corretoras de seguros, nosso maior público.
-const SEGURADORAS = ["Allianz", "Azul", "Bradesco", "HDI", "Itaú", "Mapfre", "Porto Seguro", "Sompo", "SulAmérica", "Suhai", "Tokio Marine", "Yelum (Liberty)", "Zurich", "Outra"];
-const TIPOS = ["Auto", "Residencial", "Vida", "Empresarial", "Saúde", "Odonto", "Viagem", "Condomínio", "Fiança locatícia", "Responsabilidade civil", "Consórcio", "Outro"];
+import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "./insuranceLists.js";
+const RAMO_LIST = Object.keys(RAMOS);
 const HORARIOS = ["Manhã", "Tarde", "Noite", "Qualquer horário"];
 
 export const FIELD_TYPES = ["text", "textarea", "number", "currency", "date", "select"];
@@ -26,13 +26,53 @@ export const TEMPLATES = [
       { id: "vigencia", label: "Vigência (vencimento)", type: "date", card: true, alert: true },
       { id: "corretora", label: "Corretora", type: "text", card: true },
       { id: "apolice", label: "Apólice", type: "text" },
-      { id: "seguradora", label: "Seguradora", type: "select", options: SEGURADORAS, card: true },
-      { id: "tipo_seguro", label: "Tipo de seguro", type: "select", options: TIPOS },
+      { id: "seguradora", label: "Seguradora", type: "select", options: SEGURADORAS, free: true, card: true },
+      { id: "tipo_seguro", label: "Ramo", type: "select", options: RAMO_LIST, free: true },
+      { id: "produto_seguro", label: "Produto", type: "select", options: PRODUTO_OPTIONS, parent: "tipo_seguro", free: true },
       { id: "protocolo", label: "Protocolo", type: "text" },
       { id: "premio", label: "Prêmio", type: "currency" },
       { id: "vidas", label: "Nº de vidas (saúde)", type: "number" },
       { id: "melhor_horario", label: "Melhor horário para contato", type: "select", options: HORARIOS },
       { id: "negociacao", label: "Negociação", type: "textarea" }
+    ]
+  },
+  {
+    key: "sinistro",
+    name: "Acompanhamento de sinistro",
+    group: "Por tipo de empresa",
+    kindField: "tipo_sinistro",
+    description: "Do aviso ao pagamento: número do sinistro, seguradora, documentos pendentes, vistoria e prazo de resposta, com tarefas automáticas de cobrança.",
+    stages: [
+      { id: "aviso", name: "Aviso recebido", color: "#0a84ff",
+        automations: [{ id: "a1", type: "task", active: true, title: "Abrir o sinistro de {nome_completo} na seguradora", days: 1 }] },
+      { id: "documentos", name: "Documentação pendente", color: "#ff9f0a",
+        automations: [{ id: "a1", type: "task", active: true, title: "Cobrar documentos do sinistro de {nome_completo}", days: 2 }] },
+      { id: "analise", name: "Em análise na seguradora", color: "#bf5af2",
+        automations: [{ id: "a1", type: "task", active: true, title: "Acompanhar o sinistro de {nome_completo} na seguradora", days: 5 }] },
+      { id: "vistoria", name: "Vistoria / regulação", color: "#5ac8fa" },
+      { id: "indenizacao", name: "Aguardando indenização / reparo", color: "#ffcc00",
+        automations: [{ id: "a1", type: "task", active: true, title: "Confirmar pagamento / reparo do sinistro de {nome_completo}", days: 7 }] },
+      { id: "concluido", name: "Indenizado / concluído", color: "#30d158" },
+      { id: "negado", name: "Negado / encerrado", color: "#ff453a" }
+    ],
+    fields: [
+      { id: "tipo_sinistro", label: "Tipo de sinistro", type: "select", free: true, options: ["Colisão", "Roubo / furto", "Incêndio", "Danos elétricos", "Alagamento / vendaval", "Vidros", "Terceiros", "Assistência 24h", "Morte", "Invalidez", "Reembolso saúde", "Outro"] },
+      { id: "numero_sinistro", label: "Nº do sinistro", type: "text", card: true },
+      { id: "seguradora", label: "Seguradora", type: "select", options: SEGURADORAS, free: true, card: true },
+      { id: "ramo", label: "Ramo", type: "select", options: RAMO_LIST, free: true },
+      { id: "produto", label: "Produto", type: "select", options: PRODUTO_OPTIONS, parent: "ramo", free: true },
+      { id: "apolice", label: "Apólice", type: "text" },
+      { id: "data_ocorrencia", label: "Data da ocorrência", type: "date" },
+      { id: "data_aviso", label: "Data do aviso", type: "date" },
+      { id: "prazo_resposta", label: "Prazo de resposta da seguradora", type: "date", card: true, alert: true },
+      { id: "item_segurado", label: "Item segurado (placa, endereço…)", type: "text", card: true },
+      { id: "oficina", label: "Oficina / prestador", type: "text" },
+      { id: "terceiro", label: "Terceiro envolvido", type: "text" },
+      { id: "valor_estimado", label: "Prejuízo estimado", type: "currency" },
+      { id: "franquia", label: "Franquia", type: "currency" },
+      { id: "valor_indenizado", label: "Valor indenizado", type: "currency" },
+      { id: "docs_pendentes", label: "Documentos pendentes", type: "textarea" },
+      { id: "observacoes", label: "Observações", type: "textarea" }
     ]
   },
   {
@@ -160,14 +200,16 @@ const slug = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-
 export function cleanFields(list) {
   if (!Array.isArray(list)) return [];
   const seen = new Set();
-  return list.slice(0, 30).map((f) => {
+  return list.slice(0, 40).map((f) => {
     let id = slug(f.id || f.label) || "campo";
     while (seen.has(id)) id += "_2";
     seen.add(id);
     const type = FIELD_TYPES.includes(f.type) ? f.type : "text";
     return {
       id, label: String(f.label || id).slice(0, 60), type,
-      ...(type === "select" ? { options: (Array.isArray(f.options) ? f.options : String(f.options || "").split(/[\n,;]/)).map((o) => String(o).trim()).filter(Boolean).slice(0, 50) } : {}),
+      ...(type === "select" ? { options: (Array.isArray(f.options) ? f.options : String(f.options || "").split(/[\n,;]/)).map((o) => String(o).trim()).filter(Boolean).slice(0, 250) } : {}),
+      ...(type === "select" && f.free ? { free: true } : {}),
+      ...(type === "select" && f.parent ? { parent: slug(f.parent) } : {}),
       card: !!f.card, ...(type === "date" && f.alert ? { alert: true } : {}), ...(type === "select" && f.kind ? { kind: true } : {}),
       ...(type === "date" && Array.isArray(f.reminders) && f.reminders.length ? {
         reminders: f.reminders.slice(0, 5).map((r) => ({
