@@ -8,6 +8,9 @@ import {
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import CrmLeadPage from "./CrmLeadPage.jsx";
+import { SelectField, ProductOptions } from "./CrmFieldBits.jsx";
+import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
+import { createTaskApi } from "../api.js";
 
 const COLORS = ["#0a84ff", "#5ac8fa", "#bf5af2", "#ff375f", "#ff9f0a", "#ffcc00", "#30d158", "#64d2ff", "#8e8e93", "#ac8e68"];
 const brl = (v) => (v == null ? "R$ 0" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }));
@@ -460,10 +463,21 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
               </select>
               <button type="button" className="fi-icon" onClick={() => setList((l) => l.filter((_, j) => j !== i))} title="Remover"><Trash2 size={14} /></button>
             </div>
-            {f.type === "select" && <textarea rows={3} value={f.options || ""} onChange={(e) => upd(i, { options: e.target.value })} placeholder={"Uma opção por linha\nAllianz\nPorto Seguro"} />}
+            {f.type === "select" && <textarea rows={3} value={f.options || ""} onChange={(e) => upd(i, { options: e.target.value })} placeholder={f.parent ? "Uma por linha: Ramo > Produto\nAutomóvel > Auto passeio\nVida > Vida individual" : "Uma opção por linha\nAllianz\nPorto Seguro"} />}
+            {f.type === "select" && (
+              <div className="crm-field-flags">
+                <label>Depende de
+                  <select value={f.parent || ""} onChange={(e) => upd(i, { parent: e.target.value || undefined })} style={{ marginLeft: 6 }}>
+                    <option value="">— nenhum —</option>
+                    {list.filter((x, j) => j !== i && x.type === "select" && x.id).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
             <div className="crm-field-flags">
               <label><Switch checked={!!f.card} onChange={(v) => upd(i, { card: v })} /> No card</label>
               {f.type === "date" && <label><Switch checked={!!f.alert} onChange={(v) => upd(i, { alert: v })} /> Contagem de vencimento</label>}
+              {f.type === "select" && <label><Switch checked={!!f.free} onChange={(v) => upd(i, { free: v })} /> Permitir escrever outra</label>}
               {f.type === "select" && <label><Switch checked={!!f.kind} onChange={(v) => setList((l) => l.map((x, j) => ({ ...x, kind: j === i ? v : false })))} /> Etiqueta no topo do card</label>}
             </div>
             {f.type === "date" && (
@@ -488,6 +502,23 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
           </div>
         ))}
         <button type="button" className="fi-add" onClick={() => setList((l) => [...l, { id: "", label: "", type: "text", card: false }])}><Plus size={15} /> Adicionar campo</button>
+        <button type="button" className="fi-add" onClick={() => setList((l) => {
+          // Lista completa de seguradoras, ramos e produtos (com opção de escrever outra)
+          const norm = (x) => String(x.label || "").toLowerCase();
+          const put = (arr, fld, match) => {
+            const k = arr.findIndex((x) => match.includes(norm(x)));
+            const cur = k >= 0 ? arr[k] : null;
+            const next = { card: false, ...cur, ...fld, id: cur?.id || fld.id };
+            if (k >= 0) { const a = [...arr]; a[k] = next; return a; }
+            return [...arr, next];
+          };
+          let a = put(l, { id: "seguradora", label: "Seguradora", type: "select", free: true, options: SEGURADORAS.join("\n") }, ["seguradora", "seguradoras", "cia", "companhia"]);
+          a = put(a, { id: "tipo_seguro", label: "Ramo", type: "select", free: true, options: Object.keys(RAMOS).join("\n") }, ["ramo", "tipo de seguro", "tp seguro", "tipo seguro"]);
+          const ramoId = a.find((x) => norm(x) === "ramo")?.id || "tipo_seguro";
+          a = put(a, { id: "produto_seguro", label: "Produto", type: "select", free: true, parent: ramoId, options: PRODUTO_OPTIONS.join("\n") }, ["produto", "produto do seguro"]);
+          notify("Seguradoras, ramos e produtos adicionados. Clique em Salvar campos.", "success");
+          return a;
+        })}><Package size={15} /> Usar lista completa de seguradoras, ramos e produtos</button>
       </Group>
       <p className="cv-muted" style={{ margin: "12px 4px 0", fontSize: 12.5 }}>Lembretes saem sozinhos, das 8h às 20h, uma vez por card. Use 0 para o próprio dia e número negativo para depois da data (ex.: -1 = pesquisa no dia seguinte). Dica: use os campos nas mensagens automáticas das colunas, ex.: “Sua apólice {"{apolice}"} vence em {"{vigencia}"}”.</p>
       {err && <div className="admin-feedback error" style={{ marginTop: 12 }}>{err}</div>}
@@ -552,6 +583,11 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
     stage: lead.stage || pipeline?.stages?.[0]?.id, pipelineId: lead.pipelineId || pipeline?.id, tagIds: lead.tagIds || []
   });
   const [items, setItems] = useState((lead.products || []).map((p) => ({ productId: p.productId, qty: p.qty, price: p.price })));
+  // Ao criar o lead: já gera a tarefa de primeiro contato na aba Tarefas
+  const [task, setTask] = useState(() => {
+    const d = new Date(Date.now() + 86400000); d.setHours(9, 0, 0, 0);
+    return { on: true, title: "", due: toLocalInput(d) };
+  });
   const [events, setEvents] = useState([]);
   const [newEv, setNewEv] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -567,6 +603,17 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
     try {
       const body = { ...f, ownerId: f.ownerId || undefined, checklist, custom };
       const saved = isNew ? await crm.createLead(body) : await crm.updateLead(lead.id, body);
+      if (isNew && task.on) {
+        try {
+          await createTaskApi({
+            title: (task.title.trim() || `Primeiro contato com ${f.name.trim()}`).slice(0, 200),
+            dueAt: task.due ? new Date(task.due).toISOString() : null,
+            assigneeId: f.ownerId || undefined,
+            conversationId: saved.conversationId || undefined,
+            description: [`Lead do CRM: ${f.name.trim()}`, curPipe?.name ? `Funil: ${curPipe.name}` : "", f.phone ? `WhatsApp: ${f.phone}` : ""].filter(Boolean).join("\n")
+          });
+        } catch (e) { notify(`Lead criado, mas a tarefa não: ${errText(e)}`, "error"); }
+      }
       const prev = JSON.stringify((lead.products || []).map((p) => [p.productId, p.qty, p.price]));
       const now = JSON.stringify(items.map((i) => [i.productId, Number(i.qty), Number(i.price)]));
       if (prev !== now) await crm.setLeadProducts(saved.id, items);
@@ -630,10 +677,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
             return (
               <Row key={fd.id} label={fd.label} stack={fd.type === "textarea"}>
                 {fd.type === "select" ? (
-                  <select value={v} onChange={(e) => setV(e.target.value)}>
-                    <option value="">—</option>
-                    {[...(fd.options || []), ...(v && !(fd.options || []).includes(v) ? [v] : [])].map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                  <SelectField fd={fd} value={v} onChange={setV} custom={custom} />
                 ) : fd.type === "textarea" ? (
                   <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
                 ) : fd.type === "date" ? (
@@ -689,6 +733,15 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
           <button type="button" className="fi-add" onClick={() => fileRef.current?.click()} disabled={uploading}><Paperclip size={15} /> {uploading ? "Enviando…" : "Anexar arquivo (apólice, proposta, documentos…)"}</button>
         </Group>
       )}
+      {isNew && (
+        <Group title="Tarefa" hint="Cria a tarefa na aba Tarefas junto com o lead.">
+          <Row label="Gerar tarefa"><Switch checked={task.on} onChange={(v) => setTask((t) => ({ ...t, on: v }))} /></Row>
+          {task.on && <>
+            <Row label="Título"><input value={task.title} onChange={(e) => setTask((t) => ({ ...t, title: e.target.value }))} placeholder={`Primeiro contato com ${f.name.trim() || "o lead"}`} /></Row>
+            <Row label="Prazo"><input type="datetime-local" value={task.due} onChange={(e) => setTask((t) => ({ ...t, due: e.target.value }))} style={{ width: "auto" }} /></Row>
+          </>}
+        </Group>
+      )}
       {isNew && <p className="cv-muted" style={{ margin: "14px 4px 0", fontSize: 13 }}>Depois de criar o lead você poderá anexar arquivos, abrir a conversa e agendar.</p>}
       <Group title="Tags">
         <div className="ap-chips">
@@ -705,7 +758,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
           <div key={i} className="crm-prod-row">
             <select value={it.productId} onChange={(e) => { const p = products.find((x) => x.id === e.target.value); setItems((c) => c.map((x, j) => (j === i ? { ...x, productId: e.target.value, price: p?.price ?? x.price } : x))); }}>
               <option value="">Escolha…</option>
-              {products.filter((p) => p.active || p.id === it.productId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <ProductOptions products={products} currentId={it.productId} />
             </select>
             <input type="number" min="1" value={it.qty} onChange={(e) => setItems((c) => c.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} title="Quantidade" />
             <input value={it.price} onChange={(e) => setItems((c) => c.map((x, j) => (j === i ? { ...x, price: e.target.value.replace(",", ".") } : x)))} title="Preço" inputMode="decimal" />
@@ -1037,38 +1090,73 @@ function AgendaView({ ctx }) {
 function ProductsView({ ctx }) {
   const { products, loadProducts, isManager } = ctx;
   const [edit, setEdit] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [openIds, setOpenIds] = useState({});
   const save = async () => {
     try {
-      if (edit.id) await crm.updateProduct(edit.id, edit); else await crm.createProduct(edit);
+      const body = { ...edit, parentId: edit.parentId || null };
+      if (edit.id) await crm.updateProduct(edit.id, body); else await crm.createProduct(body);
       setEdit(null);
       loadProducts();
     } catch (e) { alert(errText(e)); }
   };
+  const importRamos = async () => {
+    if (!await askConfirm("Cadastrar todos os ramos de seguro (Automóvel, Vida, Saúde, Residencial…) com os produtos de cada um? Os que já existem não são duplicados.")) return;
+    setImporting(true);
+    try {
+      const r = await crm.importRamos();
+      await loadProducts();
+      notify(r.created ? `${r.created} produtos cadastrados.` : "Todos os ramos já estavam cadastrados.", "success");
+    } catch (e) { notify(errText(e), "error"); }
+    setImporting(false);
+  };
+  const roots = products.filter((p) => !p.parent_id || !products.some((x) => x.id === p.parent_id));
+  const kidsOf = (id) => products.filter((p) => p.parent_id === id);
+  const newProduct = (parentId = null) => setEdit({ name: "", price: "", description: "", recurring: false, active: true, parentId });
+  const row = (p, sub) => (
+    <div key={p.id} className="ap-list-row" style={{ cursor: isManager ? "pointer" : "default", opacity: p.active ? 1 : 0.5, paddingLeft: sub ? 46 : undefined }} onClick={() => isManager && setEdit({ ...p, parentId: p.parent_id || null })}>
+      <span className="ap-avatar" style={{ background: sub ? "linear-gradient(135deg,#8e8e93,#c7c7cc)" : "linear-gradient(135deg,#30d158,#64d2ff)", width: sub ? 28 : undefined, height: sub ? 28 : undefined }}><Package size={sub ? 14 : 17} /></span>
+      <div className="ap-list-main"><strong>{p.name}</strong><span>{p.description || (p.recurring ? "Cobrança recorrente" : sub ? "Subproduto" : "Venda única")}{!p.active ? " · inativo" : ""}</span></div>
+      {!sub && kidsOf(p.id).length > 0 && (
+        <button type="button" className="ap-btn" style={{ height: 28, padding: "0 10px" }} onClick={(e) => { e.stopPropagation(); setOpenIds((o) => ({ ...o, [p.id]: !o[p.id] })); }}>
+          {kidsOf(p.id).length} {openIds[p.id] ? "▲" : "▼"}
+        </button>
+      )}
+      {!sub && isManager && <button type="button" className="ap-btn" style={{ height: 28, padding: "0 10px" }} title="Novo subproduto" onClick={(e) => { e.stopPropagation(); setOpenIds((o) => ({ ...o, [p.id]: true })); newProduct(p.id); }}><Plus size={13} /> Sub</button>}
+      <span className="crm-value">{p.price ? `${brl(p.price)}${p.recurring ? "/mês" : ""}` : ""}</span>
+    </div>
+  );
   return (
     <>
       <div className="crm-toolbar">
-        <span className="cv-muted">Portfólio da empresa. Vincule produtos aos leads para calcular o valor do negócio.</span>
+        <span className="cv-muted">Produtos e subprodutos da empresa (ex.: Automóvel › Auto passeio). Vincule aos leads para calcular o valor do negócio.</span>
         <div style={{ flex: 1 }} />
-        {isManager && <Button onClick={() => setEdit({ name: "", price: "", description: "", recurring: false, active: true })}><Plus size={15} /> Novo produto</Button>}
+        {isManager && <Button variant="secondary" disabled={importing} onClick={importRamos}>{importing ? "Cadastrando…" : "Importar ramos de seguro"}</Button>}
+        {isManager && <Button onClick={() => newProduct()}><Plus size={15} /> Novo produto</Button>}
       </div>
       <div className="ap-list">
-        {products.map((p) => (
-          <div key={p.id} className="ap-list-row" style={{ cursor: isManager ? "pointer" : "default", opacity: p.active ? 1 : 0.5 }} onClick={() => isManager && setEdit({ ...p })}>
-            <span className="ap-avatar" style={{ background: "linear-gradient(135deg,#30d158,#64d2ff)" }}><Package size={17} /></span>
-            <div className="ap-list-main"><strong>{p.name}</strong><span>{p.description || (p.recurring ? "Cobrança recorrente" : "Venda única")}{!p.active ? " · inativo" : ""}</span></div>
-            <span className="crm-value">{brl(p.price)}{p.recurring ? "/mês" : ""}</span>
-          </div>
+        {roots.map((p) => (
+          <React.Fragment key={p.id}>
+            {row(p, false)}
+            {openIds[p.id] && kidsOf(p.id).map((k) => row(k, true))}
+          </React.Fragment>
         ))}
-        {!products.length && <div className="ap-empty">Nenhum produto cadastrado.</div>}
+        {!products.length && <div className="ap-empty">Nenhum produto cadastrado. Use “Importar ramos de seguro” para começar com todos os ramos.</div>}
       </div>
       {edit && (
-        <Sheet title={edit.id ? "Editar produto" : "Novo produto"} onClose={() => setEdit(null)} width={480}
+        <Sheet title={edit.id ? "Editar produto" : edit.parentId ? "Novo subproduto" : "Novo produto"} onClose={() => setEdit(null)} width={480}
           footer={<>
-            {edit.id && <Button variant="danger" style={{ marginRight: "auto" }} onClick={async () => { if (await askConfirm("Excluir este produto?")) { await crm.deleteProduct(edit.id); setEdit(null); loadProducts(); } }}><Trash2 size={14} /></Button>}
+            {edit.id && <Button variant="danger" style={{ marginRight: "auto" }} onClick={async () => { if (await askConfirm(kidsOf(edit.id).length ? "Excluir este produto e todos os subprodutos dele?" : "Excluir este produto?")) { await crm.deleteProduct(edit.id); setEdit(null); loadProducts(); } }}><Trash2 size={14} /></Button>}
             <Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button disabled={!edit.name?.trim()} onClick={save}>Salvar</Button>
           </>}>
           <Group>
-            <Row label="Nome"><input autoFocus value={edit.name} onChange={(e) => setEdit((c) => ({ ...c, name: e.target.value }))} placeholder="Ex: Plano Profissional" /></Row>
+            <Row label="Nome"><input autoFocus value={edit.name} onChange={(e) => setEdit((c) => ({ ...c, name: e.target.value }))} placeholder={edit.parentId ? "Ex: Auto passeio" : "Ex: Automóvel"} /></Row>
+            <Row label="Dentro de">
+              <select value={edit.parentId || ""} onChange={(e) => setEdit((c) => ({ ...c, parentId: e.target.value || null }))}>
+                <option value="">— produto principal —</option>
+                {roots.filter((r) => r.id !== edit.id).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </Row>
             <Row label="Preço (R$)"><input value={edit.price} onChange={(e) => setEdit((c) => ({ ...c, price: e.target.value }))} inputMode="decimal" placeholder="0,00" /></Row>
             <Row label="Recorrente (mensal)"><Switch checked={edit.recurring} onChange={(v) => setEdit((c) => ({ ...c, recurring: v }))} /></Row>
             <Row label="Ativo"><Switch checked={edit.active} onChange={(v) => setEdit((c) => ({ ...c, active: v }))} /></Row>

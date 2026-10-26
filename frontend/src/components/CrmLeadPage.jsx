@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { SelectField, ProductOptions } from "./CrmFieldBits.jsx";
 import { createPortal } from "react-dom";
 import {
   X, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
@@ -288,7 +289,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
               {items.map((it, i) => (
                 <div key={i} className="lp-prod">
                   <select value={it.productId} onChange={(e) => { const p = products.find((x) => x.id === e.target.value); saveProducts(items.map((x, j) => (j === i ? { ...x, productId: e.target.value, price: p?.price ?? x.price } : x))); }}>
-                    {products.filter((p) => p.active || p.id === it.productId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <ProductOptions products={products} currentId={it.productId} />
                   </select>
                   <input type="number" min="1" value={it.qty} onChange={(e) => setItems((c) => c.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} onBlur={() => saveProducts(items)} title="Qtd" />
                   <input value={it.price} onChange={(e) => setItems((c) => c.map((x, j) => (j === i ? { ...x, price: e.target.value.replace(",", ".") } : x)))} onBlur={() => saveProducts(items)} title="Preço" inputMode="decimal" />
@@ -307,10 +308,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                   <label key={fd.id} className={`lp-field ${fd.type === "textarea" ? "stack" : ""}`}>
                     <span>{fd.label}</span>
                     {fd.type === "select" ? (
-                      <select value={v} onChange={(e) => setV(e.target.value)}>
-                        <option value="">—</option>
-                        {[...(fd.options || []), ...(v && !(fd.options || []).includes(v) ? [v] : [])].map((o) => <option key={o} value={o}>{o}</option>)}
-                      </select>
+                      <SelectField fd={fd} value={v} onChange={setV} custom={custom} />
                     ) : fd.type === "textarea" ? (
                       <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
                     ) : fd.type === "date" ? (
