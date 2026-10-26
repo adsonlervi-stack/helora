@@ -8,7 +8,7 @@ import {
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import CrmLeadPage from "./CrmLeadPage.jsx";
-import { SelectField, ProductOptions } from "./CrmFieldBits.jsx";
+import { SelectField, ProductOptions, makeAddOption } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
 
@@ -477,7 +477,7 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
             <div className="crm-field-flags">
               <label><Switch checked={!!f.card} onChange={(v) => upd(i, { card: v })} /> No card</label>
               {f.type === "date" && <label><Switch checked={!!f.alert} onChange={(v) => upd(i, { alert: v })} /> Contagem de vencimento</label>}
-              {f.type === "select" && <label><Switch checked={!!f.free} onChange={(v) => upd(i, { free: v })} /> Permitir escrever outra</label>}
+              {f.type === "select" && <label><Switch checked={f.free !== false} onChange={(v) => upd(i, { free: v })} /> Permitir escrever outra</label>}
               {f.type === "select" && <label><Switch checked={!!f.kind} onChange={(v) => setList((l) => l.map((x, j) => ({ ...x, kind: j === i ? v : false })))} /> Etiqueta no topo do card</label>}
             </div>
             {f.type === "date" && (
@@ -677,7 +677,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
             return (
               <Row key={fd.id} label={fd.label} stack={fd.type === "textarea"}>
                 {fd.type === "select" ? (
-                  <SelectField fd={fd} value={v} onChange={setV} custom={custom} />
+                  <SelectField fd={fd} value={v} onChange={setV} custom={custom} onAddOption={makeAddOption(ctx, curPipe, custom)} />
                 ) : fd.type === "textarea" ? (
                   <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
                 ) : fd.type === "date" ? (

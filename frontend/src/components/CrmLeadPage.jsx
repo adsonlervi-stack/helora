@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { SelectField, ProductOptions } from "./CrmFieldBits.jsx";
+import { SelectField, ProductOptions, makeAddOption } from "./CrmFieldBits.jsx";
 import { createPortal } from "react-dom";
 import {
-  X, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
+  X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
   Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send
 } from "lucide-react";
-import { crm } from "../api.js";
+import { crm, createTaskApi } from "../api.js";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
@@ -308,7 +308,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                   <label key={fd.id} className={`lp-field ${fd.type === "textarea" ? "stack" : ""}`}>
                     <span>{fd.label}</span>
                     {fd.type === "select" ? (
-                      <SelectField fd={fd} value={v} onChange={setV} custom={custom} />
+                      <SelectField fd={fd} value={v} onChange={setV} custom={custom} onAddOption={makeAddOption(ctx, pipe, custom)} />
                     ) : fd.type === "textarea" ? (
                       <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
                     ) : fd.type === "date" ? (
@@ -338,7 +338,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
             <div className="lp-composer">
               <div className="lp-tabs">
                 {[
-                  ["note", StickyNote, "Anotações"], ["activity", CalendarDays, "Atividade"], ["whats", MessageCircle, "WhatsApp"],
+                  ["note", StickyNote, "Anotações"], ["task", ListTodo, "Tarefa"], ["activity", CalendarDays, "Atividade"], ["whats", MessageCircle, "WhatsApp"],
                   ["files", Paperclip, "Arquivos"], ["check", CheckSquare, "Checklist"]
                 ].map(([k, Ic, l]) => (
                   <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}><Ic size={15} /> {l}</button>
@@ -346,6 +346,21 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
               </div>
               <div className="lp-tab-body">
                 {tab === "note" && <NoteBox onSave={async (t) => { try { changed(await crm.addLeadNote(lead.id, t)); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
+                {tab === "task" && (
+                  <TaskBox team={team} defaultOwner={f.ownerId} leadName={f.name}
+                    onSave={async (t) => {
+                      try {
+                        await createTaskApi({
+                          title: t.title, dueAt: t.due ? new Date(t.due).toISOString() : null, assigneeId: t.assigneeId || undefined,
+                          conversationId: lead.conversationId || undefined,
+                          description: [t.description, `Lead do CRM: ${f.name}`, pipe?.name ? `Funil: ${pipe.name}` : "", f.phone ? `WhatsApp: ${f.phone}` : ""].filter(Boolean).join("\n")
+                        });
+                        try { changed(await crm.addLeadNote(lead.id, `📌 Tarefa criada: ${t.title}${t.due ? ` (prazo ${new Date(t.due).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})` : ""}`)); } catch {}
+                        notify("Tarefa criada na aba Tarefas.", "success");
+                        return true;
+                      } catch (e) { notify(errText(e), "error"); return false; }
+                    }} />
+                )}
                 {tab === "activity" && <ActivityBox onSave={async (ev) => { try { await crm.createEvent({ ...ev, leadId: lead.id, startsAt: new Date(ev.startsAt).toISOString() }); loadEvents(); notify("Atividade agendada.", "success"); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
                 {tab === "whats" && (
                   <MessageBox
@@ -463,6 +478,27 @@ function NoteBox({ onSave }) {
     <div className="lp-notebox">
       <textarea rows={3} value={t} onChange={(e) => setT(e.target.value)} placeholder="Escreva uma anotação: o que o cliente disse, próximos passos…" onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) go(); }} />
       <div className="lp-row-end"><button className="lp-primary" disabled={!t.trim() || busy} onClick={go}><Send size={14} /> Salvar anotação</button></div>
+    </div>
+  );
+}
+
+function TaskBox({ team, defaultOwner, leadName, onSave }) {
+  const tomorrow = () => { const d = new Date(Date.now() + 86400000); d.setHours(9, 0, 0, 0); return toLocalInput(d); };
+  const [t, setT] = useState({ title: "", due: tomorrow(), assigneeId: defaultOwner || "", description: "" });
+  const [busy, setBusy] = useState(false);
+  const title = t.title.trim() || `Retornar para ${leadName || "o cliente"}`;
+  return (
+    <div className="lp-activity">
+      <input value={t.title} onChange={(e) => setT((c) => ({ ...c, title: e.target.value }))} placeholder={title} />
+      <textarea rows={2} value={t.description} onChange={(e) => setT((c) => ({ ...c, description: e.target.value }))} placeholder="Detalhes (opcional)" />
+      <div className="lp-row-end">
+        <select value={t.assigneeId} onChange={(e) => setT((c) => ({ ...c, assigneeId: e.target.value }))}>
+          <option value="">Eu</option>
+          {team.map((m) => <option key={m.id} value={m.id}>{m.name || m.email}</option>)}
+        </select>
+        <input type="datetime-local" value={t.due} onChange={(e) => setT((c) => ({ ...c, due: e.target.value }))} />
+        <button className="lp-primary" disabled={busy} onClick={async () => { setBusy(true); if (await onSave({ ...t, title })) setT({ title: "", due: tomorrow(), assigneeId: defaultOwner || "", description: "" }); setBusy(false); }}><ListTodo size={14} /> Criar tarefa</button>
+      </div>
     </div>
   );
 }

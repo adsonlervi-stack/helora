@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
+import { crm } from "../api.js";
+import { notify } from "../dialogs.js";
 
 const OTHER = "__outra__";
 
@@ -22,18 +24,26 @@ export function fieldOptions(fd, custom = {}) {
  * Campo de lista do CRM: escolhe da lista ou, quando o campo permite,
  * escreve outra opção (ex.: seguradora ou produto que não está na lista).
  */
-export function SelectField({ fd, value, onChange, custom, className }) {
+export function SelectField({ fd, value, onChange, custom, className, onAddOption }) {
+  const free = fd.free !== false; // todo campo de lista aceita escrever outra opção
   const opts = fieldOptions(fd, custom);
   const v = value ?? "";
   const outside = !!v && !opts.includes(v);
-  const [typing, setTyping] = useState(fd.free && outside);
+  const [typing, setTyping] = useState(free && outside);
   const inputRef = useRef(null);
-  useEffect(() => { if (fd.free && outside) setTyping(true); }, [outside, fd.free]);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (free && outside) setTyping(true); }, [outside, free]);
 
   if (typing) {
     return (
       <span className={`crm-free ${className || ""}`}>
         <input ref={inputRef} value={v} onChange={(e) => onChange(e.target.value)} placeholder={`Escreva ${fd.label.toLowerCase()}`} />
+        {onAddOption && v.trim() && !opts.includes(v.trim()) && (
+          <button type="button" className="add" disabled={saving} title="Salvar esta opção na lista do funil"
+            onClick={async () => { setSaving(true); const ok = await onAddOption(fd, v.trim()); setSaving(false); if (ok) setTyping(false); }}>
+            {saving ? "…" : "+ Salvar na lista"}
+          </button>
+        )}
         <button type="button" onClick={() => { setTyping(false); if (outside) onChange(""); }} title="Voltar para a lista">Lista</button>
       </span>
     );
@@ -49,7 +59,7 @@ export function SelectField({ fd, value, onChange, custom, className }) {
     >
       <option value="">—</option>
       {[...opts, ...(outside ? [v] : [])].map((o) => <option key={o} value={o}>{o}</option>)}
-      {fd.free && <option value={OTHER}>✏️ Outra (escrever)…</option>}
+      {free && <option value={OTHER}>✏️ Escrever outra / adicionar…</option>}
     </select>
   );
 }
@@ -68,4 +78,24 @@ export function ProductOptions({ products, currentId }) {
       </optgroup>
     );
   });
+}
+
+/** Salva uma opção nova na lista do campo do funil (fica disponível para todos os cards). */
+export function makeAddOption(ctx, pipe, custom) {
+  return async (fd, val) => {
+    if (!pipe) return false;
+    const grouped = (fd.options || []).some((o) => o.includes(" > "));
+    const parentVal = fd.parent ? String(custom?.[fd.parent] || "") : "";
+    const opt = grouped && parentVal ? `${parentVal} > ${val}` : val;
+    const fields = (pipe.fields || []).map((x) => (x.id === fd.id ? { ...x, options: [...(x.options || []), opt] } : x));
+    try {
+      await crm.updatePipeline(pipe.id, { fields });
+      await ctx.loadPipelines?.();
+      notify(`“${val}” adicionado à lista de ${fd.label}.`, "success");
+      return true;
+    } catch (e) {
+      notify(e?.response?.data?.error || "Só o gestor pode mudar a lista. O valor ficou só neste card.", "error");
+      return false;
+    }
+  };
 }
