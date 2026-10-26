@@ -45,10 +45,41 @@ function dueInfo(t) {
   return { label, cls };
 }
 
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const dayKey = (d) => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+/** Dia da tarefa para o topo do card: "Hoje · 14:00", "Amanhã", "Qua, 28 out", "Atrasada · 25 out". */
+function dayHeader(t) {
+  if (!t.dueAt) return null;
+  const d = new Date(t.dueAt);
+  const days = Math.round((startOfDay(d) - startOfDay(new Date())) / 86400000);
+  const hm = d.getHours() || d.getMinutes() ? ` · ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "";
+  const dm = d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" }).replace(".", "");
+  const done = t.stage === "done";
+  if (!done && d < new Date()) return { text: `Atrasada · ${days === 0 ? "hoje" + hm : dm}`, cls: "late" };
+  if (days === 0) return { text: `Hoje${hm}`, cls: done ? "ok" : "today" };
+  if (days === 1) return { text: `Amanhã${hm}`, cls: done ? "ok" : "soon" };
+  return { text: `${dm.charAt(0).toUpperCase() + dm.slice(1)}${hm}`, cls: done ? "ok" : "" };
+}
+const DAY_FILTERS = [["", "Todas"], ["late", "Atrasadas"], ["today", "Hoje"], ["tomorrow", "Amanhã"], ["week", "7 dias"], ["nodate", "Sem data"]];
+function matchDay(t, day) {
+  if (!day) return true;
+  if (day === "nodate") return !t.dueAt;
+  if (!t.dueAt) return false;
+  const d = new Date(t.dueAt);
+  const today = startOfDay(new Date());
+  const days = Math.round((startOfDay(d) - today) / 86400000);
+  if (day === "late") return t.stage !== "done" && d < new Date();
+  if (day === "today") return days === 0;
+  if (day === "tomorrow") return days === 1;
+  if (day === "week") return days >= 0 && days <= 7;
+  return dayKey(d) === day; // dia específico (yyyy-mm-dd)
+}
+
 export default function TaskBoard({
   tasks, setTasks, team, profile, isManager, scope, setScope, setLayout, openId, setOpenId, reload, onOpenConversation, onAttachScheduled
 }) {
   const [q, setQ] = useState("");
+  const [day, setDay] = useState("");
   const [who, setWho] = useState("");
   const [dragId, setDragId] = useState(null);
   const [overCol, setOverCol] = useState(null);
@@ -59,18 +90,20 @@ export default function TaskBoard({
     const term = q.trim().toLowerCase();
     return (tasks || []).filter((t) =>
       (!term || `${t.title} ${t.description} ${t.conversationName || ""}`.toLowerCase().includes(term)) &&
-      (!who || (who === "none" ? !t.assigneeId : t.assigneeId === who))
+      (!who || (who === "none" ? !t.assigneeId : t.assigneeId === who)) &&
+      matchDay(t, day)
     );
-  }, [tasks, q, who]);
+  }, [tasks, q, who, day]);
   const byCol = useMemo(() => {
     const m = Object.fromEntries(TASK_STAGES.map((s) => [s.id, []]));
     for (const t of list) (m[t.stage] || m.todo).push(t);
     const prio = { urgent: 0, high: 1, normal: 2, low: 3 };
     for (const k of Object.keys(m)) {
+      // Mais próximas da data primeiro (atrasadas no topo); sem data vão para o fim
       m[k].sort((a, b) =>
-        (a.position ?? 1e15) - (b.position ?? 1e15) ||
+        (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) - (b.dueAt ? new Date(b.dueAt).getTime() : 9e15) ||
         (prio[a.priority] ?? 2) - (prio[b.priority] ?? 2) ||
-        (a.dueAt ? new Date(a.dueAt) : 9e15) - (b.dueAt ? new Date(b.dueAt) : 9e15)
+        (a.position ?? 1e15) - (b.position ?? 1e15)
       );
     }
     m.done = m.done.sort((a, b) => new Date(b.doneAt || 0) - new Date(a.doneAt || 0));
@@ -122,6 +155,10 @@ export default function TaskBoard({
             )}
           </>
         )}
+        <div className="dash-presets tb-days">
+          {DAY_FILTERS.map(([k, l]) => <button key={k || "all"} className={day === k ? "active" : ""} onClick={() => setDay(k)}>{l}</button>)}
+          <input type="date" className={`tb-day-pick ${/^\d{4}-/.test(day) ? "active" : ""}`} value={/^\d{4}-/.test(day) ? day : ""} onChange={(e) => setDay(e.target.value)} title="Filtrar por um dia" />
+        </div>
         <div className="dash-presets" style={{ marginLeft: "auto" }}>
           <button className="active">Quadro</button>
           <button onClick={() => setLayout("list")}>Lista</button>
@@ -196,7 +233,7 @@ export default function TaskBoard({
 }
 
 function TaskCard({ t, onOpen, onDragStart, onDragEnd, dragging, onToggleDone }) {
-  const due = dueInfo(t);
+  const dh = dayHeader(t);
   const done = t.checklist.filter((i) => i.done).length;
   const pr = PRIORITIES[t.priority] || PRIORITIES.normal;
   return (
@@ -205,6 +242,7 @@ function TaskCard({ t, onOpen, onDragStart, onDragEnd, dragging, onToggleDone })
       draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart(); }} onDragEnd={onDragEnd}
       onClick={onOpen}
     >
+      {dh && <div className={`tb-card-day ${dh.cls}`}><CalendarClock size={12} /> {dh.text}</div>}
       {(t.labels.length > 0 || t.priority === "high" || t.priority === "urgent") && (
         <div className="tb-labels">
           {(t.priority === "high" || t.priority === "urgent") && <span className="tb-label" style={{ background: pr.color }}><Flag size={10} /> {pr.label}</span>}
@@ -221,7 +259,6 @@ function TaskCard({ t, onOpen, onDragStart, onDragEnd, dragging, onToggleDone })
       </div>
       {t.conversationName && <div className="tb-card-conv"><MessageCircle size={12} /> {t.conversationName}</div>}
       <div className="tb-card-foot">
-        {due && <span className={`tb-badge ${due.cls}`}><CalendarClock size={12} /> {due.label}</span>}
         {t.checklist.length > 0 && <span className={`tb-badge ${done === t.checklist.length ? "ok" : ""}`}><CheckSquare size={12} /> {done}/{t.checklist.length}</span>}
         {t.attachments.length > 0 && <span className="tb-badge"><Paperclip size={12} /> {t.attachments.length}</span>}
         {t.comments.length > 0 && <span className="tb-badge"><MessageSquare size={12} /> {t.comments.length}</span>}

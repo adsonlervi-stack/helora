@@ -37,7 +37,8 @@ export default function TasksPage({ profile, onOpenConversation }) {
 
   const pendingAttach = useMemo(() => (scheduled || []).filter((m) => m.status === "waiting_attachment"), [scheduled]);
   const upcoming = useMemo(() => (scheduled || []).filter((m) => m.status === "pending"), [scheduled]);
-  const shown = (tasks || []).filter((t) => (filter === "all" ? true : t.status === filter));
+  const shown = (tasks || []).filter((t) => (filter === "all" ? true : t.status === filter))
+    .sort((a, b) => (a.dueAt ? new Date(a.dueAt).getTime() : 9e15) - (b.dueAt ? new Date(b.dueAt).getTime() : 9e15)); // mais próximas primeiro
 
   const toggle = async (t) => {
     setTasks((cur) => cur.map((x) => (x.id === t.id ? { ...x, status: t.status === "done" ? "open" : "done" } : x)));
