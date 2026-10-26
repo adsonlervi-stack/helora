@@ -208,7 +208,7 @@ export function cleanFields(list) {
     return {
       id, label: String(f.label || id).slice(0, 60), type,
       ...(type === "select" ? { options: (Array.isArray(f.options) ? f.options : String(f.options || "").split(/[\n,;]/)).map((o) => String(o).trim()).filter(Boolean).slice(0, 250) } : {}),
-      ...(type === "select" && f.free ? { free: true } : {}),
+      ...(type === "select" && f.free === false ? { free: false } : type === "select" && f.free ? { free: true } : {}),
       ...(type === "select" && f.parent ? { parent: slug(f.parent) } : {}),
       card: !!f.card, ...(type === "date" && f.alert ? { alert: true } : {}), ...(type === "select" && f.kind ? { kind: true } : {}),
       ...(type === "date" && Array.isArray(f.reminders) && f.reminders.length ? {
