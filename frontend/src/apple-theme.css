@@ -1960,3 +1960,4 @@ img, video { max-width: 100%; }
 .crm-free { display: inline-flex; gap: 6px; align-items: center; width: 100%; justify-content: flex-end; }
 .crm-free input { flex: 1; min-width: 0; }
 .crm-free button { border: 0; background: var(--fill, rgba(120,120,128,.16)); color: inherit; border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.crm-free button.add { background: var(--accent, #0a84ff); color: #fff; }
