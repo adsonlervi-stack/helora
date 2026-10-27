@@ -16,13 +16,20 @@ const hash = (s) => crypto.createHash("sha1").update(s).digest("hex");
 export async function restoreSession(channelId, folder) {
   if (!tableOk) return false;
   if (fs.existsSync(path.join(folder, "creds.json"))) return true;
-  const { data, error } = await supabase.from(TABLE).select("file, data").eq("channel_id", channelId);
-  if (error) {
-    if (/does not exist|relation/i.test(error.message)) tableOk = false;
-    console.warn("[WhatsApp] restaurar sessão:", error.message);
-    return false;
+  // O banco devolve no máximo 1000 linhas por vez: busca em páginas (uma sessão tem milhares de arquivos)
+  const data = [];
+  for (let page = 0; page < 100; page++) {
+    const { data: rows, error } = await supabase.from(TABLE).select("file, data").eq("channel_id", channelId)
+      .order("file").range(page * 1000, page * 1000 + 999);
+    if (error) {
+      if (/does not exist|relation/i.test(error.message)) tableOk = false;
+      console.warn("[WhatsApp] restaurar sessão:", error.message);
+      return false;
+    }
+    data.push(...(rows || []));
+    if (!rows || rows.length < 1000) break;
   }
-  if (!data?.length || !data.some((r) => r.file === "creds.json")) return false;
+  if (!data.length || !data.some((r) => r.file === "creds.json")) return false;
   fs.mkdirSync(folder, { recursive: true });
   for (const r of data) {
     const safe = path.basename(r.file);

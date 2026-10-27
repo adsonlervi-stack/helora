@@ -380,7 +380,7 @@ export async function requestWhatsAppPairingCode(channelId, accountId, phone) {
   throw new Error("O WhatsApp demorou para gerar o código. Tente de novo.");
 }
 
-export async function startWhatsAppForChannel(channelId, accountId, { pairingPhone = null, retries = 0 } = {}) {
+export async function startWhatsAppForChannel(channelId, accountId, { pairingPhone = null, retries = 0, everOpened = false } = {}) {
   // Nunca deixa duas conexões vivas pro mesmo número (isso derruba a sessão).
   const previous = connections.get(channelId);
   if (previous) {
@@ -419,6 +419,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
     accountId,
     retries,
     pairingPhone,
+    everOpened,
     stopped: false,
     reconnectTimer: null
   };
@@ -473,6 +474,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
     }
 
     if (connection === "open") {
+      conn.everOpened = true;
       conn.status = "connected";
       conn.qr = null;
       conn.pairingCode = null;
@@ -499,7 +501,12 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 
       // 2) Ninguém escaneou o QR/código a tempo: para e espera o usuário
       //    clicar em "Conectar" de novo (não fica gerando QR pra sempre).
-      if (!state.creds.registered && statusCode !== DisconnectReason.restartRequired) {
+      // Atenção: em sessão lida por QR o Baileys deixa creds.registered = false para sempre.
+      // Usar só isso fazia toda queda normal de rede ser tratada como "QR expirou" e o
+      // número ficava desconectado. Já pareado = tem creds.me (ou já abriu nesta execução).
+      const paired = !!state.creds?.me?.id || conn.everOpened;
+      console.log(`[WhatsApp] Dispositivo ${channelId}: conexão fechada (código ${statusCode ?? "?"}, ${paired ? "pareado" : "sem pareamento"}).`);
+      if (!paired && statusCode !== DisconnectReason.restartRequired) {
         console.log(`[WhatsApp] Dispositivo ${channelId}: QR/código expirou sem leitura.`);
         conn.stopped = true;
         connections.delete(channelId);
@@ -520,7 +527,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       if (nextRetries === 6) logChannelDrop({ accountId, channelId, code: statusCode, critical: true });
       conn.reconnectTimer = setTimeout(() => {
         if (conn.stopped) return;
-        startWhatsAppForChannel(channelId, accountId, { retries: nextRetries }).catch((err) =>
+        startWhatsAppForChannel(channelId, accountId, { retries: nextRetries, everOpened: true }).catch((err) =>
           console.error(`[WhatsApp] Falha ao reconectar ${channelId}:`, err.message)
         );
       }, delay);
