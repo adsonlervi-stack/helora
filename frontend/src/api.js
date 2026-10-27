@@ -384,6 +384,7 @@ export const crm = {
   createProduct: (d) => api.post("/crm/products", d).then((r) => r.data),
   updateProduct: (id, d) => api.patch(`/crm/products/${id}`, d).then((r) => r.data),
   deleteProduct: (id) => api.delete(`/crm/products/${id}`),
+  cnpj: (n) => api.get(`/crm/cnpj/${String(n).replace(/\D/g, "")}`).then((r) => r.data),
   activityKinds: () => api.get("/crm/activity-kinds").then((r) => r.data),
   importRamos: () => api.post("/crm/products/import-ramos").then((r) => r.data),
   events: (params) => api.get("/crm/events", { params }).then((r) => r.data),
