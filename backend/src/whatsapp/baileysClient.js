@@ -64,6 +64,7 @@ async function groupSubject(sock, jid) {
 }
 import { handleIncoming } from "../bot/engine.js";
 import { uploadMedia } from "../storage.js";
+import { restoreSession, scheduleBackup, deleteSessionBackup, hasBackup } from "./sessionBackup.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // No Railway, aponte SESSIONS_DIR pro volume persistente (ex: /data/sessions).
@@ -332,6 +333,7 @@ export async function stopWhatsAppForChannel(channelId, { logout = false, wipe =
   }
   if (wipe) {
     await fs.promises.rm(sessionFolder(channelId), { recursive: true, force: true });
+    await deleteSessionBackup(channelId);
   }
   await setChannelStatus(channelId, { status: "disconnected", qr: null }).catch(() => {});
 }
@@ -389,7 +391,13 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
     } catch {}
   }
 
-  const { state, saveCreds } = await useMultiFileAuthState(sessionFolder(channelId));
+  // Disco do Railway some a cada deploy: traz a sessão de volta do banco
+  await restoreSession(channelId, sessionFolder(channelId)).catch(() => {});
+  const { state, saveCreds: saveCredsDisk } = await useMultiFileAuthState(sessionFolder(channelId));
+  const backup = () => scheduleBackup(channelId, sessionFolder(channelId));
+  const saveCreds = async () => { await saveCredsDisk(); backup(); };
+  const keysSet = state.keys.set.bind(state.keys);
+  state.keys.set = async (data) => { await keysSet(data); backup(); };
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
@@ -470,6 +478,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       conn.pairingCode = null;
       conn.pairingPhone = null;
       conn.retries = 0;
+      scheduleBackup(channelId, sessionFolder(channelId), 500);
       conn.phone = (sock.user?.id || "").split(":")[0].split("@")[0] || null;
       await publishStatus(channelId);
       console.log(`[WhatsApp] Dispositivo ${channelId} conectado (${conn.phone}).`);
@@ -500,7 +509,9 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 
       // 3) Queda de rede/reinício: reconecta sozinho, com espera crescente.
       const nextRetries = conn.retries + 1;
-      const delay = statusCode === DisconnectReason.restartRequired ? 0 : Math.min(30000, 1000 * 2 ** conn.retries);
+      const delay = statusCode === DisconnectReason.restartRequired ? 0
+        : statusCode === DisconnectReason.connectionReplaced ? 45000
+        : Math.min(30000, 1000 * 2 ** conn.retries);
       conn.status = "connecting";
       await publishStatus(channelId);
       console.log(`[WhatsApp] Dispositivo ${channelId}: caiu (código ${statusCode}). Reconectando em ${delay}ms.`);
@@ -780,7 +791,7 @@ export async function startAllChannels() {
   for (const { channelId, accountId } of channels) {
     // Só religa quem já tinha sessão salva. Os demais esperam o "Conectar"
     // no painel (evita gerar dezenas de QR Codes que ninguém vai ler).
-    if (!hasSavedSession(channelId)) continue;
+    if (!hasSavedSession(channelId) && !(await hasBackup(channelId).catch(() => false))) continue;
     startWhatsAppForChannel(channelId, accountId).catch((err) => {
       console.error(`[WhatsApp] Erro ao iniciar dispositivo ${channelId}:`, err);
     });
