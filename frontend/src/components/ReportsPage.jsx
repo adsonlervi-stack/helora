@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Download, MessageCircle, CheckCircle2, Timer, Star, Search, Printer } from "lucide-react";
+import CrmReports from "./CrmReports.jsx";
 import { getReportsApi, getAttendancesApi, getDepartments, getTeam, getChannels, getLabels } from "../api.js";
 
 const iso = (d) => d.toISOString().slice(0, 10);
@@ -31,8 +32,9 @@ export default function ReportsPage() {
       <div className="dash-presets" style={{ marginBottom: 14 }}>
         <button className={view === "query" ? "active" : ""} onClick={() => setView("query")}>Consultar atendimentos</button>
         <button className={view === "summary" ? "active" : ""} onClick={() => setView("summary")}>Resumo e indicadores</button>
+        <button className={view === "crm" ? "active" : ""} onClick={() => setView("crm")}>CRM</button>
       </div>
-      {view === "query" ? <AttendanceQuery /> : <ReportsSummary />}
+      {view === "query" ? <AttendanceQuery /> : view === "crm" ? <CrmReports /> : <ReportsSummary />}
     </div>
   );
 }

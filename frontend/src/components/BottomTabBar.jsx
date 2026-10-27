@@ -71,6 +71,9 @@ export default function BottomTabBar({ items, section, onChange, unreadTotal, pr
       {moreOpen && (
         <div className="modal-overlay" onClick={() => setMoreOpen(false)}>
           <div className="modal-card more-sheet" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="ms-x" aria-label="Fechar menu" onClick={(e) => { e.stopPropagation(); setMoreOpen(false); }}>
+              <X size={18} strokeWidth={2.4} />
+            </button>
             <div className="more-sheet-head">
               <input
                 type="file"
@@ -89,9 +92,6 @@ export default function BottomTabBar({ items, section, onChange, unreadTotal, pr
                 <div className="more-sheet-name">{profile?.name || "Usuário"}</div>
                 <div className="more-sheet-role">{roleLabel(profile)}</div>
               </div>
-              <button className="modal-close more-sheet-close" onClick={() => setMoreOpen(false)}>
-                <X size={16} />
-              </button>
             </div>
 
             <div className="more-sheet-list">

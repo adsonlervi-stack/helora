@@ -3,13 +3,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
-  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown
+  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown, MoreHorizontal
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import CrmLeadPage from "./CrmLeadPage.jsx";
 import AutomationsSheet from "./CrmAutomations.jsx";
-import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose } from "./CrmFieldBits.jsx";
+import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
 
@@ -110,6 +110,7 @@ function FunnelView({ ctx }) {
   const [search, setSearch] = useState("");
   const [flt, setFlt] = useState({ owner: "", tag: "", outcome: "", fields: {} });
   const [fltOpen, setFltOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [view, setView] = useState("board"); // board | snoozed | archived
   const [side, setSide] = useState(null); // leads arquivados / reagendados
   const [exporting, setExporting] = useState(false);
@@ -238,10 +239,6 @@ function FunnelView({ ctx }) {
             {isManager && <option value="__new">+ Novo funil…</option>}
           </select>
         </label>
-        {isManager && !all && <Button variant="secondary" onClick={() => setEditCol({ name: "", color: COLORS[0] })}><Plus size={15} /> Coluna</Button>}
-        {isManager && !all && pipeline && pipelines.length > 1 && <Button variant="secondary" title="Apagar este funil" onClick={deletePipeline}><Trash2 size={15} /></Button>}
-        {isManager && !all && pipeline && <Button variant="secondary" onClick={() => setAutoOpen(true)}><Zap size={15} /> Automações{pipeline.automations?.filter((r) => r.active !== false).length ? ` (${pipeline.automations.filter((r) => r.active !== false).length})` : ""}</Button>}
-        {isManager && !all && pipeline && <Button variant="secondary" onClick={() => setEditFields(true)}><SlidersHorizontal size={15} /> Campos{pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}</Button>}
         <div className="crm-search"><Search size={15} /><input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <div className="crm-flt-wrap">
           <button type="button" className={`crm-flt-btn ${fltCount ? "on" : ""}`} onClick={() => setFltOpen((v) => !v)}>
@@ -290,8 +287,33 @@ function FunnelView({ ctx }) {
           ))}
         </div>
         <div style={{ flex: 1 }} />
-        {!all && <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar planilha</Button>}
-        {isManager && <Button variant="secondary" onClick={() => setExporting(true)} title="Baixar o CRM com anexos, em pastas"><Download size={15} /> Baixar CRM</Button>}
+        {(() => {
+          const autoN = pipeline?.automations?.filter((r) => r.active !== false).length || 0;
+          const items = [
+            isManager && !all && [Plus, "Nova coluna", () => setEditCol({ name: "", color: COLORS[0] })],
+            isManager && !all && pipeline && [Zap, `Automações${autoN ? ` (${autoN})` : ""}`, () => setAutoOpen(true)],
+            isManager && !all && pipeline && [SlidersHorizontal, `Campos${pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}`, () => setEditFields(true)],
+            !all && [Upload, "Importar planilha", () => setImporting(true)],
+            isManager && [Download, "Baixar CRM (com anexos)", () => setExporting(true)],
+            isManager && !all && pipeline && pipelines.length > 1 && [Trash2, "Apagar este funil", deletePipeline, true]
+          ].filter(Boolean);
+          if (!items.length) return null;
+          return (
+            <div className="crm-more-wrap">
+              <button type="button" className="crm-more-btn" title="Mais opções" onClick={() => setMoreOpen((v) => !v)}><MoreHorizontal size={18} /></button>
+              {moreOpen && (
+                <>
+                  <div className="crm-more-backdrop" onClick={() => setMoreOpen(false)} />
+                  <div className="crm-more-pop">
+                    {items.map(([Icon, label, fn, danger]) => (
+                      <button key={label} type="button" className={danger ? "danger" : ""} onClick={() => { setMoreOpen(false); fn(); }}><Icon size={16} /> {label}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
         {!all && <Button onClick={() => setOpen({ isNew: true, stage: stages[0]?.id })}><Plus size={15} /> Novo lead</Button>}
       </div>
 
@@ -798,7 +820,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
               <Row key={fd.id} label={fd.label} stack={fd.type === "textarea"}>
                 {fd.type === "select" ? (
                   <SelectField fd={fd} value={v} onChange={setV} custom={custom} onAddOption={makeAddOption(ctx, curPipe, custom)} />
-                ) : fd.type === "document" ? (
+                ) : isDocField(fd) ? (
                   <DocumentField value={v} onChange={setV} onCnpjData={(d) => applyCnpjData(d, { f, setField: (k, val) => setF((c) => ({ ...c, [k]: val })), fields: curPipe?.fields, custom, setCustomValue: (id, val) => setCustom((c) => ({ ...c, [id]: val })) })} />
                 ) : fd.type === "textarea" ? (
                   <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
@@ -818,7 +840,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
       <Group title="Contato">
         <Row label="Nome"><input autoFocus={isNew} value={f.name} onChange={set("name")} placeholder="Obrigatório" /></Row>
         <Row label="Empresa"><input value={f.company} onChange={set("company")} placeholder="Opcional" /></Row>
-        <Row label="WhatsApp"><input value={f.phone} onChange={set("phone")} placeholder="55 61 99999-9999" inputMode="tel" /></Row>
+        <Row label="WhatsApp"><PhoneInput value={f.phone} onChange={(v) => setF((c) => ({ ...c, phone: v }))} /></Row>
         <Row label="E-mail"><input value={f.email} onChange={set("email")} placeholder="email@empresa.com" inputMode="email" /></Row>
         <Row label="Origem"><input value={f.source} onChange={set("source")} placeholder="Instagram, indicação…" /></Row>
       </Group>

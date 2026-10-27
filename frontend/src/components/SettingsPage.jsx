@@ -16,6 +16,7 @@ import {
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook } from "../api.js";
 import { AccessLogList } from "./AdminPage.jsx";
+import { crm as crmApi } from "../api.js";
 import {
   getAutoReplies,
   createAutoReply,
@@ -945,8 +946,71 @@ document.getElementById("lead").onsubmit = async (e) => {
         ))}
         <p className="cv-muted">Etapas aceitas em "stage": novo_lead, contato, negociacao, proposta, fechado, perdido. Respostas de erro: 401 chave inválida, 402 sem créditos, 429 muitas chamadas.</p>
       </div>
+      <CrmApiCard base={base} apiKey={key} copy={copy} />
       <WebhooksCard />
     </>
+  );
+}
+
+/** Código pronto para mandar lead para um funil do CRM: escolhe o funil e a etapa. */
+function CrmApiCard({ base, apiKey, copy }) {
+  const [pipes, setPipes] = useState(null);
+  const [pid, setPid] = useState("");
+  const [stage, setStage] = useState("");
+  useEffect(() => {
+    crmApi.pipelines().then((l) => { setPipes(l || []); if (l?.[0]) { setPid(l[0].id); setStage(l[0].stages?.[0]?.id || ""); } }).catch(() => setPipes([]));
+  }, []);
+  if (!pipes) return null;
+  if (!pipes.length) return <div className="card" style={{ marginTop: 16 }}><div className="card-title">CRM</div><div className="card-subtitle">Crie um funil no CRM para gerar o código de integração.</div></div>;
+  const pipe = pipes.find((p) => p.id === pid) || pipes[0];
+  const fields = (pipe.fields || []).slice(0, 4);
+  const body = { funilId: pipe.id, etapa: stage || undefined, nome: "Maria Souza", telefone: "61999998888", email: "maria@email.com", origem: "Site" };
+  if (fields.length) body.campos = Object.fromEntries(fields.map((f) => [f.label, "..."]));
+  const curl = `curl -X POST ${base}/crm/leads \\
+  -H "X-API-Key: ${apiKey}" -H "Content-Type: application/json" \\
+  -d '${JSON.stringify(body)}'`;
+  const form = `<form id="lead-crm">
+  <input name="nome" placeholder="Nome" required>
+  <input name="telefone" placeholder="WhatsApp com DDD" required>
+  <input name="email" placeholder="E-mail">
+  <button>Enviar</button>
+</form>
+<script>
+document.getElementById("lead-crm").onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  await fetch("${base}/crm/leads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": "${apiKey}" },
+    body: JSON.stringify({ funilId: "${pipe.id}", etapa: "${stage}", nome: f.get("nome"), telefone: f.get("telefone"), email: f.get("email"), origem: "Site" })
+  });
+  alert("Recebemos! Em instantes falamos com você.");
+};
+</script>`;
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-title">Enviar leads para o CRM</div>
+      <div className="card-subtitle">Escolha o funil e a etapa onde o lead deve cair. O código abaixo já sai com eles. O telefone ganha o +55 sozinho.</div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "10px 0 14px" }}>
+        <label className="api-pick"><span>Funil</span>
+          <select value={pipe.id} onChange={(e) => { const p = pipes.find((x) => x.id === e.target.value); setPid(e.target.value); setStage(p?.stages?.[0]?.id || ""); }}>
+            {pipes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+        <label className="api-pick"><span>Etapa de entrada</span>
+          <select value={stage} onChange={(e) => setStage(e.target.value)}>
+            {(pipe.stages || []).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+          </select>
+        </label>
+      </div>
+      {[["Criar lead neste funil", curl], ["Formulário de site (HTML) para este funil", form]].map(([t, code]) => (
+        <div key={t} className="api-example">
+          <div className="api-example-head"><strong>{t}</strong><button className="pill-btn" onClick={() => copy(code)}><Copy size={13} /> Copiar</button></div>
+          <pre>{code}</pre>
+        </div>
+      ))}
+      <p className="cv-muted">Campos do funil (envie em "campos" pelo nome): {(pipe.fields || []).map((f) => f.label).join(", ") || "nenhum"}.</p>
+    </div>
   );
 }
 

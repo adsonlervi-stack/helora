@@ -205,3 +205,20 @@ export async function runAfterClose(lead, outcome) {
   } catch (e) { notify(e?.response?.data?.error || "Não consegui salvar.", "error"); }
   return null;
 }
+
+/** Campo de texto chamado "CPF", "CNPJ"… também vira campo de documento (com pontos). */
+export const isDocField = (fd) => fd?.type === "document" || (fd?.type === "text" || !fd?.type) && /\b(cpf|cnpj)\b/i.test(String(fd?.label || ""));
+
+/** Telefone: +55 sempre fixo na frente; guarda "55" + DDD + número. */
+export function PhoneInput({ value, onChange, className }) {
+  let d = String(value || "").replace(/\D/g, "");
+  if (d.startsWith("55") && d.length >= 12) d = d.slice(2);
+  const show = d.length > 2 ? `(${d.slice(0, 2)}) ${d.length > 10 ? `${d.slice(2, 7)}-${d.slice(7, 11)}` : d.length > 6 ? `${d.slice(2, 6)}-${d.slice(6, 10)}` : d.slice(2)}` : d;
+  return (
+    <span className={`crm-phone ${className || ""}`}>
+      <span className="crm-phone-cc">+55</span>
+      <input value={show} inputMode="tel" placeholder="(61) 99999-9999"
+        onChange={(e) => { let n = e.target.value.replace(/\D/g, ""); if (n.startsWith("55") && n.length > 11) n = n.slice(2); n = n.slice(0, 11); onChange(n ? `55${n}` : ""); }} />
+    </span>
+  );
+}

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose } from "./CrmFieldBits.jsx";
+import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
 import { createPortal } from "react-dom";
 import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
@@ -250,7 +250,8 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
         <div className="lp-stages">
           {stages.map((s, i) => (
             <button key={s.id} className={`lp-stage ${i < stageIdx ? "past" : ""} ${i === stageIdx ? "cur" : ""}`} style={i <= stageIdx ? { "--c": s.color || "#34c759" } : undefined} onClick={() => moveStage(s)} title={`Mover para ${s.name}`}>
-              <span>{i === stageIdx ? `${daysSince(lead.stageChangedAt)} dia${daysSince(lead.stageChangedAt) === 1 ? "" : "s"} · ${s.name}` : s.name}</span>
+              <span className="lp-stage-n">{i < stageIdx ? <><Check size={11} /> Etapa {i + 1}</> : i === stageIdx ? `Etapa ${i + 1} · há ${daysSince(lead.stageChangedAt)} dia${daysSince(lead.stageChangedAt) === 1 ? "" : "s"}` : `Etapa ${i + 1}`}</span>
+              <span className="lp-stage-name">{s.name}</span>
             </button>
           ))}
         </div>
@@ -334,7 +335,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                     <span>{fd.label}</span>
                     {fd.type === "select" ? (
                       <SelectField fd={fd} value={v} onChange={setV} custom={custom} onAddOption={makeAddOption(ctx, pipe, custom)} />
-                    ) : fd.type === "document" ? (
+                    ) : isDocField(fd) ? (
                       <DocumentField value={v} onChange={setV} onCnpjData={(d) => applyCnpjData(d, { f, setField, fields: pipe?.fields, custom, setCustomValue: (id, val) => { setCustom((c) => ({ ...c, [id]: val })); schedule(); } })} />
                     ) : fd.type === "textarea" ? (
                       <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
@@ -349,7 +350,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
             </Section>
 
             <Section title="Pessoa" open={open.contato} onToggle={() => setOpen((o) => ({ ...o, contato: !o.contato }))}>
-              <label className="lp-field"><span>Telefone</span><input value={f.phone} onChange={(e) => setField("phone", e.target.value)} inputMode="tel" placeholder="55 61 99999-9999" /></label>
+              <label className="lp-field"><span>Telefone</span><PhoneInput value={f.phone} onChange={(v) => setField("phone", v)} /></label>
               <label className="lp-field"><span>E-mail</span><input value={f.email} onChange={(e) => setField("email", e.target.value)} inputMode="email" placeholder="—" /></label>
               <label className="lp-field"><span>Origem</span><input value={f.source} onChange={(e) => setField("source", e.target.value)} placeholder="Instagram, site…" /></label>
               <div className="lp-quick">
