@@ -170,6 +170,7 @@ import { requireAuth, requireOwner } from "../middleware/auth.js";
 import { enforceTabs, logAccess, listConversationAudit, notifySupport, emailContract, invalidateTabs, listAccessLogs } from "../governance.js";
 import { uploadMedia, uploadAvatar } from "../storage.js";
 import { convertToOggOpus } from "../audio.js";
+import { exportConversation } from "../conversationExport.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -1041,6 +1042,22 @@ router.get("/conversations/:id/messages", async (req, res) => {
     markWhatsAppRead(conversation.channelId, conversation.externalId, ids).catch(() => {});
   }
   res.json({ conversation, messages });
+});
+
+// Exportação para fins judiciais: ZIP com relatório, transcrição, JSON, mídias e hashes SHA-256
+router.get("/conversations/:id/export", requireOwner, async (req, res) => {
+  try {
+    const conversation = await getConversation(req.accountId, req.params.id);
+    if (!(await assertConversationAccess(req, res, conversation))) return;
+    const toIso = (v, end) => (v ? new Date(`${v}T${end ? "23:59:59" : "00:00:00"}-03:00`).toISOString() : undefined);
+    const r = await exportConversation(res, req.accountId, req.params.id, {
+      from: toIso(req.query.from), to: toIso(req.query.to, true), media: req.query.media !== "0", exportedBy: req.userName || "gestor"
+    });
+    logConversationEvent(req.accountId, req.params.id, "exported",
+      `Conversa exportada (relatório com hashes) por ${req.userName || "gestor"} · ${r.messages} mensagens · hash do pacote ${r.finalHash.slice(0, 16)}…`, req.userName).catch(() => {});
+  } catch (err) {
+    if (!res.headersSent) res.status(err.status || 500).json({ error: err.message }); else try { res.end(); } catch {}
+  }
 });
 
 router.post("/conversations/:id/mode", async (req, res) => {
