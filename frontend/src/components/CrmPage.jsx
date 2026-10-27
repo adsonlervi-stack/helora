@@ -8,7 +8,7 @@ import {
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import CrmLeadPage from "./CrmLeadPage.jsx";
-import { SelectField, ProductOptions, makeAddOption } from "./CrmFieldBits.jsx";
+import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
 
@@ -107,7 +107,10 @@ function FunnelView({ ctx }) {
   const { pipelines, pipeline, pipelineId, setPipelineId, tags, isManager, loadPipelines } = ctx;
   const [leads, setLeads] = useState(null);
   const [search, setSearch] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
+  const [flt, setFlt] = useState({ owner: "", tag: "", outcome: "", fields: {} });
+  const [fltOpen, setFltOpen] = useState(false);
+  const [view, setView] = useState("board"); // board | snoozed | archived
+  const [side, setSide] = useState(null); // leads arquivados / reagendados
   const [open, setOpen] = useState(null); // lead | {new:true, stage}
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
@@ -137,6 +140,13 @@ function FunnelView({ ctx }) {
     } catch (e) { notify(errText(e), "error"); }
   };
   useEffect(() => { setLeads(null); load(); }, [pipelineId, all]);
+  const loadSide = () => {
+    if (view === "board") return setSide(null);
+    setSide(null);
+    const params = { ...(all || !pipelineId ? {} : { pipelineId }), ...(view === "archived" ? { archived: "1" } : { snoozed: "1" }) };
+    crm.leads(params).then(setSide).catch(() => setSide([]));
+  };
+  useEffect(() => { loadSide(); }, [view, pipelineId, all]);
 
   // Em "todos os funis" as colunas com o mesmo nome viram uma só
   const stages = useMemo(() => {
@@ -153,9 +163,15 @@ function FunnelView({ ctx }) {
   }, [all, pipeline, pipelines]);
   const colOf = (l) => (all ? colKey(pipeById.get(l.pipelineId)?.stages?.find((st) => st.id === l.stage)?.name || l.stage) : l.stage);
   const fieldsOf = (l) => (all ? pipeById.get(l.pipelineId)?.fields || [] : modelFields);
+  const fltCount = (flt.owner ? 1 : 0) + (flt.tag ? 1 : 0) + (flt.outcome ? 1 : 0) + Object.values(flt.fields).filter(Boolean).length;
   const filtered = (leads || []).filter((l) => {
-    const t = `${l.name} ${l.company || ""} ${l.phone || ""} ${l.email || ""}`.toLowerCase();
-    return t.includes(search.toLowerCase()) && (!tagFilter || l.tagIds.includes(tagFilter));
+    const t = `${l.name} ${l.company || ""} ${l.phone || ""} ${l.email || ""} ${Object.values(l.custom || {}).join(" ")}`.toLowerCase();
+    if (!t.includes(search.toLowerCase())) return false;
+    if (flt.tag && !l.tagIds.includes(flt.tag)) return false;
+    if (flt.owner && (flt.owner === "none" ? l.ownerId : l.ownerId !== flt.owner)) return false;
+    if (flt.outcome && (flt.outcome === "open" ? l.outcome : l.outcome !== flt.outcome)) return false;
+    for (const [k, v] of Object.entries(flt.fields)) if (v && String(l.custom?.[k] || "") !== v) return false;
+    return true;
   });
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
 
@@ -169,7 +185,13 @@ function FunnelView({ ctx }) {
     }
     if (!lead || lead.stage === stage) return;
     setLeads((cur) => cur.map((l) => (l.id === id ? { ...l, stage, stageChangedAt: new Date().toISOString() } : l)));
-    try { await crm.updateLead(id, { stage }); } catch { load(); }
+    let saved = null;
+    try { saved = await crm.updateLead(id, { stage }); } catch { return load(); }
+    // Entrou em Fechado/Ganho ou Perdido: pergunta se arquiva ou reagenda
+    if (saved?.outcome && saved.outcome !== lead.outcome) {
+      const l = await runAfterClose(saved, saved.outcome);
+      if (l && (l.archivedAt || l.snoozeUntil)) setLeads((cur) => cur.filter((x) => x.id !== id));
+    }
   };
   const openConv = async (l) => {
     try {
@@ -217,16 +239,86 @@ function FunnelView({ ctx }) {
         {isManager && !all && pipeline && pipelines.length > 1 && <Button variant="secondary" title="Apagar este funil" onClick={deletePipeline}><Trash2 size={15} /></Button>}
         {isManager && !all && pipeline && <Button variant="secondary" onClick={() => setEditFields(true)}><SlidersHorizontal size={15} /> Campos{pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}</Button>}
         <div className="crm-search"><Search size={15} /><input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
-        <select className="crm-filter" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
-          <option value="">Todas as tags</option>
-          {tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
+        <div className="crm-flt-wrap">
+          <button type="button" className={`crm-flt-btn ${fltCount ? "on" : ""}`} onClick={() => setFltOpen((v) => !v)}>
+            <SlidersHorizontal size={15} /> Filtros{fltCount ? ` · ${fltCount}` : ""}
+          </button>
+          {fltOpen && (
+            <div className="crm-flt-pop" onMouseLeave={() => setFltOpen(false)}>
+              <label><span>Responsável</span>
+                <select value={flt.owner} onChange={(e) => setFlt((c) => ({ ...c, owner: e.target.value }))}>
+                  <option value="">Todos</option><option value="none">Sem responsável</option>
+                  {(ctx.team || []).map((m) => <option key={m.id} value={m.id}>{m.name || m.email}</option>)}
+                </select>
+              </label>
+              <label><span>Situação</span>
+                <select value={flt.outcome} onChange={(e) => setFlt((c) => ({ ...c, outcome: e.target.value }))}>
+                  <option value="">Todas</option><option value="open">Em andamento</option><option value="won">Ganhos</option><option value="lost">Perdidos</option>
+                </select>
+              </label>
+              {tags.length > 0 && (
+                <label><span>Tag</span>
+                  <select value={flt.tag} onChange={(e) => setFlt((c) => ({ ...c, tag: e.target.value }))}>
+                    <option value="">Todas</option>
+                    {tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </label>
+              )}
+              {!all && modelFields.filter((f) => f.type === "select").map((f) => {
+                const vals = [...new Set((leads || []).map((l) => l.custom?.[f.id]).filter(Boolean))].sort();
+                if (!vals.length) return null;
+                return (
+                  <label key={f.id}><span>{f.label}</span>
+                    <select value={flt.fields[f.id] || ""} onChange={(e) => setFlt((c) => ({ ...c, fields: { ...c.fields, [f.id]: e.target.value } }))}>
+                      <option value="">Todos</option>
+                      {vals.map((v) => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </label>
+                );
+              })}
+              {fltCount > 0 && <button type="button" className="crm-flt-clear" onClick={() => setFlt({ owner: "", tag: "", outcome: "", fields: {} })}>Limpar filtros</button>}
+            </div>
+          )}
+        </div>
+        <div className="crm-views">
+          {[["board", "Funil"], ["snoozed", "Reagendados"], ["archived", "Arquivados"]].map(([k, l]) => (
+            <button key={k} type="button" className={view === k ? "on" : ""} onClick={() => setView(k)}>{l}</button>
+          ))}
+        </div>
         <div style={{ flex: 1 }} />
         {!all && <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar planilha</Button>}
         {!all && <Button onClick={() => setOpen({ isNew: true, stage: stages[0]?.id })}><Plus size={15} /> Novo lead</Button>}
       </div>
 
-      <div className="crm-board">
+      {view !== "board" && (
+        <div className="crm-side-list">
+          {side === null && <div className="cv-muted" style={{ padding: 16 }}>Carregando…</div>}
+          {side && !side.length && <div className="ap-empty">{view === "archived" ? "Nenhum card arquivado." : "Nenhum card reagendado."}</div>}
+          {(side || []).filter((l) => `${l.name} ${l.company || ""} ${l.phone || ""}`.toLowerCase().includes(search.toLowerCase())).map((l) => {
+            const p = pipeById.get(l.pipelineId);
+            const st = p?.stages?.find((x) => x.id === l.stage);
+            return (
+              <div key={l.id} className="crm-side-row" onClick={() => setOpen(l)}>
+                <span className="crm-side-av">{initials(l.name)}</span>
+                <div className="crm-side-main">
+                  <strong>{l.name}</strong>
+                  <span>{[l.company, p?.name, st?.name, l.outcome === "won" ? "Ganho" : l.outcome === "lost" ? "Perdido" : null].filter(Boolean).join(" · ")}</span>
+                </div>
+                <span className="crm-side-date">{view === "archived" ? `Arquivado ${l.archivedAt ? new Date(l.archivedAt).toLocaleDateString("pt-BR") : ""}` : `Volta em ${l.snoozeUntil ? new Date(l.snoozeUntil).toLocaleDateString("pt-BR") : ""}`}</span>
+                <button type="button" className="ap-btn" onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await crm.updateLead(l.id, view === "archived" ? { archived: false } : { snoozeUntil: null });
+                    notify(view === "archived" ? "Card voltou para o funil." : "Card voltou para o funil agora.");
+                    loadSide(); load();
+                  } catch (err) { notify(errText(err), "error"); }
+                }}>{view === "archived" ? "Desarquivar" : "Trazer agora"}</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="crm-board" style={view !== "board" ? { display: "none" } : undefined}>
         {stages.map((st) => {
           const items = filtered.filter((l) => colOf(l) === st.id);
           return (
@@ -314,7 +406,7 @@ function FunnelView({ ctx }) {
 
       {open && (open.isNew
         ? <LeadSheet ctx={ctx} lead={open} onClose={() => setOpen(null)} onSaved={() => { setOpen(null); load(); }} />
-        : <CrmLeadPage ctx={ctx} lead={open} onClose={() => { setOpen(null); load(); }} />)}
+        : <CrmLeadPage ctx={ctx} lead={open} onClose={() => { setOpen(null); load(); loadSide(); }} />)}
       {editCol && (
         <Sheet title={editCol.id ? "Editar coluna" : "Nova coluna"} subtitle="Automações rodam sempre que um card entra nesta coluna." onClose={() => setEditCol(null)} width={560}
           footer={<><Button variant="secondary" onClick={() => setEditCol(null)}>Cancelar</Button><Button onClick={saveCol}>Salvar</Button></>}>
@@ -429,11 +521,15 @@ function NewPipelineSheet({ onClose, onCreated }) {
   );
 }
 
-const FIELD_TYPE_LABEL = { text: "Texto", textarea: "Texto longo", number: "Número", currency: "Valor (R$)", date: "Data", select: "Lista de opções" };
+const FIELD_TYPE_LABEL = { text: "Texto", textarea: "Texto longo", number: "Número", currency: "Valor (R$)", date: "Data", select: "Lista de opções", document: "CPF / CNPJ" };
 function FieldsSheet({ pipeline, onClose, onSaved }) {
   const [list, setList] = useState(() => (pipeline.fields || []).map((f) => ({ ...f, options: (f.options || []).join("\n") })));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [openI, setOpenI] = useState(null);
+  const [picker, setPicker] = useState(false);
+  const TYPE_ICON = { text: "Aa", textarea: "¶", number: "#", currency: "R$", date: "📅", select: "☰", document: "ID" };
+  const TYPE_HINT = { text: "Nome, apólice, placa…", textarea: "Observações, negociação", number: "Nº de vidas, parcelas", currency: "Prêmio, comissão", date: "Vigência, nascimento", select: "Seguradora, ramo, status", document: "Valida e busca dados do CNPJ" };
   const upd = (i, patch) => setList((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const move = (i, d) => setList((l) => { const a = [...l]; const j = i + d; if (j < 0 || j >= a.length) return a; [a[i], a[j]] = [a[j], a[i]]; return a; });
   const save = async () => {
@@ -455,12 +551,17 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
                 <button type="button" className="fi-icon" onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp size={13} /></button>
                 <button type="button" className="fi-icon" onClick={() => move(i, 1)} disabled={i === list.length - 1}><ArrowDown size={13} /></button>
               </span>
-              <input className="crm-field-label" value={f.label} onChange={(e) => upd(i, { label: e.target.value })} placeholder="Nome do campo (ex.: Apólice)" />
+              <span className="crm-field-ico" title={FIELD_TYPE_LABEL[f.type]}>{TYPE_ICON[f.type] || "Aa"}</span>
+              <input className="crm-field-label" value={f.label} onChange={(e) => upd(i, { label: e.target.value })} onFocus={() => setOpenI(i)} placeholder="Nome do campo (ex.: Apólice)" />
+              {f.card && <span className="crm-field-chip">No card</span>}
+              {f.kind && <span className="crm-field-chip">Etiqueta</span>}
+              <button type="button" className="fi-icon" onClick={() => setOpenI(openI === i ? null : i)} title={openI === i ? "Fechar" : "Configurar"}>{openI === i ? <ChevronLeft size={14} style={{ transform: "rotate(90deg)" }} /> : <Settings2 size={14} />}</button>
               <select value={f.type} onChange={(e) => upd(i, { type: e.target.value })}>
                 {Object.entries(FIELD_TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
               <button type="button" className="fi-icon" onClick={() => setList((l) => l.filter((_, j) => j !== i))} title="Remover"><Trash2 size={14} /></button>
             </div>
+            {openI === i && (<div className="crm-field-body">
             {f.type === "select" && <textarea rows={3} value={f.options || ""} onChange={(e) => upd(i, { options: e.target.value })} placeholder={f.parent ? "Uma por linha: Ramo > Produto\nAutomóvel > Auto passeio\nVida > Vida individual" : "Uma opção por linha\nAllianz\nPorto Seguro"} />}
             {f.type === "select" && (
               <div className="crm-field-flags">
@@ -497,9 +598,23 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
                 )}
               </div>
             )}
+            </div>)}
           </div>
         ))}
-        <button type="button" className="fi-add" onClick={() => setList((l) => [...l, { id: "", label: "", type: "text", card: false }])}><Plus size={15} /> Adicionar campo</button>
+        {picker ? (
+          <div className="crm-type-grid">
+            {Object.entries(FIELD_TYPE_LABEL).map(([k, v]) => (
+              <button type="button" key={k} onClick={() => { setList((l) => { setOpenI(l.length); return [...l, { id: "", label: "", type: k, card: false, ...(k === "select" ? { free: true } : {}) }]; }); setPicker(false); }}>
+                <span className="crm-field-ico">{TYPE_ICON[k]}</span>
+                <strong>{v}</strong>
+                <small>{TYPE_HINT[k]}</small>
+              </button>
+            ))}
+            <button type="button" className="crm-type-cancel" onClick={() => setPicker(false)}>Cancelar</button>
+          </div>
+        ) : (
+          <button type="button" className="fi-add" onClick={() => setPicker(true)}><Plus size={15} /> Adicionar campo</button>
+        )}
         <button type="button" className="fi-add" onClick={() => setList((l) => {
           // Lista completa de seguradoras, ramos e produtos (com opção de escrever outra)
           const norm = (x) => String(x.label || "").toLowerCase();
@@ -676,6 +791,8 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
               <Row key={fd.id} label={fd.label} stack={fd.type === "textarea"}>
                 {fd.type === "select" ? (
                   <SelectField fd={fd} value={v} onChange={setV} custom={custom} onAddOption={makeAddOption(ctx, curPipe, custom)} />
+                ) : fd.type === "document" ? (
+                  <DocumentField value={v} onChange={setV} onCnpjData={(d) => applyCnpjData(d, { f, setField: (k, val) => setF((c) => ({ ...c, [k]: val })), fields: curPipe?.fields, custom, setCustomValue: (id, val) => setCustom((c) => ({ ...c, [id]: val })) })} />
                 ) : fd.type === "textarea" ? (
                   <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
                 ) : fd.type === "date" ? (

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { crm } from "../api.js";
 import { notify } from "../dialogs.js";
+import { fmtDoc, docStatus, onlyDigits } from "../docs.js";
 
 const OTHER = "__outra__";
 
@@ -98,4 +100,108 @@ export function makeAddOption(ctx, pipe, custom) {
       return false;
     }
   };
+}
+
+/**
+ * Campo CPF/CNPJ: formata enquanto digita, avisa se o número é inválido e,
+ * quando é um CNPJ válido, busca os dados na Receita (razão social, endereço…).
+ */
+export function DocumentField({ value, onChange, onCnpjData, className }) {
+  const v = value ?? "";
+  const st = docStatus(v);
+  const [busy, setBusy] = useState(false);
+  const lastLookup = useRef("");
+  const lookup = async (digits) => {
+    if (!onCnpjData || lastLookup.current === digits) return;
+    lastLookup.current = digits;
+    setBusy(true);
+    try {
+      const d = await crm.cnpj(digits);
+      onCnpjData(d);
+      notify(`CNPJ encontrado: ${d.razaoSocial || d.nomeFantasia || "empresa"}${d.situacao && !/ativa/i.test(d.situacao) ? ` (situação: ${d.situacao})` : ""}.`, "success");
+    } catch (e) {
+      notify(e?.response?.data?.error || "Não consegui consultar o CNPJ agora.", "error");
+    }
+    setBusy(false);
+  };
+  useEffect(() => { if (st === "cnpj") lookup(onlyDigits(v)); }, [st, v]);
+  return (
+    <span className={`crm-doc ${className || ""}`}>
+      <input value={fmtDoc(v)} onChange={(e) => onChange(fmtDoc(e.target.value))} inputMode="numeric" placeholder="CPF ou CNPJ" />
+      {busy ? <span className="crm-doc-tag wait">Buscando…</span>
+        : st === "cpf" ? <span className="crm-doc-tag ok">CPF ✓</span>
+        : st === "cnpj" ? <button type="button" className="crm-doc-tag ok" title="Buscar os dados de novo na Receita" onClick={() => { lastLookup.current = ""; lookup(onlyDigits(v)); }}>CNPJ ✓</button>
+        : st === "invalid" ? <span className="crm-doc-tag bad">Inválido</span>
+        : null}
+    </span>
+  );
+}
+
+/** Preenche o card com os dados do CNPJ, sem apagar o que já foi digitado. */
+export function applyCnpjData(d, { f, setField, fields, custom, setCustomValue }) {
+  if (!d) return;
+  const empresa = d.razaoSocial || d.nomeFantasia;
+  if (setField) {
+    if (empresa && !String(f.company || "").trim()) setField("company", empresa);
+    if (!String(f.name || "").trim() && (d.nomeFantasia || d.razaoSocial)) setField("name", d.nomeFantasia || d.razaoSocial);
+    if (d.email && !String(f.email || "").trim()) setField("email", d.email);
+    if (d.telefone && !String(f.phone || "").trim()) setField("phone", `55${d.telefone}`);
+  }
+  for (const fd of fields || []) {
+    if (String(custom?.[fd.id] || "").trim()) continue;
+    const l = String(fd.label || "").toLowerCase();
+    const val = /endere/.test(l) ? d.endereco : /raz[aã]o/.test(l) ? d.razaoSocial : /fantasia/.test(l) ? d.nomeFantasia
+      : /situa/.test(l) ? d.situacao : /atividade|cnae|ramo de atividade/.test(l) ? d.atividade : /cidade|munic/.test(l) ? d.municipio : null;
+    if (val) setCustomValue(fd.id, val);
+  }
+}
+
+/** Depois de ganhar/perder: arquivar, reagendar ou deixar no funil. */
+export function askAfterClose(name, outcome) {
+  return new Promise((resolve) => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const root = createRoot(el);
+    const done = (r) => { resolve(r); setTimeout(() => { root.unmount(); el.remove(); }, 0); };
+    root.render(<AfterClose name={name} outcome={outcome} onDone={done} />);
+  });
+}
+function AfterClose({ name, outcome, onDone }) {
+  const d0 = new Date(); d0.setMonth(d0.getMonth() + (outcome === "won" ? 11 : 3));
+  const [date, setDate] = useState(d0.toISOString().slice(0, 10));
+  const [pick, setPick] = useState(false);
+  return (
+    <div className="modal-overlay crm-after" onClick={() => onDone({ action: "keep" })}>
+      <div className="modal-card crm-after-card" onClick={(e) => e.stopPropagation()}>
+        <div className="crm-after-ico">{outcome === "won" ? "🏆" : "📁"}</div>
+        <h3>{outcome === "won" ? "Negócio fechado!" : "Negócio perdido"}</h3>
+        <p>O que fazer com o card de <strong>{name}</strong>?</p>
+        {!pick ? (
+          <div className="crm-after-actions">
+            <button type="button" className="primary" onClick={() => onDone({ action: "archive" })}>Arquivar card</button>
+            <button type="button" onClick={() => setPick(true)}>{outcome === "won" ? "Reagendar (ex.: renovação)" : "Reagendar novo contato"}</button>
+            <button type="button" className="ghost" onClick={() => onDone({ action: "keep" })}>Deixar no funil</button>
+          </div>
+        ) : (
+          <div className="crm-after-actions">
+            <label className="crm-after-date">Volta como cliente novo em
+              <input type="date" value={date} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            <button type="button" className="primary" disabled={!date} onClick={() => onDone({ action: "snooze", date: new Date(`${date}T08:00:00`).toISOString() })}>Reagendar</button>
+            <button type="button" className="ghost" onClick={() => setPick(false)}>Voltar</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Aplica a escolha (arquivar / reagendar) no lead. Devolve o lead atualizado ou null. */
+export async function runAfterClose(lead, outcome) {
+  const r = await askAfterClose(lead.name || "este cliente", outcome);
+  try {
+    if (r.action === "archive") { const l = await crm.updateLead(lead.id, { archived: true }); notify("Card arquivado. Veja em Arquivados."); return l; }
+    if (r.action === "snooze") { const l = await crm.updateLead(lead.id, { snoozeUntil: r.date }); notify(`Reagendado: volta como cliente novo em ${new Date(r.date).toLocaleDateString("pt-BR")}.`, "success"); return l; }
+  } catch (e) { notify(e?.response?.data?.error || "Não consegui salvar.", "error"); }
+  return null;
 }

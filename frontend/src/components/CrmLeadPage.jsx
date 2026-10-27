@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { SelectField, ProductOptions, makeAddOption } from "./CrmFieldBits.jsx";
+import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose } from "./CrmFieldBits.jsx";
 import { createPortal } from "react-dom";
 import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
-  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send
+  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive
 } from "lucide-react";
 import { crm, createTaskApi } from "../api.js";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
@@ -33,8 +33,8 @@ const toLocalInput = (d) => {
 };
 const daysUntil = (d) => { if (!d) return null; return Math.round((new Date(`${String(d).slice(0, 10)}T12:00:00`) - new Date()) / 86400000); };
 const EV_KIND = { reuniao: "Reunião", call: "Ligação", followup: "Follow-up", tarefa: "Tarefa" };
-const WON_RE = /fechad|ganh|vendid|conclu/i;
-const LOST_RE = /perdid|cancel|desist/i;
+const WON_RE = /fechad|ganh|vendid|conclu|indeniz/i;
+const LOST_RE = /perdid|cancel|desist|negad|n[aã]o fechou/i;
 
 /** Card do CRM aberto em tela cheia (modelo Pipedrive): etapas no topo, resumo à esquerda, atividades e histórico à direita. */
 export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) {
@@ -102,10 +102,32 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
   };
   const close = async () => { clearTimeout(timer.current); await flush(); onClose(); };
 
+  // Fechou ou perdeu: pergunta se arquiva, reagenda ou deixa no funil
+  const afterClose = async (saved, o) => {
+    if (!saved || !o) return;
+    const l = await runAfterClose(saved, o);
+    if (l) { changed(l); if (l.archivedAt || l.snoozeUntil) onClose(); }
+  };
   const moveStage = async (st) => {
     if (st.id === f.stage) return;
     setF((c) => ({ ...c, stage: st.id }));
-    await persist({ stage: st.id, pipelineId: f.pipelineId });
+    const saved = await persist({ stage: st.id, pipelineId: f.pipelineId });
+    const o = WON_RE.test(st.name) ? "won" : LOST_RE.test(st.name) ? "lost" : null;
+    if (o && saved) await afterClose(saved, o);
+  };
+  const snooze = async () => {
+    const d0 = new Date(); d0.setDate(d0.getDate() + 30);
+    const v = await askPrompt("Reagendar: em que data o cliente volta como novo? (dd/mm/aaaa)", d0.toLocaleDateString("pt-BR"), { okText: "Reagendar" });
+    if (!v) return;
+    const m = String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (!m) return notify("Use o formato dd/mm/aaaa.", "error");
+    const iso = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), 8, 0, 0).toISOString();
+    const saved = await persist({ snoozeUntil: iso });
+    if (saved) { notify(`Reagendado: volta como cliente novo em ${m[1].padStart(2, "0")}/${m[2].padStart(2, "0")}/${m[3]}.`, "success"); onClose(); }
+  };
+  const toggleArchive = async () => {
+    const saved = await persist({ archived: !lead.archivedAt });
+    if (saved) { notify(saved.archivedAt ? "Card arquivado." : "Card voltou para o funil."); if (saved.archivedAt) onClose(); }
   };
   const changePipeline = async (pid) => {
     const p = pipelines.find((x) => x.id === pid);
@@ -124,9 +146,10 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
     if (target) setF((c) => ({ ...c, stage: target.id }));
     const s = await persist(patch);
     if (s) notify(o === "won" ? "Negócio ganho! 🎉" : o === "lost" ? "Marcado como perdido." : "Negócio reaberto.", o === "won" ? "success" : undefined);
+    if (s && o) await afterClose(s, o);
   };
   const remove = async () => {
-    if (!await askConfirm(`Excluir o negócio "${lead.name}"? Não dá para desfazer.`)) return;
+    if (!await askConfirm(`Excluir o negócio "${lead.name}"? Ele sai do funil, mas os dados ficam guardados no Helora.`)) return;
     try { await crm.deleteLead(lead.id); onChanged?.(null); onClose(); } catch (e) { notify(errText(e), "error"); }
   };
   const openConversation = async () => {
@@ -213,6 +236,8 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
               <button className="lp-icon" onClick={() => setMenu((v) => !v)} title="Mais"><MoreHorizontal size={18} /></button>
               {menu && (
                 <div className="lp-menu" onMouseLeave={() => setMenu(false)}>
+                  <button onClick={() => { setMenu(false); snooze(); }}><RotateCcw size={14} /> Reagendar contato</button>
+                  <button onClick={() => { setMenu(false); toggleArchive(); }}><Archive size={14} /> {lead.archivedAt ? "Desarquivar" : "Arquivar card"}</button>
                   <button onClick={() => { setMenu(false); remove(); }} className="danger"><Trash2 size={14} /> Excluir negócio</button>
                 </div>
               )}
@@ -309,6 +334,8 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                     <span>{fd.label}</span>
                     {fd.type === "select" ? (
                       <SelectField fd={fd} value={v} onChange={setV} custom={custom} onAddOption={makeAddOption(ctx, pipe, custom)} />
+                    ) : fd.type === "document" ? (
+                      <DocumentField value={v} onChange={setV} onCnpjData={(d) => applyCnpjData(d, { f, setField, fields: pipe?.fields, custom, setCustomValue: (id, val) => { setCustom((c) => ({ ...c, [id]: val })); schedule(); } })} />
                     ) : fd.type === "textarea" ? (
                       <textarea rows={3} value={v} onChange={(e) => setV(e.target.value)} />
                     ) : fd.type === "date" ? (
@@ -438,6 +465,10 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                     {h.type === "stage" && <div className="lp-tl-text">Etapa: {stageName(h.fromPipeline, h.from)} <ArrowRight size={12} /> <strong>{stageName(h.toPipeline, h.to)}</strong></div>}
                     {h.type === "owner" && <div className="lp-tl-text">Responsável: <strong>{memberName(h.to)}</strong></div>}
                     {h.type === "value" && <div className="lp-tl-text">Valor: {brl(h.from)} <ArrowRight size={12} /> <strong>{brl(h.to)}</strong></div>}
+                    {h.type === "archived" && <div className="lp-tl-text">📁 Card arquivado</div>}
+                    {h.type === "unarchived" && <div className="lp-tl-text">Card desarquivado</div>}
+                    {h.type === "snoozed" && <div className="lp-tl-text">⏰ Reagendado para {new Date(h.to).toLocaleDateString("pt-BR")}</div>}
+                    {h.type === "snooze_wake" && <div className="lp-tl-text">⏰ Voltou do reagendamento como cliente novo</div>}
                     {h.type === "outcome" && <div className="lp-tl-text">{h.to === "won" ? "🏆 Marcado como ganho" : h.to === "lost" ? `Marcado como perdido${h.reason ? `: ${h.reason}` : ""}` : "Negócio reaberto"}</div>}
                     {h.type === "created" && <div className="lp-tl-text">Negócio criado{lead.source ? ` · origem: ${lead.source}` : ""}</div>}
                     <small>{when(h.at)}{h.by ? ` · ${h.by}` : ""}</small>
