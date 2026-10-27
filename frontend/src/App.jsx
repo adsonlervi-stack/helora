@@ -30,14 +30,23 @@ import TasksPage from "./components/TasksPage.jsx";
 import CrmPage from "./components/CrmPage.jsx";
 import FinancePage from "./components/FinancePage.jsx";
 import TermsGate from "./components/TermsGate.jsx";
+import InstallPrompt from "./components/InstallPrompt.jsx";
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = ainda não sabemos
   const [profile, setProfile] = useState(null);
 
-  const [section, setSection] = useState(() =>
-    new URLSearchParams(window.location.search).get("secao") === "financeiro" ? "finance" : new URLSearchParams(window.location.search).get("c") ? "conversations" : "home"
-  );
+  const [section, setSection] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("aba")) return q.get("aba");
+    return q.get("secao") === "financeiro" ? "finance" : q.get("c") ? "conversations" : "home";
+  });
+  // Cada aba tem seu endereço (?aba=crm): dá para abrir em nova guia e usar o voltar do navegador
+  useEffect(() => {
+    const on = () => { const a = new URLSearchParams(window.location.search).get("aba"); if (a) setSection(a); };
+    window.addEventListener("popstate", on);
+    return () => window.removeEventListener("popstate", on);
+  }, []);
   const [billingBlocked, setBillingBlocked] = useState(false);
   const [tabs, setTabs] = useState({ enabledTabs: null, agentTabs: null });
   useEffect(() => {
@@ -320,6 +329,14 @@ export default function App() {
   if (mobileApp && !MOBILE_NAV_KEYS.includes(activeSection)) activeSection = "conversations";
   if (!isHeloraPanel && !tabAllowed(activeSection)) activeSection = "conversations";
   if (billingBlocked && !isHeloraPanel) activeSection = "finance";
+  const urlAba = new URLSearchParams(window.location.search).get("aba");
+  if (urlAba !== activeSection && !new URLSearchParams(window.location.search).get("c")) {
+    const next = `${window.location.pathname}?aba=${encodeURIComponent(activeSection)}`;
+    setTimeout(() => {
+      if (new URLSearchParams(window.location.search).get("aba") === activeSection) return;
+      if (urlAba) window.history.pushState(null, "", next); else window.history.replaceState(null, "", next);
+    }, 0);
+  }
   const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
   const canEditFooter = profile.role === "owner" || profile.isSuperAdmin;
   const handleAvatarUpdated = (avatarUrl) => setProfile((p) => ({ ...p, avatarUrl }));
@@ -409,6 +426,7 @@ export default function App() {
       {/* Aviso de rodapé ("versão / atualização") escondido: estava poluindo a tela. */}
 
       {!isHeloraPanel && <TermsGate />}
+      <InstallPrompt />
 
       {showProfile && (
         <ProfileModal
