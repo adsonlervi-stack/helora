@@ -3,7 +3,7 @@ import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjDat
 import { createPortal } from "react-dom";
 import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
-  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive
+  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin
 } from "lucide-react";
 import { crm, createTaskApi } from "../api.js";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
@@ -201,6 +201,42 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
   const shownHistory = histFilter === "all" ? history : history.filter((x) => x.cat === histFilter);
   const counts = { notes: history.filter((x) => x.cat === "notes").length, activities: history.filter((x) => x.cat === "activities").length, files: history.filter((x) => x.cat === "files").length };
 
+  // Itens do histórico fixados no topo do card (guardados no próprio lead)
+  const pinned = String(custom.__pinned || "").split(",").filter(Boolean);
+  const togglePin = (id) => {
+    const next = pinned.includes(id) ? pinned.filter((x) => x !== id) : [id, ...pinned].slice(0, 10);
+    setCustom((c) => ({ ...c, __pinned: next.join(",") }));
+    schedule();
+  };
+  const tlBody = (h) => (
+  <div className="lp-tl-body">
+    {h.type === "note" && (
+      <div className="lp-note">
+        <p>{h.text}</p>
+        {!h.legacy && <button className="lp-link sm" onClick={async () => { if (await askConfirm("Apagar esta anotação?")) { try { changed(await crm.deleteLeadNote(lead.id, h.id)); } catch (e) { notify(errText(e), "error"); } } }}>apagar</button>}
+      </div>
+    )}
+    {h.type === "file" && (
+      <div className="lp-file">
+        <a href={h.url} target="_blank" rel="noreferrer"><FileText size={14} /> {h.text}</a>
+        {(lead.attachments || []).find((a) => a.url === h.url) && <button className="lp-icon sm" onClick={() => delFile((lead.attachments || []).find((a) => a.url === h.url))}><Trash2 size={13} /></button>}
+      </div>
+    )}
+    {h.type === "whats" && <div className="lp-note whats"><p>{h.text}</p></div>}
+    {h.type === "event" && <div className="lp-tl-text"><strong>{h.ev.title}</strong> · {EV_KIND[h.ev.kind] || h.ev.kind}{h.ev.done ? " · feito ✓" : ""}</div>}
+    {h.type === "stage" && <div className="lp-tl-text">Etapa: {stageName(h.fromPipeline, h.from)} <ArrowRight size={12} /> <strong>{stageName(h.toPipeline, h.to)}</strong></div>}
+    {h.type === "owner" && <div className="lp-tl-text">Responsável: <strong>{memberName(h.to)}</strong></div>}
+    {h.type === "value" && <div className="lp-tl-text">Valor: {brl(h.from)} <ArrowRight size={12} /> <strong>{brl(h.to)}</strong></div>}
+    {h.type === "archived" && <div className="lp-tl-text">📁 Card arquivado</div>}
+    {h.type === "unarchived" && <div className="lp-tl-text">Card desarquivado</div>}
+    {h.type === "snoozed" && <div className="lp-tl-text">⏰ Reagendado para {new Date(h.to).toLocaleDateString("pt-BR")}</div>}
+    {h.type === "snooze_wake" && <div className="lp-tl-text">⏰ Voltou do reagendamento como cliente novo</div>}
+    {h.type === "outcome" && <div className="lp-tl-text">{h.to === "won" ? "🏆 Marcado como ganho" : h.to === "lost" ? `Marcado como perdido${h.reason ? `: ${h.reason}` : ""}` : "Negócio reaberto"}</div>}
+    {h.type === "created" && <div className="lp-tl-text">Negócio criado{lead.source ? ` · origem: ${lead.source}` : ""}</div>}
+    <button type="button" className={`lp-pin ${pinned.includes(h.id) ? "on" : ""}`} title={pinned.includes(h.id) ? "Desafixar do topo" : "Fixar no topo do card"} onClick={() => togglePin(h.id)}><Pin size={13} /> {pinned.includes(h.id) ? "Fixado" : "Fixar"}</button>
+    <small>{when(h.at)}{h.by ? ` · ${h.by}` : ""}</small>
+  </div>
+  );
   const outcome = lead.outcome;
   const tagById = new Map(tags.map((t) => [t.id, t]));
 
@@ -242,6 +278,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                 </div>
               )}
             </div>
+            <a className="lp-icon lp-newtab" href={`${window.location.pathname}?aba=crm&lead=${lead.id}`} target="_blank" rel="noopener noreferrer" title="Abrir este card em nova guia"><ExternalLink size={17} /></a>
             <button className="lp-icon" onClick={close} title="Fechar (Esc)"><X size={18} /></button>
           </div>
         </header>
@@ -437,6 +474,16 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
               </div>
             ) : <div className="lp-empty">Nada pendente. Agende a próxima atividade para não perder o negócio de vista.</div>}
 
+            {/* Fixados */}
+            {history.some((h) => pinned.includes(h.id)) && (
+              <div className="lp-pinned">
+                <h3 className="lp-h3"><Pin size={14} /> Fixado</h3>
+                {pinned.map((id) => history.find((h) => h.id === id)).filter(Boolean).map((h) => (
+                  <div key={`pin-${h.id}`} className={`lp-tl ${h.type} pinned`}>{tlBody(h)}</div>
+                ))}
+              </div>
+            )}
+
             {/* Histórico */}
             <h3 className="lp-h3">Histórico</h3>
             <div className="lp-hfilter">
@@ -448,32 +495,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
               {shownHistory.map((h) => (
                 <div key={h.id} className={`lp-tl ${h.type}`}>
                   <span className="lp-tl-dot">{h.type === "whats" ? <MessageCircle size={13} /> : h.type === "note" ? <StickyNote size={13} /> : h.type === "file" ? <Paperclip size={13} /> : h.type === "event" ? <CalendarDays size={13} /> : <ArrowRight size={13} />}</span>
-                  <div className="lp-tl-body">
-                    {h.type === "note" && (
-                      <div className="lp-note">
-                        <p>{h.text}</p>
-                        {!h.legacy && <button className="lp-link sm" onClick={async () => { if (await askConfirm("Apagar esta anotação?")) { try { changed(await crm.deleteLeadNote(lead.id, h.id)); } catch (e) { notify(errText(e), "error"); } } }}>apagar</button>}
-                      </div>
-                    )}
-                    {h.type === "file" && (
-                      <div className="lp-file">
-                        <a href={h.url} target="_blank" rel="noreferrer"><FileText size={14} /> {h.text}</a>
-                        {(lead.attachments || []).find((a) => a.url === h.url) && <button className="lp-icon sm" onClick={() => delFile((lead.attachments || []).find((a) => a.url === h.url))}><Trash2 size={13} /></button>}
-                      </div>
-                    )}
-                    {h.type === "whats" && <div className="lp-note whats"><p>{h.text}</p></div>}
-                    {h.type === "event" && <div className="lp-tl-text"><strong>{h.ev.title}</strong> · {EV_KIND[h.ev.kind] || h.ev.kind}{h.ev.done ? " · feito ✓" : ""}</div>}
-                    {h.type === "stage" && <div className="lp-tl-text">Etapa: {stageName(h.fromPipeline, h.from)} <ArrowRight size={12} /> <strong>{stageName(h.toPipeline, h.to)}</strong></div>}
-                    {h.type === "owner" && <div className="lp-tl-text">Responsável: <strong>{memberName(h.to)}</strong></div>}
-                    {h.type === "value" && <div className="lp-tl-text">Valor: {brl(h.from)} <ArrowRight size={12} /> <strong>{brl(h.to)}</strong></div>}
-                    {h.type === "archived" && <div className="lp-tl-text">📁 Card arquivado</div>}
-                    {h.type === "unarchived" && <div className="lp-tl-text">Card desarquivado</div>}
-                    {h.type === "snoozed" && <div className="lp-tl-text">⏰ Reagendado para {new Date(h.to).toLocaleDateString("pt-BR")}</div>}
-                    {h.type === "snooze_wake" && <div className="lp-tl-text">⏰ Voltou do reagendamento como cliente novo</div>}
-                    {h.type === "outcome" && <div className="lp-tl-text">{h.to === "won" ? "🏆 Marcado como ganho" : h.to === "lost" ? `Marcado como perdido${h.reason ? `: ${h.reason}` : ""}` : "Negócio reaberto"}</div>}
-                    {h.type === "created" && <div className="lp-tl-text">Negócio criado{lead.source ? ` · origem: ${lead.source}` : ""}</div>}
-                    <small>{when(h.at)}{h.by ? ` · ${h.by}` : ""}</small>
-                  </div>
+                  {tlBody(h)}
                 </div>
               ))}
             </div>

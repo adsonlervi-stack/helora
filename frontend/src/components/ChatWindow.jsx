@@ -4,8 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2,
   RotateCcw, Users, Check, CheckCheck, Clock, AlertCircle, Forward, Reply, Copy, Trash2, Ban, UserRound, MapPin, X,
-  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles, Bot, Headset, Plus
+  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles, Bot, Headset, Plus, FileDown
 } from "lucide-react";
+import ExportConversationModal from "./ExportConversationModal.jsx";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
 import TransferModal from "./TransferModal.jsx";
@@ -624,6 +625,7 @@ export default function ChatWindow({
     setTimeout(() => { el?.focus(); el?.setSelectionRange(pos + e.length, pos + e.length); }, 0);
   };
   const [showTransfer, setShowTransfer] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const [menuId, setMenuId] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
   const [forwarding, setForwarding] = useState(null);
@@ -880,6 +882,9 @@ export default function ChatWindow({
               <Undo2 size={15} />
             </button>
           )}
+          <button className="cv-icon-btn" onClick={() => setShowExport(true)} title="Exportar conversa (relatório para uso jurídico)">
+            <FileDown size={15} />
+          </button>
           <button className="cv-icon-btn" onClick={onMarkUnread} title="Marcar como não lida">
             <MailOpen size={15} />
           </button>
@@ -1153,6 +1158,7 @@ export default function ChatWindow({
       {showSchedule && <ScheduleModal conversation={conversation} initialText={text} defaultSign={signOn} onClose={() => setShowSchedule(false)} />}
       {special && <SpecialModal kind={special} onClose={() => setSpecial(null)} onSend={onSendSpecial} />}
 
+      {showExport && <ExportConversationModal conversation={conversation} onClose={() => setShowExport(false)} />}
       {showTransfer && (
         <TransferModal
           conversation={conversation}

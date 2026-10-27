@@ -1,3 +1,4 @@
+import { newTabHandlers } from "../newTab.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { Search, SquarePen, SlidersHorizontal, X, MessageCircle, Hourglass, Users, CheckCircle2 } from "lucide-react";
 import { getLabels, getDepartments } from "../api.js";
@@ -203,7 +204,7 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
             <button
               key={c.id}
               className={`cv-item ${selectedId === c.id ? "active" : ""} ${c.unread > 0 ? "unread" : ""} ${waiting ? "waiting" : ""}`}
-              onClick={() => onSelect(c.id)}
+              {...newTabHandlers({ c: c.id }, () => onSelect(c.id))}
             >
               <div className="cv-avatar">
                 <Avatar name={c.name} url={c.avatarUrl} size={46} />

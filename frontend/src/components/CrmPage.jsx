@@ -1,3 +1,4 @@
+import { newTabHandlers, openNewTab } from "../newTab.js";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -117,6 +118,24 @@ function FunnelView({ ctx }) {
   const [autoOpen, setAutoOpen] = useState(false);
   const [open, setOpen] = useState(null); // lead | {new:true, stage}
   const [dragId, setDragId] = useState(null);
+  // Card aberto pelo endereço (?aba=crm&lead=ID), ex.: aberto em nova guia
+  const urlLead = useRef(new URLSearchParams(window.location.search).get("lead"));
+  useEffect(() => {
+    const id = urlLead.current;
+    if (!id || !leads) return;
+    urlLead.current = null;
+    const l = leads.find((x) => x.id === id);
+    if (l) setOpen(l);
+    else crm.leads({ include: "all" }).then((list) => { const x = (list || []).find((y) => y.id === id); if (x) setOpen(x); }).catch(() => {});
+  }, [leads]);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("aba") !== "crm") return;
+    const id = open && !open.isNew && open.id ? open.id : null;
+    if ((q.get("lead") || null) === id) return;
+    if (id) q.set("lead", id); else q.delete("lead");
+    window.history.replaceState(null, "", `${window.location.pathname}?${q}`);
+  }, [open]);
   const [over, setOver] = useState(null);
   const [editCol, setEditCol] = useState(null);
   const [newPipe, setNewPipe] = useState(false);
@@ -325,7 +344,7 @@ function FunnelView({ ctx }) {
             const p = pipeById.get(l.pipelineId);
             const st = p?.stages?.find((x) => x.id === l.stage);
             return (
-              <div key={l.id} className="crm-side-row" onClick={() => setOpen(l)}>
+              <div key={l.id} className="crm-side-row" {...newTabHandlers({ aba: "crm", lead: l.id }, () => setOpen(l))}>
                 <span className="crm-side-av">{initials(l.name)}</span>
                 <div className="crm-side-main">
                   <strong>{l.name}</strong>
@@ -370,7 +389,7 @@ function FunnelView({ ctx }) {
               <div className="crm-cards">
                 {leads === null && <div className="crm-skel" />}
                 {items.map((l) => (
-                  <div key={l.id} className="crm-card cc" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} onClick={() => setOpen(l)}>
+                  <div key={l.id} className="crm-card cc" draggable onDragStart={() => setDragId(l.id)} onDragEnd={() => setDragId(null)} {...newTabHandlers({ aba: "crm", lead: l.id }, () => setOpen(l))}>
                     {(() => {
                       const flds = fieldsOf(l);
                       const kf = flds.find((f) => f.kind);

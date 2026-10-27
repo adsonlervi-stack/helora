@@ -81,10 +81,11 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
 
       <div className="nav-sidebar-nav">
         {items.map(({ key, label, icon: Icon }) => (
-          <button
+          <a
             key={key}
+            href={`?aba=${key}`}
             className={`nav-sidebar-item ${section === key ? "active" : ""}`}
-            onClick={() => onChange(key)}
+            onClick={(e) => { if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return; e.preventDefault(); onChange(key); }}
             title={label}
           >
             <Icon size={18} strokeWidth={2} />
@@ -92,7 +93,7 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
             {key === "conversations" && unreadTotal > 0 && (
               <span className="nav-sidebar-badge">{unreadTotal > 9 ? "9+" : unreadTotal}</span>
             )}
-          </button>
+          </a>
         ))}
       </div>
 
