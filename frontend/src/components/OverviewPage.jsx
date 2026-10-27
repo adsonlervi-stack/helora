@@ -70,6 +70,55 @@ function rankRows(list) {
   );
 }
 
+
+/** Anel de progresso (taxa em %). */
+function Ring({ value }) {
+  const r = 46, c = 2 * Math.PI * r, v = Math.max(0, Math.min(100, value || 0));
+  return (
+    <div className="db-ring-wrap">
+      <svg viewBox="0 0 120 120" width="120" height="120">
+        <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(118,118,128,.14)" strokeWidth="12" />
+        <circle cx="60" cy="60" r={r} fill="none" stroke="url(#dbRing)" strokeWidth="12" strokeLinecap="round"
+          strokeDasharray={`${(v / 100) * c} ${c}`} transform="rotate(-90 60 60)" />
+        <defs><linearGradient id="dbRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#0071e3" /><stop offset="60%" stopColor="#5ac8fa" /><stop offset="100%" stopColor="#34c759" /></linearGradient></defs>
+      </svg>
+      <div className="db-ring-val">{v}%</div>
+    </div>
+  );
+}
+function Mini({ icon: Icon, label, value, sub }) {
+  return (
+    <div className="db-mini">
+      <div className="db-mini-top"><span className="db-mini-ico"><Icon size={14} /></span>{label}</div>
+      <div className="db-mini-val">{value}</div>
+      <div className="db-mini-sub">{sub}</div>
+    </div>
+  );
+}
+function RankTable({ title, list }) {
+  const rows = (list || []).slice(0, 6);
+  const max = Math.max(1, ...rows.map((r) => r.count || 0));
+  return (
+    <div className="db-card">
+      <div className="db-card-title">{title} com mais conversas</div>
+      {!rows.length ? <div className="rank-empty">Sem dados neste período.</div> : (
+        <table className="db-table">
+          <thead><tr><th>Nome</th><th>Conversas</th><th style={{ width: "40%" }}></th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.name}>
+                <td><span className="db-av">{String(r.name || "?").split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</span>{r.name}</td>
+                <td><strong>{r.count}</strong></td>
+                <td><div className="db-ch-bar"><span style={{ width: `${(r.count / max) * 100}%` }} /></div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 const PRESETS = [
   { key: "0", label: "Hoje", days: 0 },
   { key: "7", label: "7 dias", days: 7 },
@@ -191,159 +240,79 @@ export default function OverviewPage({ refreshKey }) {
         </div>
       </div>
 
-      <div className="kpi-grid">
-        <KpiCard
-          label="Conversas no período"
-          value={total}
-          sub="conforme os filtros acima"
-          color="var(--accent-deep)"
-          bg="var(--accent-soft)"
-          icon={MessageSquare}
-        />
-        <KpiCard
-          label="Resolvidas"
-          value={resolvedCount}
-          sub={`${total ? Math.round((resolvedCount / total) * 100) : 0}% do período`}
-          color="var(--success)"
-          bg="#e7f6ef"
-          icon={CheckCircle2}
-        />
-        <KpiCard
-          label="Em aberto"
-          value={openCount}
-          sub="dentro do período filtrado"
-          color="var(--warning)"
-          bg="#fdf1e2"
-          icon={Inbox}
-        />
-        <KpiCard
-          label="CSAT médio"
-          value={stats.csat.average ? Number(stats.csat.average).toFixed(1) : "—"}
-          sub={`${stats.csat.count} avaliação(ões)`}
-          color="var(--accent-deep)"
-          bg="var(--accent-soft)"
-          icon={Smile}
-        />
+      {/* ===== Destaques ===== */}
+      <div className="db-bento">
+        <div className="db-hero blue">
+          <div className="db-hero-top"><MessageSquare size={15} /> Conversas</div>
+          <div className="db-hero-val">{total.toLocaleString("pt-BR")}</div>
+          <div className="db-hero-sub">no período filtrado</div>
+        </div>
+        <div className="db-hero light">
+          <div className="db-hero-top"><CheckCircle2 size={15} /> Resolvidas</div>
+          <div className="db-hero-val">{resolvedCount.toLocaleString("pt-BR")}</div>
+          <div className="db-hero-sub">{openCount.toLocaleString("pt-BR")} em aberto</div>
+        </div>
+        <div className="db-card db-ring">
+          <div className="db-card-title">Taxa de resolução</div>
+          <Ring value={total ? Math.round((resolvedCount / total) * 100) : 0} />
+        </div>
+        <div className="db-card db-line">
+          <div className="db-card-title">Mensagens · 7 dias</div>
+          <div className="db-line-val">{(stats.messagesByDay || []).reduce((s2, d) => s2 + (d.count || 0), 0).toLocaleString("pt-BR")}</div>
+          <MessagesChart data={stats.messagesByDay || []} />
+        </div>
       </div>
 
-      <div className="kpi-grid">
-        <KpiCard
-          label="Resolvidas pelo bot"
-          value={botStage?.value ?? 0}
-          sub="sem precisar de atendente"
-          color="var(--accent)"
-          bg="#eaf2fd"
-          icon={Bot}
-        />
-        <KpiCard
-          label="Transferidas p/ atendente"
-          value={escalatedStage?.value ?? 0}
-          sub="no período filtrado"
-          color="var(--warning)"
-          bg="#fdf1e2"
-          icon={UserCheck}
-        />
-        <KpiCard
-          label="TMR (1ª resposta)"
-          value={formatMinutes(stats.stageTable[1]?.avgMinutes ?? stats.stageTable[0]?.avgMinutes)}
-          sub="tempo médio até responder"
-          color="var(--text-main)"
-          bg="var(--bg-sunken)"
-          icon={Clock3}
-        />
-        <KpiCard
-          label="TMA (atendimento)"
-          value={formatMinutes(stats.tma?.avgMinutes)}
-          sub={`${stats.tma?.count ?? 0} conversa(s) resolvida(s)`}
-          color="var(--text-main)"
-          bg="var(--bg-sunken)"
-          icon={Clock3}
-        />
+      {/* ===== Números rápidos ===== */}
+      <div className="db-minis">
+        <Mini icon={Smile} label="CSAT médio" value={stats.csat.average ? `${Number(stats.csat.average).toFixed(1)}/5` : "—"} sub={`${stats.csat.count} avaliação(ões)`} />
+        <Mini icon={Bot} label="Resolvidas pelo bot" value={botStage?.value ?? 0} sub="sem atendente" />
+        <Mini icon={UserCheck} label="Para atendente" value={escalatedStage?.value ?? 0} sub="transferidas" />
+        <Mini icon={Clock3} label="1ª resposta" value={formatMinutes(stats.stageTable[1]?.avgMinutes ?? stats.stageTable[0]?.avgMinutes)} sub="tempo médio" />
+        <Mini icon={Clock3} label="Atendimento" value={formatMinutes(stats.tma?.avgMinutes)} sub={`${stats.tma?.count ?? 0} resolvida(s)`} />
+        <Mini icon={Inbox} label="Em aberto" value={openCount} sub="aguardando" />
       </div>
 
-      <div className="panel">
-        <div className="panel-title">Ranking do período</div>
-        <div className="grid-2">
-          <div>
-            <div className="rank-group-label">Atendente com mais conversas</div>
-            {rankRows(stats.rankingByAgent)}
-          </div>
-          <div>
-            <div className="rank-group-label">Setor com mais conversas</div>
-            {rankRows(stats.rankingByDepartment)}
+      {/* ===== Gráficos ===== */}
+      <div className="db-grid2">
+        <div className="db-card">
+          <div className="db-card-title">Funil de atendimento</div>
+          <div className="card-subtitle">Da primeira mensagem até a resolução</div>
+          <FunnelChart funnel={stats.funnel} />
+        </div>
+        <div className="db-card">
+          <div className="db-card-title">Conversas por canal</div>
+          <div className="db-channels">
+            {Object.entries(stats.byPlatform).map(([platform, count]) => {
+              const max = Math.max(1, ...Object.values(stats.byPlatform));
+              return (
+                <div className="db-ch" key={platform}>
+                  <div className="db-ch-head"><span className="legend-dot" style={{ background: PLATFORM_COLORS[platform] }} />{PLATFORM_LABELS[platform] || platform}<strong>{count}</strong></div>
+                  <div className="db-ch-bar"><span style={{ width: `${(count / max) * 100}%`, background: PLATFORM_COLORS[platform] }} /></div>
+                </div>
+              );
+            })}
+            {Object.keys(stats.byPlatform).length === 0 && <div className="rank-empty">Sem dados neste período.</div>}
           </div>
         </div>
       </div>
 
-      <div className="panel">
-        <div className="panel-title">Funil de atendimento</div>
-        <div className="card-subtitle">Da primeira mensagem até a resolução, no período filtrado</div>
-        <FunnelChart funnel={stats.funnel} />
+      {/* ===== Ranking em tabela ===== */}
+      <div className="db-grid2">
+        <RankTable title="Atendentes" list={stats.rankingByAgent} />
+        <RankTable title="Setores" list={stats.rankingByDepartment} />
       </div>
 
-      <div className="panel-grid">
-        <div className="panel">
-          <div className="panel-title">Conversas por canal</div>
-          <div className="platform-legend">
-            {Object.entries(stats.byPlatform).map(([platform, count]) => (
-              <div className="legend-row" key={platform}>
-                <span className="legend-dot" style={{ background: PLATFORM_COLORS[platform] }} />
-                {PLATFORM_LABELS[platform] || platform}
-                <span className="legend-count">{count}</span>
-              </div>
+      <div className="db-card">
+        <div className="db-card-title">Tempo de resposta por estágio</div>
+        <table className="db-table">
+          <thead><tr><th>Estágio</th><th>Tempo médio</th><th>Amostras</th></tr></thead>
+          <tbody>
+            {stats.stageTable.map((row) => (
+              <tr key={row.stage}><td>{row.stage}</td><td>{formatMinutes(row.avgMinutes)}</td><td>{row.count}</td></tr>
             ))}
-            {Object.keys(stats.byPlatform).length === 0 && (
-              <div className="rank-empty">Sem dados neste período.</div>
-            )}
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Satisfação (CSAT)</div>
-          <div className="csat-display">
-            <div className="csat-icon">
-              <Smile size={22} />
-            </div>
-            <div>
-              <div className="csat-value">
-                {stats.csat.average ? Number(stats.csat.average).toFixed(1) : "—"}
-                <span className="csat-value-max">/5</span>
-              </div>
-              <div className="csat-count">
-                {stats.csat.count} {stats.csat.count === 1 ? "avaliação" : "avaliações"}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel-grid">
-        <div className="panel">
-          <div className="panel-title">Mensagens nos últimos 7 dias</div>
-          <MessagesChart data={stats.messagesByDay} />
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">TMR por estágio</div>
-          <table className="stage-table">
-            <thead>
-              <tr>
-                <th>Estágio</th>
-                <th>Tempo médio</th>
-                <th>Amostras</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.stageTable.map((row) => (
-                <tr key={row.stage}>
-                  <td>{row.stage}</td>
-                  <td>{formatMinutes(row.avgMinutes)}</td>
-                  <td>{row.count}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          </tbody>
+        </table>
       </div>
     </div>
   );

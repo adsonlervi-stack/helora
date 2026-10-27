@@ -327,7 +327,7 @@ function FunnelView({ ctx }) {
         {stages.map((st) => {
           const items = filtered.filter((l) => colOf(l) === st.id);
           return (
-            <div key={st.id} className={`crm-col ${over === st.id ? "over" : ""}`}
+            <div key={st.id} className={`crm-col ${over === st.id ? "over" : ""}`} style={{ "--col-c": st.color || "#0071e3" }}
               onDragOver={(e) => { e.preventDefault(); setOver(st.id); }}
               onDragLeave={() => setOver((c) => (c === st.id ? null : c))}
               onDrop={(e) => { e.preventDefault(); setOver(null); dragId && move(dragId, st.id); setDragId(null); }}>
