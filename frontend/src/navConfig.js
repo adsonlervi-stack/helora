@@ -81,5 +81,6 @@ export const SECTION_TITLES = {
   g_logs: "Acessos"
 };
 
-// No celular o Helora funciona como app: só Conversas e Pipeline.
-export const MOBILE_NAV_KEYS = ["conversations", "deals", "crm"];
+// No celular o Helora funciona como app: Conversas, CRM (ou Pipeline, para quem não tem CRM) e Tarefas.
+// A ordem aqui é a ordem da barra; os 3 primeiros ficam à mostra e o resto vai para "Mais".
+export const MOBILE_NAV_KEYS = ["conversations", "crm", "deals", "tasks"];

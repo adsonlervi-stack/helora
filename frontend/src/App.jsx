@@ -305,12 +305,18 @@ export default function App() {
     if (!isManager) return key === "conversations" || (tabs.agentTabs || []).includes(key);
     return true;
   };
-  const navItems = isHeloraPanel ? GESTAO_NAV_ITEMS : NAV_ITEMS.filter((i) => (!i.ownerOnly || isManager) && tabAllowed(i.key));
+  // Quem tem CRM não usa mais o Pipeline antigo (o CRM substitui)
+  const crmOn = tabAllowed("crm");
+  const visibleTab = (key) => tabAllowed(key) && !(key === "deals" && crmOn);
+  const navItems = isHeloraPanel ? GESTAO_NAV_ITEMS : NAV_ITEMS.filter((i) => (!i.ownerOnly || isManager) && visibleTab(i.key));
   const mobileApp = isMobile && !isHeloraPanel;
-  const mobileItems = mobileApp ? NAV_ITEMS.filter((i) => MOBILE_NAV_KEYS.includes(i.key) && tabAllowed(i.key)) : navItems;
+  const mobileItems = mobileApp
+    ? MOBILE_NAV_KEYS.map((k) => NAV_ITEMS.find((i) => i.key === k)).filter((i) => i && visibleTab(i.key))
+    : navItems;
   let activeSection = isHeloraPanel
     ? (section.startsWith("g_") ? section : "g_dashboard")
     : section.startsWith("g_") || section === "admin" ? "home" : section;
+  if (!isHeloraPanel && activeSection === "deals" && crmOn) activeSection = "crm";
   if (mobileApp && !MOBILE_NAV_KEYS.includes(activeSection)) activeSection = "conversations";
   if (!isHeloraPanel && !tabAllowed(activeSection)) activeSection = "conversations";
   if (billingBlocked && !isHeloraPanel) activeSection = "finance";

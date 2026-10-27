@@ -1971,3 +1971,47 @@ img, video { max-width: 100%; }
 .tb-days { flex-wrap: wrap; align-items: center; }
 .tb-day-pick { border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 8px; }
 .tb-day-pick.active { background: var(--accent, #0a84ff); color: #fff; }
+
+/* V9 · Menu "Mais" no mobile: fica por cima da barra flutuante e rola se precisar */
+@media (max-width: 860px) {
+  .modal-overlay:has(.more-sheet) { z-index: 200 !important; align-items: flex-end !important; }
+  .more-sheet { width: 100% !important; max-height: 86vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom)) !important; }
+  .more-sheet-list { padding: 8px 10px 4px !important; display: flex; flex-direction: column; gap: 2px; }
+  .more-sheet-item { min-height: 48px; border-radius: 14px !important; padding: 0 14px !important; font-size: 16px !important; }
+  .more-sheet-item:active { background: rgba(0,113,227,.08) !important; }
+  .more-sheet-logout { margin-top: 6px; border-top: .5px solid rgba(0,0,0,.08); border-radius: 0 0 14px 14px !important; }
+}
+
+/* V9 · Barra de digitar no mobile: [+] [mensagem] [enviar]; anexo, áudio, emoji e assinatura ficam no + */
+.mob-only { display: none !important; }
+.desk-only { display: inline-flex; }
+@media (max-width: 760px) {
+  .mob-only { display: inline-flex !important; }
+  .desk-only { display: none !important; }
+  .attach-menu .mob-only { display: flex !important; }
+  .composer { gap: 6px !important; padding: 0 !important; min-width: 0; width: 100%; }
+  .composer input { min-width: 0 !important; width: 100%; flex: 1 1 auto; height: 40px; font-size: 16px; }
+  .composer-wrap { padding: 8px 10px calc(8px + env(safe-area-inset-bottom)) !important; }
+  .composer .composer-icon-btn, .composer .composer-send { width: 38px; height: 38px; min-width: 38px; flex: 0 0 38px; }
+  .composer .rec-bar { flex: 1; min-width: 0; font-size: 13px; }
+  .attach-menu { left: 0; bottom: 46px; min-width: 230px; }
+  .emoji-picker.mob-only { position: absolute; left: 0; bottom: 46px; display: grid !important; grid-template-columns: repeat(8, 1fr); width: min(320px, calc(100vw - 24px)); }
+}
+
+/* V9 · Foto redonda e sem esticar em qualquer lugar (tarefas, comentários, cards) */
+.tb-comment .avatar-circle, .tb-comment-new .avatar-circle, .tb-card .avatar-circle, .tb-stage-pick .avatar-circle {
+  flex-shrink: 0 !important; align-self: flex-start; aspect-ratio: 1 / 1; border-radius: 50% !important; overflow: hidden; display: grid; place-items: center; }
+.avatar-circle img { object-fit: cover; }
+.tb-comment .avatar-circle img, .tb-comment-new .avatar-circle img, .tb-card .avatar-circle img { width: 100%; height: 100%; display: block; }
+.tb-card-foot .avatar-circle { align-self: center; }
+
+/* V9 · Aba Tarefa / Atividade no card do CRM */
+.lp-activity textarea, .lp-activity select { border: 0; background: rgba(118,118,128,.08); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13.5px; outline: 0; color: var(--text-main); box-sizing: border-box; }
+.lp-activity textarea { width: 100%; resize: vertical; min-height: 56px; }
+.lp-activity > input { width: 100%; box-sizing: border-box; padding: 9px 10px; font-size: 14px; }
+.lp-activity .lp-row-end { flex-wrap: wrap; justify-content: flex-start; }
+.lp-activity .lp-row-end select { flex: 1 1 150px; min-width: 0; }
+.lp-activity .lp-row-end input[type="datetime-local"] { flex: 1 1 190px; min-width: 0; }
+.lp-activity .lp-row-end .lp-primary { margin-left: auto; }
+.lp-kinds { flex-wrap: wrap; }
