@@ -2068,3 +2068,44 @@ button.crm-doc-tag.ok { cursor: pointer; }
 .crm-type-grid small { font-size: 12px; color: #6e6e73; }
 .crm-type-grid .crm-type-cancel { grid-column: 1 / -1; align-items: center; background: transparent; color: #6e6e73; padding: 6px; }
 @media (max-width: 720px) { .crm-field-body { padding-left: 0; } }
+
+/* V9 · Baixar CRM */
+.crm-exp-levels { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
+.crm-exp-levels button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 999px; border: 0; background: rgba(118,118,128,.12); font: inherit; font-size: 14px; cursor: pointer; color: #1d1d1f; }
+.crm-exp-levels button.on { background: #0071e3; color: #fff; }
+.crm-exp-levels button b { width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,.3); display: grid; place-items: center; font-size: 11px; }
+
+/* V9 · Automações de processo do CRM (Quando → Se → Então) */
+.au-list { display: flex; flex-direction: column; gap: 10px; }
+.au-rule { background: #fff; border-radius: 18px; box-shadow: 0 0 0 .5px rgba(0,0,0,.07), 0 2px 10px rgba(0,0,0,.04); overflow: hidden; }
+.au-rule.off { opacity: .6; }
+.au-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+.au-ico { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: linear-gradient(135deg, #0071e3, #5ac8fa); color: #fff; flex-shrink: 0; }
+.au-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.au-title strong { font-size: 15px; }
+.au-title small { font-size: 12.5px; color: #6e6e73; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.au-body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.au-name { border: 0; border-bottom: 1px solid rgba(0,0,0,.08); font: inherit; font-size: 15px; font-weight: 600; padding: 6px 0; outline: 0; }
+.au-block { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: rgba(118,118,128,.06); }
+.au-tag { align-self: flex-start; font-size: 11px; font-weight: 800; letter-spacing: .06em; padding: 3px 9px; border-radius: 999px; color: #fff; }
+.au-tag.q { background: #0071e3; } .au-tag.s { background: #8e8e93; } .au-tag.e { background: #34c759; }
+.au-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.au-row select, .au-row input, .au-action textarea, .au-action > select { border: 0; border-radius: 10px; background: #fff; padding: 8px 10px; font: inherit; font-size: 13.5px; box-shadow: 0 0 0 .5px rgba(0,0,0,.1); outline: 0; min-width: 0; }
+.au-row select, .au-row input { flex: 1 1 160px; }
+.au-action { display: flex; flex-direction: column; gap: 8px; }
+.au-action textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.au-days { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #6e6e73; flex: 0 0 auto !important; }
+.au-days input { width: 70px; flex: 0 0 70px !important; }
+.au-step { width: 22px; height: 22px; border-radius: 50%; background: #34c759; color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; flex-shrink: 0; }
+.au-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: #0071e3; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 0; }
+.au-muted { font-size: 13px; color: #6e6e73; }
+.au-foot { display: flex; gap: 16px; justify-content: flex-end; }
+.au-link { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; font: inherit; font-size: 13px; color: #6e6e73; cursor: pointer; }
+.au-link.danger { color: #ff3b30; }
+.au-empty { padding: 22px; text-align: center; color: #6e6e73; font-size: 14px; background: rgba(118,118,128,.06); border-radius: 16px; }
+.au-new { margin: 14px 0; }
+.au-preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 8px; }
+.au-preset-grid button { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 12px 14px; border: 0; border-radius: 14px; background: #fff; box-shadow: 0 0 0 .5px rgba(0,0,0,.08); cursor: pointer; font: inherit; }
+.au-preset-grid button:hover { box-shadow: 0 0 0 1.5px rgba(0,113,227,.4); }
+.au-preset-grid strong { font-size: 14px; }
+.au-preset-grid small { font-size: 12px; color: #6e6e73; }
