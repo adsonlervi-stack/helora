@@ -385,6 +385,30 @@ router.post("/leads", async (req, res) => {
   } catch (err) { fail(res, err); }
 });
 // Histórico do card (mudanças, anotações). Falha silenciosa se a migration 035 não rodou.
+/**
+ * Tarefa concluída/reaberta na aba Tarefas → registra no card do CRM.
+ * Usa o vínculo lead_id; tarefas antigas são achadas pelo "Lead do CRM: Nome" da descrição.
+ */
+export async function syncTaskToLead(accountId, task, done, byName) {
+  try {
+    let leadId = task.leadId;
+    if (!leadId) {
+      const name = (String(task.description || "").match(/Lead do CRM:\s*(.+)/) || [])[1]?.trim();
+      if (!name) return;
+      const { data } = await supabase.from("crm_leads").select("id").eq("account_id", accountId).eq("name", name).is("deleted_at", null).limit(2);
+      if (data?.length !== 1) return;
+      leadId = data[0].id;
+    }
+    const { data: lead } = await supabase.from("crm_leads").select("id").eq("account_id", accountId).eq("id", leadId).maybeSingle();
+    if (!lead) return;
+    await pushHistory(leadId, [{ type: "task", to: done ? "done" : "open", text: task.title, taskId: task.id, by: byName || null }]);
+    const upd = { last_interaction_at: new Date().toISOString() };
+    await supabase.from("crm_leads").update(upd).eq("id", leadId).then(() => {}, () => {});
+  } catch (err) {
+    console.warn("[CRM] tarefa → card:", err.message);
+  }
+}
+
 async function pushHistory(leadId, entries) {
   if (!entries.length) return;
   try {

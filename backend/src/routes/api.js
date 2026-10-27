@@ -171,6 +171,7 @@ import { enforceTabs, logAccess, listConversationAudit, notifySupport, emailCont
 import { uploadMedia, uploadAvatar } from "../storage.js";
 import { convertToOggOpus } from "../audio.js";
 import { exportConversation } from "../conversationExport.js";
+import { syncTaskToLead } from "./crm.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -1614,7 +1615,11 @@ router.post("/tasks", async (req, res) => {
 });
 router.patch("/tasks/:id", async (req, res) => {
   try {
-    res.json(await updateTask(req.accountId, req.params.id, req.body || {}));
+    const before = await getTask(req.accountId, req.params.id).catch(() => null);
+    const t = await updateTask(req.accountId, req.params.id, req.body || {});
+    // Concluiu (ou reabriu) a tarefa → atualiza o card do CRM ligado a ela
+    if (before && (before.status === "done") !== (t.status === "done")) syncTaskToLead(req.accountId, t, t.status === "done", req.userName).catch(() => {});
+    res.json(t);
   } catch (err) {
     taskMigErr(res, err);
   }
