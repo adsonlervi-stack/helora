@@ -2848,7 +2848,7 @@ function mapTask(t) {
     id: t.id, title: t.title, description: t.description || "", assigneeId: t.assignee_id, assigneeName: t.assignee?.name || null,
     createdById: t.created_by, createdByName: t.creator?.name || null, dueAt: t.due_at, status: t.status, kind: t.kind,
     scheduledMessageId: t.scheduled_message_id, conversationId: t.conversation_id, conversationName: t.conversations?.name || null,
-    createdAt: t.created_at, doneAt: t.done_at,
+    createdAt: t.created_at, doneAt: t.done_at, leadId: t.lead_id || null,
     stage: t.stage || (t.status === "done" ? "done" : "todo"), priority: t.priority || "normal",
     checklist: t.checklist || [], attachments: t.attachments || [], comments: t.comments || [], labels: t.labels || [],
     position: t.position ?? null
@@ -2869,7 +2869,13 @@ export async function createTask(accountId, t) {
     assignee_id: t.assigneeId || null, created_by: t.createdById || null, due_at: t.dueAt || null,
     kind: t.kind || "manual", scheduled_message_id: t.scheduledMessageId || null, conversation_id: t.conversationId || null
   };
-  const { data, error } = await supabase.from("tasks").insert(row).select(TASK_SELECT).single();
+  if (t.leadId) row.lead_id = t.leadId;
+  let { data, error } = await supabase.from("tasks").insert(row).select(TASK_SELECT).single();
+  // Sem a migration 040 ainda: cria a tarefa sem o vínculo com o card
+  if (error && row.lead_id && /lead_id/.test(error.message)) {
+    delete row.lead_id;
+    ({ data, error } = await supabase.from("tasks").insert(row).select(TASK_SELECT).single());
+  }
   if (error) throw error;
   return mapTask(data);
 }
