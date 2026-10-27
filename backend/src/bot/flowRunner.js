@@ -98,7 +98,7 @@ async function findLeadByPhone(accountId, phone, pipelineId) {
   const digits = String(phone || "").replace(/\D/g, "");
   if (digits.length < 8) return null;
   let q = supabase.from("crm_leads").select("*, crm_pipelines(name, stages, fields), owner:profiles!crm_leads_owner_id_fkey(name)")
-    .eq("account_id", accountId).ilike("phone", `%${digits.slice(-8)}`).order("created_at", { ascending: false }).limit(1);
+    .eq("account_id", accountId).ilike("phone", `%${digits.slice(-8)}`).is("deleted_at", null).order("created_at", { ascending: false }).limit(1);
   if (pipelineId) q = q.eq("pipeline_id", pipelineId);
   const { data } = await q.maybeSingle();
   return data || null;
