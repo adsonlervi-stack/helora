@@ -91,7 +91,7 @@ r.patch("/contatos/:id", wrap(async (req, res) => {
   if (b.nome !== undefined) patch.name = b.nome;
   if (b.email !== undefined) patch.email = b.email;
   if (b.observacoes !== undefined) patch.notes = b.observacoes;
-  if (b.telefone !== undefined) patch.phone = onlyDigits(b.telefone);
+  if (b.telefone !== undefined) patch.phone = br55(b.telefone);
   const { data, error } = await supabase.from("contacts").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().maybeSingle();
   if (error) throw error;
   if (!data) throw notFound("Contato não encontrado.");
@@ -208,6 +208,7 @@ r.delete("/atendimentos/:id/etiquetas/:etiquetaId", wrap(async (req, res) => {
 }));
 
 // ------------------------------------------------------------ CRM
+const br55 = (v) => { const d = onlyDigits(v); return d.length === 10 || d.length === 11 ? `55${d}` : d; };
 const lead = (l) => ({
   id: l.id, funilId: l.pipeline_id, etapa: l.stage, nome: l.name, telefone: l.phone, email: l.email, empresa: l.company,
   valor: l.value != null ? Number(l.value) : null, responsavelId: l.owner_id, tagIds: l.tag_ids || [], origem: l.source,
@@ -219,7 +220,7 @@ r.get("/crm/funis", wrap(async (req, res) => {
 }));
 r.get("/crm/leads", wrap(async (req, res) => {
   const p = page(req.query);
-  let q = supabase.from("crm_leads").select("*", { count: "exact" }).eq("account_id", req.accountId).order("created_at", { ascending: false }).range(p.from, p.to);
+  let q = supabase.from("crm_leads").select("*", { count: "exact" }).eq("account_id", req.accountId).is("deleted_at", null).order("created_at", { ascending: false }).range(p.from, p.to);
   if (req.query.funilId) q = q.eq("pipeline_id", req.query.funilId);
   if (req.query.etapa) q = q.eq("stage", req.query.etapa);
   if (req.query.telefone) q = q.eq("phone", onlyDigits(req.query.telefone));
@@ -263,7 +264,7 @@ r.post("/crm/leads", wrap(async (req, res) => {
   const valorProdutos = itens.reduce((s, i) => s + i.price, 0);
   const origem = b.origem || b.formulario || "Site";
   const { data, error } = await supabase.from("crm_leads").insert({
-    account_id: req.accountId, pipeline_id: pipe.id, stage: stage?.id || "novos", name: String(b.nome).slice(0, 120), phone: onlyDigits(b.telefone) || null,
+    account_id: req.accountId, pipeline_id: pipe.id, stage: stage?.id || "novos", name: String(b.nome).slice(0, 120), phone: br55(b.telefone) || null,
     email: b.email || null, company: b.empresa || null, value: b.valor != null && b.valor !== "" ? Number(String(b.valor).replace(",", ".")) || null : valorProdutos || null,
     owner_id: b.responsavelId || null, source: String(origem).slice(0, 80),
     notes: [b.formulario ? `Formulário: ${b.formulario}` : null, b.observacoes || null].filter(Boolean).join("\n") || null,
@@ -283,7 +284,7 @@ r.patch("/crm/leads/:id", wrap(async (req, res) => {
   const map = { nome: "name", email: "email", empresa: "company", origem: "source", observacoes: "notes", responsavelId: "owner_id", tagIds: "tag_ids", funilId: "pipeline_id" };
   const patch = {};
   for (const [k, col] of Object.entries(map)) if (b[k] !== undefined) patch[col] = b[k];
-  if (b.telefone !== undefined) patch.phone = onlyDigits(b.telefone);
+  if (b.telefone !== undefined) patch.phone = br55(b.telefone);
   if (b.valor !== undefined) patch.value = b.valor === null ? null : Number(b.valor);
   if (b.etapa !== undefined) { patch.stage = b.etapa; patch.stage_changed_at = new Date().toISOString(); }
   const { data, error } = await supabase.from("crm_leads").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().maybeSingle();
@@ -293,7 +294,8 @@ r.patch("/crm/leads/:id", wrap(async (req, res) => {
   res.json(lead(data));
 }));
 r.delete("/crm/leads/:id", wrap(async (req, res) => {
-  await supabase.from("crm_leads").delete().eq("account_id", req.accountId).eq("id", req.params.id);
+  // Dados do CRM nunca são apagados de verdade: some da tela, mas fica guardado
+  await supabase.from("crm_leads").update({ deleted_at: new Date().toISOString() }).eq("account_id", req.accountId).eq("id", req.params.id);
   res.sendStatus(204);
 }));
 r.get("/crm/produtos", wrap(async (req, res) => {

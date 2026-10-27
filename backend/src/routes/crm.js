@@ -38,6 +38,8 @@ const DEFAULT_STAGES = [
   { id: "perdido", name: "Perdido", color: "#ff453a" }
 ];
 const onlyDigits = (v) => String(v || "").replace(/\D/g, "");
+// Telefone sempre com +55: quem digita só DDD + número ganha o 55 na frente
+const br55 = (v) => { const d = onlyDigits(v); return d.length === 10 || d.length === 11 ? `55${d}` : d; };
 // "1.500,00", "1500.5", 1500 → número
 const money = (v) => { if (typeof v === "number") return v; const t = String(v ?? "").replace(/[^\d,.-]/g, ""); return Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t) || 0; };
 
@@ -298,7 +300,7 @@ function leadRow(b) {
   for (const [k, col] of [["name", "name"], ["phone", "phone"], ["email", "email"], ["company", "company"], ["source", "source"], ["notes", "notes"], ["stage", "stage"], ["pipelineId", "pipeline_id"]]) {
     if (b[k] !== undefined) row[col] = b[k] === "" ? null : b[k];
   }
-  if (row.phone) row.phone = onlyDigits(row.phone);
+  if (row.phone) row.phone = br55(row.phone);
   if (b.value !== undefined) row.value = b.value === "" || b.value === null ? null : money(b.value);
   if (b.ownerId !== undefined) row.owner_id = b.ownerId || null;
   if (b.tagIds !== undefined) row.tag_ids = Array.isArray(b.tagIds) ? b.tagIds : [];
@@ -643,7 +645,7 @@ router.post("/leads/import", async (req, res) => {
       .filter((r) => String(r.name || r.phone || "").trim())
       .map((r) => ({
         account_id: req.accountId, pipeline_id: pipelineId, stage: stage || "novos", owner_id: findOwner(r.owner) || defaultOwner,
-        name: String(r.name || r.phone).trim().slice(0, 120), phone: onlyDigits(r.phone) || null, email: r.email || null,
+        name: String(r.name || r.phone).trim().slice(0, 120), phone: br55(r.phone) || null, email: r.email || null,
         company: r.company || null, source: r.source || kind || "Importação",
         notes: [r.due ? `Vencimento: ${r.due}` : null, r.notes || null].filter(Boolean).join("\n") || null,
         value: r.value ? Number(String(r.value).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3})/g, "").replace(",", ".")) || null : null,
