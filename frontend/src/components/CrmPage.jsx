@@ -229,7 +229,6 @@ function FunnelView({ ctx }) {
       <div className="crm-board">
         {stages.map((st) => {
           const items = filtered.filter((l) => colOf(l) === st.id);
-          const sum = items.reduce((s, l) => s + (l.value || 0), 0);
           return (
             <div key={st.id} className={`crm-col ${over === st.id ? "over" : ""}`}
               onDragOver={(e) => { e.preventDefault(); setOver(st.id); }}
@@ -248,7 +247,6 @@ function FunnelView({ ctx }) {
                     <button onClick={() => deleteCol(st.id)} title="Excluir"><Trash2 size={12} /></button>
                   </span>
                 )}
-                <span className="crm-sum">{brl(sum)}</span>
               </div>
               <div className="crm-cards">
                 {leads === null && <div className="crm-skel" />}

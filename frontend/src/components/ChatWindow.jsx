@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2,
   RotateCcw, Users, Check, CheckCheck, Clock, AlertCircle, Forward, Reply, Copy, Trash2, Ban, UserRound, MapPin, X,
-  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles, Bot, Headset
+  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles, Bot, Headset, Plus
 } from "lucide-react";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
@@ -1040,14 +1040,23 @@ export default function ChatWindow({
                   disabled={offline}
                   onClick={() => setAttachOpen((v) => !v)}
                 >
-                  <Paperclip size={18} />
+                  <span className="desk-only"><Paperclip size={18} /></span>
+                  <span className="mob-only"><Plus size={20} /></span>
                 </button>
                 {showStickers && (
                   <StickerPicker onClose={() => setShowStickers(false)} onPick={(url) => sendSticker({ url })} onUpload={(file) => sendSticker({ file })} />
                 )}
+                {emojiOpen && (
+                  <div className="emoji-picker mob-only" onMouseLeave={() => setEmojiOpen(false)}>
+                    {EMOJIS.map((e) => <button type="button" key={e} onClick={() => { insertEmoji(e); setEmojiOpen(false); }}>{e}</button>)}
+                  </div>
+                )}
                 {attachOpen && (
                   <div className="attach-menu" onMouseLeave={() => setAttachOpen(false)}>
                     <button type="button" onClick={() => { setAttachOpen(false); fileInputRef.current?.click(); }}><FileText size={16} /> Foto, vídeo ou arquivo</button>
+                    <button type="button" className="mob-only" onClick={() => { setAttachOpen(false); startRecording(); }}><Mic size={16} /> Gravar áudio</button>
+                    <button type="button" className="mob-only" onClick={() => { setAttachOpen(false); setEmojiOpen(true); }}><Smile size={16} /> Emojis</button>
+                    <button type="button" className="mob-only" onClick={() => { setAttachOpen(false); toggleSign(); }}><PenLine size={16} /> Assinatura: {signOn ? "ligada" : "desligada"}</button>
                     {conversation.platform === "whatsapp" && (
                       <>
                         <button type="button" onClick={() => { setAttachOpen(false); setSpecial("contact"); }}><UserRound size={16} /> Contato</button>
@@ -1064,14 +1073,14 @@ export default function ChatWindow({
 
               <button
                 type="button"
-                className={`composer-icon-btn sign-btn ${signOn ? "on" : ""}`}
+                className={`composer-icon-btn sign-btn desk-only ${signOn ? "on" : ""}`}
                 title={signOn ? "Assinatura ligada: o cliente vê seu nome. Clique para desligar" : "Assinatura desligada. Clique para ligar"}
                 onClick={toggleSign}
               >
                 <PenLine size={17} />
               </button>
 
-              <div className="attach-wrap">
+              <div className="attach-wrap desk-only">
                 <button type="button" className="composer-icon-btn" title="Emojis" disabled={offline || recording} onClick={() => setEmojiOpen((v) => !v)}>
                   <Smile size={18} />
                 </button>
@@ -1104,7 +1113,7 @@ export default function ChatWindow({
 
               <button
                 type="button"
-                className={`composer-icon-btn ${recording ? "recording" : ""}`}
+                className={`composer-icon-btn ${recording ? "recording" : "desk-only"}`}
                 disabled={offline}
                 title={recording ? "Enviar áudio" : "Gravar áudio"}
                 onClick={recording ? stopRecording : startRecording}

@@ -472,14 +472,14 @@ function TaskSheet({ task, team, profile, isManager, onClose, onChange, onDelete
 
       <Group title={`Comentários${task.comments.length ? ` · ${task.comments.length}` : ""}`}>
         <div className="tb-comment-new">
-          <Avatar name={profile?.name || "Eu"} size={30} />
+          <Avatar name={profile?.name || "Eu"} url={profile?.avatarUrl} size={30} />
           <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Escreva um comentário…" onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendComment(); }} />
           <button type="button" className="ap-btn primary" onClick={sendComment} disabled={!comment.trim()}><Send size={14} /></button>
         </div>
         <div className="tb-comments">
           {[...task.comments].reverse().map((c) => (
             <div key={c.id} className="tb-comment">
-              <Avatar name={c.by || "?"} size={30} />
+              <Avatar name={c.by || "?"} url={(team || []).find((m) => m.id === c.byId)?.avatarUrl || (c.byId === profile?.id ? profile?.avatarUrl : undefined)} size={30} />
               <div>
                 <div className="tb-comment-head"><strong>{c.by || "Alguém"}</strong><span className="cv-muted">{rel(c.at)}</span>
                   {(isManager || c.byId === profile?.id) && <button type="button" className="tb-link" onClick={() => delComment(c)}>apagar</button>}

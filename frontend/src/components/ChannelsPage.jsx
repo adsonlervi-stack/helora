@@ -1,3 +1,4 @@
+import { askConfirm } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
 import { Plus, Trash2, Smartphone, QrCode, Pencil, Workflow } from "lucide-react";
 import {
@@ -211,6 +212,8 @@ export default function ChannelsPage() {
   };
 
   const handleDelete = async (id) => {
+    const ch = (channels || []).find?.((x) => x.id === id);
+    if (!await askConfirm(`Remover o canal${ch?.name ? ` "${ch.name}"` : ""}? O número será desconectado e as mensagens dele param de chegar no Helora.`, { okText: "Sim, remover", danger: true })) return;
     await removeChannel(id);
     load();
   };
