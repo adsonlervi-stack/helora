@@ -191,7 +191,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
   const stageName = (pid, sid) => pipelines.find((p) => p.id === pid)?.stages?.find((s) => s.id === sid)?.name || pipelines.flatMap((p) => p.stages || []).find((s) => s.id === sid)?.name || sid || "—";
   const memberName = (id) => team.find((m) => m.id === id)?.name || "ninguém";
   const history = useMemo(() => {
-    const h = (lead.history || []).map((x) => ({ ...x, cat: x.type === "note" || x.type === "whats" ? "notes" : x.type === "file" ? "files" : "changes" }));
+    const h = (lead.history || []).map((x) => ({ ...x, cat: x.type === "note" || x.type === "whats" ? "notes" : x.type === "file" ? "files" : x.type === "task" ? "activities" : "changes" }));
     for (const e of events) h.push({ id: `ev-${e.id}`, type: "event", at: e.startsAt, ev: e, cat: "activities" });
     for (const a of lead.attachments || []) if (!h.some((x) => x.type === "file" && x.url === a.url)) h.push({ id: `f-${a.id}`, type: "file", text: a.name, url: a.url, by: a.by, at: a.at, cat: "files" });
     if (lead.notes && !h.some((x) => x.type === "note" && x.text === lead.notes)) h.push({ id: "legacy-note", type: "note", text: lead.notes, at: lead.createdAt, legacy: true, cat: "notes" });
@@ -232,6 +232,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
     {h.type === "snoozed" && <div className="lp-tl-text">⏰ Reagendado para {new Date(h.to).toLocaleDateString("pt-BR")}</div>}
     {h.type === "snooze_wake" && <div className="lp-tl-text">⏰ Voltou do reagendamento como cliente novo</div>}
     {h.type === "outcome" && <div className="lp-tl-text">{h.to === "won" ? "🏆 Marcado como ganho" : h.to === "lost" ? `Marcado como perdido${h.reason ? `: ${h.reason}` : ""}` : "Negócio reaberto"}</div>}
+    {h.type === "task" && <div className="lp-tl-text">{h.to === "done" ? <>✅ Tarefa concluída: <strong>{h.text}</strong></> : <>Tarefa reaberta: <strong>{h.text}</strong></>}</div>}
     {h.type === "created" && <div className="lp-tl-text">Negócio criado{lead.source ? ` · origem: ${lead.source}` : ""}</div>}
     <button type="button" className={`lp-pin ${pinned.includes(h.id) ? "on" : ""}`} title={pinned.includes(h.id) ? "Desafixar do topo" : "Fixar no topo do card"} onClick={() => togglePin(h.id)}><Pin size={13} /> {pinned.includes(h.id) ? "Fixado" : "Fixar"}</button>
     <small>{when(h.at)}{h.by ? ` · ${h.by}` : ""}</small>
@@ -416,6 +417,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                     onSave={async (t) => {
                       try {
                         await createTaskApi({
+                          leadId: lead.id,
                           title: t.title, dueAt: t.due ? new Date(t.due).toISOString() : null, assigneeId: t.assigneeId || undefined,
                           conversationId: lead.conversationId || undefined,
                           description: [t.description, `Lead do CRM: ${f.name}`, pipe?.name ? `Funil: ${pipe.name}` : "", f.phone ? `WhatsApp: ${f.phone}` : ""].filter(Boolean).join("\n")

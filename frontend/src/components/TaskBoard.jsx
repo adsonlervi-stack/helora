@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckSquare, Paperclip, MessageSquare, CalendarClock, Trash2, MessageCircle, Plus, X, Search, Flag, Tag, Send, FileText, Check
+  CheckSquare, Paperclip, MessageSquare, CalendarClock, Trash2, MessageCircle, Plus, X, Search, Flag, Tag, Send, FileText, Check, KanbanSquare
 } from "lucide-react";
 import { askConfirm, notify } from "../dialogs.js";
 import { Sheet, Group, Row } from "./ui.jsx";
@@ -360,6 +360,11 @@ function TaskSheet({ task, team, profile, isManager, onClose, onChange, onDelete
           <button type="button" onClick={() => { onClose(); onOpenConversation?.(task.conversationId); }}>
             <MessageCircle size={16} /><span>Abrir conversa</span>
           </button>
+        )}
+        {task.leadId && (
+          <a href={`?aba=crm&lead=${task.leadId}`} title="Abrir o card do CRM ligado a esta tarefa">
+            <KanbanSquare size={16} /><span>Abrir card</span>
+          </a>
         )}
         <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}>
           <Paperclip size={16} /><span>{uploading ? "Enviando…" : "Anexar"}</span>

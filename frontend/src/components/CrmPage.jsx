@@ -767,6 +767,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
       if (isNew && task.on) {
         try {
           await createTaskApi({
+            leadId: saved?.id || undefined,
             title: (task.title.trim() || `Primeiro contato com ${f.name.trim()}`).slice(0, 200),
             dueAt: task.due ? new Date(task.due).toISOString() : null,
             assigneeId: f.ownerId || undefined,
