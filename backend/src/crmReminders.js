@@ -4,7 +4,7 @@
  * (horário de Brasília), e nunca manda o mesmo lembrete duas vezes para o mesmo card.
  */
 import { supabase } from "./config/db.js";
-import { leadConversation } from "./routes/crm.js";
+import { leadConversation, runPipelineAutomations } from "./routes/crm.js";
 import { sendTextToConversation, sendMediaUrlToConversation } from "./messaging.js";
 
 const SERVER = String(process.env.SERVER_ID || "1").replace(/^main$/, "1");
@@ -77,7 +77,59 @@ export async function runCrmReminders() {
   }
 }
 
+/**
+ * Automações por tempo: "card parado X dias na etapa" e "X dias antes/depois de uma data do card".
+ * Cada regra roda uma vez por entrada na etapa (ou por data), controlado em crm_leads.auto_log.
+ */
+let runningRules = false;
+export async function runTimedRules() {
+  if (runningRules) return;
+  runningRules = true;
+  try {
+    const { date: today, hour } = todaySP();
+    if (hour < 8 || hour >= 20) return;
+    const { data: pipes, error } = await supabase.from("crm_pipelines").select("id, account_id, automations");
+    if (error) return; // migration 038 ainda não rodou
+    for (const pipe of pipes || []) {
+      const rules = (pipe.automations || []).filter((r) => r.active !== false && ["idle", "date"].includes(r.trigger?.type));
+      if (!rules.length) continue;
+      const { data: acc } = await supabase.from("accounts").select("server_id").eq("id", pipe.account_id).maybeSingle();
+      if (acc && String(acc.server_id || "1").replace(/^main$/, "1") !== SERVER) continue;
+      const { data: leads } = await supabase.from("crm_leads").select("*").eq("pipeline_id", pipe.id).is("deleted_at", null).is("archived_at", null).is("snooze_until", null).limit(5000);
+      for (const lead of leads || []) {
+        for (const rule of rules) {
+          const t = rule.trigger;
+          let key = null;
+          if (t.type === "idle") {
+            if (t.stageId && t.stageId !== lead.stage) continue;
+            const since = lead.stage_changed_at || lead.created_at;
+            if ((Date.now() - new Date(since).getTime()) / 86400000 < (t.days ?? 3)) continue;
+            key = `${rule.id}:${since}`;
+          } else {
+            const when = String((lead.custom || {})[t.fieldId] || "").slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(when) || daysBetween(today, when) !== (t.days ?? 0)) continue;
+            key = `${rule.id}:${when}`;
+          }
+          const log = lead.auto_log || {};
+          if (log[key]) continue;
+          lead.auto_log = { ...log, [key]: new Date().toISOString() };
+          // grava antes de rodar: nunca dispara duas vezes, mesmo se cair no meio
+          const keep = Object.fromEntries(Object.entries(lead.auto_log).slice(-200));
+          await supabase.from("crm_leads").update({ auto_log: keep }).eq("id", lead.id);
+          await runPipelineAutomations(pipe.account_id, lead, { type: t.type, ruleId: rule.id }, "Automação").catch((e) => console.warn("[CRM regra tempo]", e.message));
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[CRM regras por tempo]", err.message);
+  } finally {
+    runningRules = false;
+  }
+}
+
 export function startCrmReminders() {
+  setTimeout(runTimedRules, 90 * 1000);
+  setInterval(runTimedRules, 60 * 60 * 1000);
   setTimeout(runCrmReminders, 60 * 1000);
   setInterval(runCrmReminders, 60 * 60 * 1000);
 }
