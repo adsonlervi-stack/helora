@@ -146,7 +146,7 @@ router.patch("/pipelines/:id", async (req, res) => {
 router.delete("/pipelines/:id", async (req, res) => {
   try {
     if (!isManager(req)) return res.status(403).json({ error: "Só o gestor exclui funis." });
-    const { count } = await supabase.from("crm_leads").select("id", { count: "exact", head: true }).eq("pipeline_id", req.params.id);
+    const { count } = await supabase.from("crm_leads").select("id", { count: "exact", head: true }).eq("pipeline_id", req.params.id).is("deleted_at", null);
     if (count) return res.status(400).json({ error: "Mova ou exclua os leads deste funil antes." });
     const { error } = await supabase.from("crm_pipelines").delete().eq("account_id", req.accountId).eq("id", req.params.id);
     if (error) throw error;
@@ -167,6 +167,7 @@ function mapLead(l) {
     tagIds: l.tag_ids || [], source: l.source, notes: l.notes, stageChangedAt: l.stage_changed_at, lastInteractionAt: l.last_interaction_at,
     createdAt: l.created_at, conversationId: l.conversation_id,
     attachments: l.attachments || [], checklist: l.checklist || [], custom: l.custom || {},
+    archivedAt: l.archived_at || null, snoozeUntil: l.snooze_until || null,
     history: l.history || [], outcome: l.outcome || null, outcomeAt: l.outcome_at || null, lostReason: l.lost_reason || null, expectedClose: l.expected_close || null,
     products: (l.crm_lead_products || []).map((p) => ({ id: p.id, productId: p.product_id, name: p.crm_products?.name || "Produto", qty: Number(p.qty), price: Number(p.price) }))
   };
@@ -184,15 +185,60 @@ function leadRow(b) {
   if (b.outcome !== undefined) { row.outcome = ["won", "lost"].includes(b.outcome) ? b.outcome : null; row.outcome_at = row.outcome ? new Date().toISOString() : null; }
   if (b.lostReason !== undefined) row.lost_reason = b.lostReason ? String(b.lostReason).slice(0, 300) : null;
   if (b.expectedClose !== undefined) row.expected_close = b.expectedClose || null;
+  if (b.archived !== undefined) row.archived_at = b.archived ? new Date().toISOString() : null;
+  if (b.snoozeUntil !== undefined) row.snooze_until = b.snoozeUntil || null;
   if (b.custom !== undefined) row.custom = cleanCustom(b.custom);
   if (Array.isArray(b.checklist)) row.checklist = b.checklist.slice(0, 50).map((c) => ({ id: String(c.id || randomUUID()).slice(0, 40), text: String(c.text || "").slice(0, 200), done: !!c.done })).filter((c) => c.text);
   return row;
 }
 
+const WON_RE = /fechad|ganh|vendid|conclu|indeniz/i;
+const LOST_RE = /perdid|cancel|desist|negad|n[aã]o fechou/i;
+let archiveColsOk = null;
+async function hasArchiveCols() {
+  if (archiveColsOk !== null) return archiveColsOk;
+  const { error } = await supabase.from("crm_leads").select("archived_at, deleted_at, snooze_until").limit(1);
+  archiveColsOk = !error;
+  if (error) setTimeout(() => { archiveColsOk = null; }, 60000);
+  return archiveColsOk;
+}
+/** Cards reagendados cuja data chegou voltam para a 1ª coluna do funil, como cliente novo. */
+async function wakeSnoozed(accountId) {
+  if (!(await hasArchiveCols())) return;
+  const now = new Date().toISOString();
+  const { data } = await supabase.from("crm_leads").select("id, pipeline_id, stage").eq("account_id", accountId).is("deleted_at", null).lte("snooze_until", now).limit(200);
+  if (!data?.length) return;
+  const pids = [...new Set(data.map((l) => l.pipeline_id).filter(Boolean))];
+  const { data: pipes } = pids.length ? await supabase.from("crm_pipelines").select("id, stages").in("id", pids) : { data: [] };
+  for (const l of data) {
+    const first = (pipes || []).find((p) => p.id === l.pipeline_id)?.stages?.[0]?.id || l.stage;
+    await supabase.from("crm_leads").update({ snooze_until: null, archived_at: null, outcome: null, outcome_at: null, stage: first, stage_changed_at: now, last_interaction_at: now }).eq("id", l.id);
+    await pushHistory(l.id, [{ type: "snooze_wake", to: first, by: "Reagendamento" }]);
+  }
+}
+/** Etapa de ganho/perda: mover para ela marca o resultado; sair dela reabre. */
+async function outcomeForStage(pipelineId, stageId) {
+  if (!pipelineId || !stageId) return undefined;
+  const { data } = await supabase.from("crm_pipelines").select("stages").eq("id", pipelineId).maybeSingle();
+  const st = (data?.stages || []).find((s) => s.id === stageId);
+  if (!st) return undefined;
+  if (WON_RE.test(st.name)) return "won";
+  if (LOST_RE.test(st.name)) return "lost";
+  return null;
+}
+
 router.get("/leads", async (req, res) => {
   try {
-    let q = supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", req.accountId).order("created_at", { ascending: false }).limit(2000);
+    await wakeSnoozed(req.accountId).catch(() => {});
+    let q = supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", req.accountId).order("created_at", { ascending: false }).limit(3000);
     if (req.query.pipelineId) q = q.eq("pipeline_id", req.query.pipelineId);
+    // Dados do CRM nunca são apagados: "excluídos" só somem da tela
+    if (await hasArchiveCols()) {
+      q = q.is("deleted_at", null);
+      if (req.query.archived === "1") q = q.not("archived_at", "is", null);
+      else if (req.query.snoozed === "1") q = q.is("archived_at", null).not("snooze_until", "is", null);
+      else if (req.query.include !== "all") q = q.is("archived_at", null).is("snooze_until", null);
+    }
     if (!isManager(req)) q = q.eq("owner_id", req.userId);
     if (req.query.search) {
       const s = String(req.query.search).replace(/[%,()]/g, "");
@@ -234,8 +280,17 @@ router.patch("/leads/:id", async (req, res) => {
       if (before && before.stage === row.stage && (!row.pipeline_id || row.pipeline_id === before.pipeline_id)) delete row.stage;
       else row.stage_changed_at = new Date().toISOString();
     }
+    if (row.stage && req.body?.outcome === undefined) {
+      const o = await outcomeForStage(row.pipeline_id || before?.pipeline_id, row.stage).catch(() => undefined);
+      if (o !== undefined) {
+        const { data: cur } = await supabase.from("crm_leads").select("outcome").eq("id", req.params.id).maybeSingle();
+        if ((cur?.outcome || null) !== o) { row.outcome = o; row.outcome_at = o ? new Date().toISOString() : null; }
+      }
+    }
     const hist = [];
     const by = req.userName || null;
+    if (row.archived_at !== undefined) hist.push({ type: row.archived_at ? "archived" : "unarchived", by });
+    if (row.snooze_until) hist.push({ type: "snoozed", to: row.snooze_until, by });
     if (before && row.stage) hist.push({ type: "stage", from: before.stage, to: row.stage, fromPipeline: before.pipeline_id, toPipeline: row.pipeline_id || before.pipeline_id, by });
     if (before && row.owner_id !== undefined && row.owner_id !== before.owner_id) hist.push({ type: "owner", to: row.owner_id, by });
     if (before && row.value !== undefined && Number(row.value || 0) !== Number(before.value || 0)) hist.push({ type: "value", from: before.value, to: row.value, by });
@@ -253,12 +308,35 @@ router.patch("/leads/:id", async (req, res) => {
 });
 router.delete("/leads/:id", async (req, res) => {
   try {
-    let q = supabase.from("crm_leads").delete().eq("account_id", req.accountId).eq("id", req.params.id);
+    // Nunca apaga de verdade: os dados do CRM ficam guardados enquanto a empresa for cliente
+    const soft = await hasArchiveCols();
+    let q = soft
+      ? supabase.from("crm_leads").update({ deleted_at: new Date().toISOString() }).eq("account_id", req.accountId).eq("id", req.params.id)
+      : supabase.from("crm_leads").delete().eq("account_id", req.accountId).eq("id", req.params.id);
     if (!isManager(req)) q = q.eq("owner_id", req.userId);
     const { error } = await q;
+    if (soft) await pushHistory(req.params.id, [{ type: "deleted", by: req.userName || null }]);
     if (error) throw error;
     res.sendStatus(204);
   } catch (err) { fail(res, err); }
+});
+
+// Consulta CNPJ (dados públicos da Receita via BrasilAPI) para preencher o card
+router.get("/cnpj/:cnpj", async (req, res) => {
+  try {
+    const n = onlyDigits(req.params.cnpj);
+    if (n.length !== 14) return res.status(400).json({ error: "CNPJ precisa ter 14 números." });
+    const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${n}`, { headers: { "User-Agent": "Helora/1.0" } });
+    if (r.status === 404) return res.status(404).json({ error: "CNPJ não encontrado na Receita." });
+    if (!r.ok) return res.status(502).json({ error: "Consulta de CNPJ indisponível agora. Tente de novo em instantes." });
+    const d = await r.json();
+    const addr = [d.descricao_tipo_de_logradouro, d.logradouro, d.numero, d.complemento, d.bairro, d.municipio && `${d.municipio}/${d.uf}`, d.cep].filter(Boolean).join(", ");
+    res.json({
+      cnpj: n, razaoSocial: d.razao_social || null, nomeFantasia: d.nome_fantasia || null, situacao: d.descricao_situacao_cadastral || null,
+      abertura: d.data_inicio_atividade || null, atividade: d.cnae_fiscal_descricao || null, endereco: addr || null,
+      telefone: onlyDigits(d.ddd_telefone_1 || "") || null, email: d.email ? String(d.email).toLowerCase() : null, municipio: d.municipio || null, uf: d.uf || null
+    });
+  } catch (err) { res.status(502).json({ error: "Consulta de CNPJ indisponível agora." }); }
 });
 
 // Abre a conversa do lead no WhatsApp (sem mandar mensagem)
@@ -280,11 +358,11 @@ router.post("/leads/:id/conversation", async (req, res) => {
 async function leadForConversation(accountId, convId) {
   const { data: conv } = await supabase.from("conversations").select("id, name, phone, external_id").eq("account_id", accountId).eq("id", convId).maybeSingle();
   if (!conv) return { conv: null, lead: null };
-  let { data: lead } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", accountId).eq("conversation_id", convId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  let { data: lead } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", accountId).eq("conversation_id", convId).is("deleted_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
   const phone = onlyDigits(conv.phone || String(conv.external_id || "").split("@")[0]);
   if (!lead && phone.length >= 10) {
     const tail = phone.slice(-8);
-    ({ data: lead } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", accountId).ilike("phone", `%${tail}`).order("created_at", { ascending: false }).limit(1).maybeSingle());
+    ({ data: lead } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", accountId).ilike("phone", `%${tail}`).is("deleted_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle());
   }
   return { conv, lead, phone };
 }
