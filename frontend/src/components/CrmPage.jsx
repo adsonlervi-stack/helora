@@ -8,6 +8,7 @@ import {
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import CrmLeadPage from "./CrmLeadPage.jsx";
+import AutomationsSheet from "./CrmAutomations.jsx";
 import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
@@ -111,6 +112,8 @@ function FunnelView({ ctx }) {
   const [fltOpen, setFltOpen] = useState(false);
   const [view, setView] = useState("board"); // board | snoozed | archived
   const [side, setSide] = useState(null); // leads arquivados / reagendados
+  const [exporting, setExporting] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(false);
   const [open, setOpen] = useState(null); // lead | {new:true, stage}
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
@@ -237,6 +240,7 @@ function FunnelView({ ctx }) {
         </label>
         {isManager && !all && <Button variant="secondary" onClick={() => setEditCol({ name: "", color: COLORS[0] })}><Plus size={15} /> Coluna</Button>}
         {isManager && !all && pipeline && pipelines.length > 1 && <Button variant="secondary" title="Apagar este funil" onClick={deletePipeline}><Trash2 size={15} /></Button>}
+        {isManager && !all && pipeline && <Button variant="secondary" onClick={() => setAutoOpen(true)}><Zap size={15} /> Automações{pipeline.automations?.filter((r) => r.active !== false).length ? ` (${pipeline.automations.filter((r) => r.active !== false).length})` : ""}</Button>}
         {isManager && !all && pipeline && <Button variant="secondary" onClick={() => setEditFields(true)}><SlidersHorizontal size={15} /> Campos{pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}</Button>}
         <div className="crm-search"><Search size={15} /><input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <div className="crm-flt-wrap">
@@ -287,6 +291,7 @@ function FunnelView({ ctx }) {
         </div>
         <div style={{ flex: 1 }} />
         {!all && <Button variant="secondary" onClick={() => setImporting(true)}><Upload size={15} /> Importar planilha</Button>}
+        {isManager && <Button variant="secondary" onClick={() => setExporting(true)} title="Baixar o CRM com anexos, em pastas"><Download size={15} /> Baixar CRM</Button>}
         {!all && <Button onClick={() => setOpen({ isNew: true, stage: stages[0]?.id })}><Plus size={15} /> Novo lead</Button>}
       </div>
 
@@ -416,6 +421,8 @@ function FunnelView({ ctx }) {
         </Sheet>
       )}
       {importing && <ImportSheet ctx={ctx} onClose={() => setImporting(false)} onDone={() => { setImporting(false); load(); ctx.loadTags(); }} />}
+      {autoOpen && pipeline && <AutomationsSheet pipeline={pipeline} pipelines={pipelines} tags={tags} team={ctx.team || []} departments={ctx.departments || []} onClose={() => setAutoOpen(false)} onSaved={() => { setAutoOpen(false); loadPipelines(); }} />}
+      {exporting && <ExportSheet pipelines={pipelines} pipelineId={all ? "" : pipelineId} onClose={() => setExporting(false)} />}
       {editFields && <FieldsSheet pipeline={pipeline} onClose={() => setEditFields(false)} onSaved={() => { setEditFields(false); loadPipelines(); }} />}
       {newPipe && <NewPipelineSheet onClose={() => setNewPipe(false)} onCreated={(p) => { setNewPipe(false); loadPipelines().then(() => setPipelineId(p.id)); }} />}
     </>
@@ -1198,6 +1205,63 @@ function AgendaView({ ctx }) {
         </Sheet>
       )}
     </>
+  );
+}
+
+
+// ================================================================ Exportar
+const EXPORT_LEVELS = [["mes", "Mês"], ["seguradora", "Seguradora"], ["produto", "Produto"], ["etapa", "Etapa"], ["responsavel", "Responsável"]];
+function ExportSheet({ pipelines, pipelineId, onClose }) {
+  const [pid, setPid] = useState(pipelineId || "");
+  const [levels, setLevels] = useState(["mes", "seguradora", "produto"]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [files, setFiles] = useState(true);
+  const [archived, setArchived] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const toggle = (k) => setLevels((l) => (l.includes(k) ? l.filter((x) => x !== k) : [...l, k]));
+  const go = async () => {
+    setBusy(true);
+    try {
+      const r = await crm.exportZip({ pipelineId: pid || undefined, levels: levels.join(","), from: from || undefined, to: to || undefined, files: files ? "1" : "0", archived: archived ? "1" : "0" });
+      const name = decodeURIComponent((r.headers?.["content-disposition"] || "").match(/filename="([^"]+)"/)?.[1] || `CRM ${new Date().toISOString().slice(0, 10)}.zip`);
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      notify("CRM baixado.", "success");
+      onClose();
+    } catch (e) {
+      let msg = errText(e);
+      try { if (e?.response?.data instanceof Blob) msg = JSON.parse(await e.response.data.text()).error || msg; } catch {}
+      notify(msg, "error");
+    }
+    setBusy(false);
+  };
+  const preview = ["CRM", ...levels.map((k) => EXPORT_LEVELS.find((x) => x[0] === k)?.[1]), "Cliente"].join(" › ");
+  return (
+    <Sheet title="Baixar CRM" subtitle="Um arquivo .zip com uma pasta por cliente (dados do card + anexos) e uma planilha geral. Nada é apagado do Helora." onClose={onClose} width={560}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={go}><Download size={15} /> {busy ? "Gerando o arquivo…" : "Baixar .zip"}</Button></>}>
+      <Group>
+        <Row label="Funil">
+          <select value={pid} onChange={(e) => setPid(e.target.value)}>
+            <option value="">Todos os funis</option>
+            {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </Row>
+        <Row label="Criados de"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: "auto" }} /></Row>
+        <Row label="até"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ width: "auto" }} /></Row>
+        <Row label="Incluir anexos"><Switch checked={files} onChange={setFiles} /></Row>
+        <Row label="Incluir arquivados"><Switch checked={archived} onChange={setArchived} /></Row>
+      </Group>
+      <Group title="Organizar as pastas por" hint={`Ordem das pastas: ${preview}`}>
+        <div className="crm-exp-levels">
+          {EXPORT_LEVELS.map(([k, l]) => {
+            const i = levels.indexOf(k);
+            return <button key={k} type="button" className={i >= 0 ? "on" : ""} onClick={() => toggle(k)}>{i >= 0 && <b>{i + 1}</b>}{l}</button>;
+          })}
+        </div>
+      </Group>
+    </Sheet>
   );
 }
 
