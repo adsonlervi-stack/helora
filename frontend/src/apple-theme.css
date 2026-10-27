@@ -2153,3 +2153,59 @@ button.crm-doc-tag.ok { cursor: pointer; }
 .crm-card.cc { border-radius: 16px !important; box-shadow: 0 0 0 .5px rgba(0,0,0,.06), 0 3px 12px rgba(0,0,0,.05) !important; transition: transform .15s, box-shadow .15s; }
 .crm-card.cc:hover { transform: translateY(-2px); box-shadow: 0 0 0 .5px rgba(0,113,227,.25), 0 8px 22px rgba(0,0,0,.08) !important; }
 .lp-stage.cur { box-shadow: 0 6px 16px rgba(0,0,0,.12); }
+
+/* V10 · Botão de fechar do menu "Mais" (mobile): sempre visível, redondo e fácil de tocar */
+.more-sheet { position: relative; }
+.ms-x { position: sticky; top: 10px; float: right; margin: 10px 10px -54px auto; z-index: 5; width: 40px; height: 40px; padding: 0;
+  border: 0; border-radius: 50%; background: rgba(118,118,128,.14); color: #1d1d1f; display: grid; place-items: center; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.ms-x:active { background: rgba(118,118,128,.26); transform: scale(.94); }
+.more-sheet-head { clear: none; }
+
+/* V10 · Foto dos comentários da tarefa nunca estica */
+.tb-comment > .avatar-circle, .tb-comment-new > .avatar-circle { flex: 0 0 30px !important; width: 30px !important; height: 30px !important; }
+
+/* V10 · Telefone com +55 fixo */
+.crm-phone { display: flex; align-items: center; gap: 0; width: 100%; min-width: 0; background: rgba(118,118,128,.08); border-radius: 8px; overflow: hidden; }
+.crm-phone-cc { padding: 0 8px 0 10px; font-weight: 600; color: #1d1d1f; font-size: 14px; white-space: nowrap; border-right: .5px solid rgba(0,0,0,.1); }
+.crm-phone input { flex: 1; min-width: 0; border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 8px 10px; font: inherit; font-size: 14px; outline: 0; }
+.crm-phone:focus-within { box-shadow: 0 0 0 2px rgba(0,113,227,.35); }
+
+/* V10 · Barra do CRM numa linha só, com o resto no "⋯" */
+.crm-toolbar { flex-wrap: nowrap !important; overflow: visible; }
+.crm-toolbar .crm-search { flex: 1 1 160px; min-width: 120px; }
+.crm-more-wrap { position: relative; flex-shrink: 0; }
+.crm-more-btn { width: 40px; height: 40px; border: 0; border-radius: 12px; background: rgba(118,118,128,.1); display: grid; place-items: center; cursor: pointer; color: #1d1d1f; }
+.crm-more-btn:hover { background: rgba(118,118,128,.18); }
+.crm-more-backdrop { position: fixed; inset: 0; z-index: 40; }
+.crm-more-pop { position: absolute; right: 0; top: 46px; z-index: 41; min-width: 240px; background: #fff; border-radius: 14px; padding: 6px;
+  box-shadow: 0 0 0 .5px rgba(0,0,0,.08), 0 12px 32px rgba(0,0,0,.14); display: flex; flex-direction: column; }
+.crm-more-pop button { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 10px 12px; border-radius: 10px; font: inherit; font-size: 14px; color: #1d1d1f; cursor: pointer; text-align: left; }
+.crm-more-pop button:hover { background: rgba(0,113,227,.08); }
+.crm-more-pop button svg { color: #0071e3; }
+.crm-more-pop button.danger, .crm-more-pop button.danger svg { color: #ff3b30; }
+@media (max-width: 900px) {
+  .crm-toolbar { flex-wrap: wrap !important; }
+  .crm-toolbar .crm-views { order: 10; width: 100%; }
+}
+
+/* V10 · Etapas do card (lead): barra em passos, mais limpa */
+.lp-stages { display: flex !important; gap: 6px !important; padding: 10px 20px 4px !important; background: #fff; overflow-x: auto; scrollbar-width: none; }
+.lp-stages::-webkit-scrollbar { display: none; }
+.lp-stage { clip-path: none !important; margin-right: 0 !important; border-radius: 12px !important; height: auto !important; min-height: 44px; padding: 6px 10px 8px !important;
+  background: #f2f3f6 !important; color: #6e6e73 !important; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
+  position: relative; text-align: left; font-size: 13px !important; font-weight: 600 !important; box-shadow: none !important; transition: background .15s, transform .15s; }
+.lp-stage::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 5px; height: 3px; border-radius: 3px; background: rgba(118,118,128,.18); }
+.lp-stage:hover { background: #e9ebf0 !important; filter: none !important; }
+.lp-stage.past { background: color-mix(in srgb, var(--c) 12%, #fff) !important; color: #1d1d1f !important; }
+.lp-stage.past::after { background: var(--c); opacity: .6; }
+.lp-stage.cur { background: color-mix(in srgb, var(--c) 18%, #fff) !important; color: #1d1d1f !important; box-shadow: 0 0 0 1.5px var(--c) inset !important; }
+.lp-stage.cur::after { background: var(--c); }
+.lp-stage .lp-stage-n { font-size: 11px; font-weight: 600; color: #8e8e93; display: flex; align-items: center; gap: 4px; }
+.lp-stage.cur .lp-stage-n { color: color-mix(in srgb, var(--c) 70%, #000); }
+.lp-stage .lp-stage-name { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-bottom: 4px; }
+@media (max-width: 860px) { .lp-stage { flex: 0 0 auto !important; min-width: 120px !important; } }
+
+/* V10 · Escolha de funil na API */
+.api-pick { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #6e6e73; font-weight: 600; }
+.api-pick select { min-width: 220px; padding: 9px 10px; border-radius: 10px; border: 0; background: rgba(118,118,128,.1); font: inherit; font-size: 14px; color: #1d1d1f; }
