@@ -4,7 +4,7 @@ import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "./insuranceLists.js";
 const RAMO_LIST = Object.keys(RAMOS);
 const HORARIOS = ["Manhã", "Tarde", "Noite", "Qualquer horário"];
 
-export const FIELD_TYPES = ["text", "textarea", "number", "currency", "date", "select"];
+export const FIELD_TYPES = ["text", "textarea", "number", "currency", "date", "select", "document"];
 
 export const TEMPLATES = [
   {
@@ -24,6 +24,7 @@ export const TEMPLATES = [
     fields: [
       { id: "tipo_negocio", label: "Tipo de negócio", type: "select", options: ["Renovação", "Venda nova", "Plano de saúde", "Indicação", "Endosso"] },
       { id: "vigencia", label: "Vigência (vencimento)", type: "date", card: true, alert: true },
+      { id: "cpf_cnpj", label: "CPF/CNPJ", type: "document" },
       { id: "corretora", label: "Corretora", type: "text", card: true },
       { id: "apolice", label: "Apólice", type: "text" },
       { id: "seguradora", label: "Seguradora", type: "select", options: SEGURADORAS, free: true, card: true },
@@ -58,6 +59,7 @@ export const TEMPLATES = [
     fields: [
       { id: "tipo_sinistro", label: "Tipo de sinistro", type: "select", free: true, options: ["Colisão", "Roubo / furto", "Incêndio", "Danos elétricos", "Alagamento / vendaval", "Vidros", "Terceiros", "Assistência 24h", "Morte", "Invalidez", "Reembolso saúde", "Outro"] },
       { id: "numero_sinistro", label: "Nº do sinistro", type: "text", card: true },
+      { id: "cpf_cnpj", label: "CPF/CNPJ do segurado", type: "document" },
       { id: "seguradora", label: "Seguradora", type: "select", options: SEGURADORAS, free: true, card: true },
       { id: "ramo", label: "Ramo", type: "select", options: RAMO_LIST, free: true },
       { id: "produto", label: "Produto", type: "select", options: PRODUTO_OPTIONS, parent: "ramo", free: true },

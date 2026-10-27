@@ -41,7 +41,7 @@ export async function runCrmReminders() {
       if (acc && String(acc.server_id || "1").replace(/^main$/, "1") !== SERVER) continue;
       const { data: leads } = await supabase.from("crm_leads").select("*").eq("pipeline_id", pipe.id).not("phone", "is", null).limit(5000);
       for (const lead of leads || []) {
-        if (lead.outcome === "lost") continue;
+        if (lead.outcome === "lost" || lead.deleted_at || lead.archived_at || lead.snooze_until) continue;
         for (const f of dateFields) {
           const when = String((lead.custom || {})[f.id] || "").slice(0, 10);
           if (!/^\d{4}-\d{2}-\d{2}$/.test(when)) continue;
