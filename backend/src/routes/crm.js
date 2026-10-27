@@ -9,6 +9,7 @@ import { randomUUID } from "crypto";
 import { uploadCrmFile, removeCrmFile } from "../storage.js";
 import { TEMPLATES, cleanFields, cleanCustom } from "../crmTemplates.js";
 import { RAMOS } from "../insuranceLists.js";
+import { createZip } from "../zip.js";
 import { getPrimaryWhatsAppChannel, findOrCreateConversation, updateConversation, createTask } from "../config/db.js";
 import { sendTextToConversation } from "../messaging.js";
 import { resolveWhatsAppNumber } from "../whatsapp/baileysClient.js";
@@ -70,7 +71,9 @@ export async function leadConversation(accountId, lead, { departmentId, agentId 
   return conv;
 }
 
-export async function runStageAutomations(accountId, lead, byName) {
+export async function runStageAutomations(accountId, lead, byName, opts = {}) {
+  // Automações de processo do funil (quando → se → então)
+  if ((opts.depth || 0) <= 3) runPipelineAutomations(accountId, lead, { type: opts.created ? "created" : "moved", stageId: lead.stage }, byName, opts.depth || 0).catch((e) => console.warn("[CRM] regras:", e.message));
   try {
     const { data: pipe } = await supabase.from("crm_pipelines").select("stages").eq("id", lead.pipeline_id).maybeSingle();
     const stage = (pipe?.stages || []).find((s) => s.id === lead.stage);
@@ -99,6 +102,123 @@ export async function runStageAutomations(accountId, lead, byName) {
     }
   } catch (e) {
     console.warn("[CRM] automações:", e.message);
+  }
+}
+
+
+// ---------------------------------------------------------------- Automações de processo (estilo Pipefy)
+// Regra: { id, name, active, trigger:{ type, stageId?, fieldId?, value?, days? }, conditions:[{ fieldId, op, value }], actions:[...] }
+const RULE_TRIGGERS = ["created", "moved", "won", "lost", "field", "idle", "date"];
+const RULE_ACTIONS = ["move", "message", "task", "followup", "owner", "tag", "field", "archive", "snooze", "copy"];
+export function cleanRules(list) {
+  if (!Array.isArray(list)) return [];
+  const str = (v, n = 200) => (v == null || v === "" ? undefined : String(v).slice(0, n));
+  const num = (v, min = 0, max = 365) => (v == null || v === "" ? undefined : Math.min(max, Math.max(min, parseInt(v, 10) || 0)));
+  return list.slice(0, 40).filter((r) => RULE_TRIGGERS.includes(r?.trigger?.type)).map((r) => ({
+    id: String(r.id || randomUUID()).slice(0, 40), name: str(r.name, 80) || "Automação", active: r.active !== false,
+    trigger: { type: r.trigger.type, stageId: str(r.trigger.stageId, 40), fieldId: str(r.trigger.fieldId, 40), value: str(r.trigger.value, 200), days: num(r.trigger.days, -365, 365) },
+    conditions: (Array.isArray(r.conditions) ? r.conditions : []).slice(0, 6).filter((c) => c?.fieldId).map((c) => ({ fieldId: str(c.fieldId, 40), op: ["eq", "neq", "filled", "empty"].includes(c.op) ? c.op : "eq", value: str(c.value, 200) })),
+    actions: (Array.isArray(r.actions) ? r.actions : []).slice(0, 8).filter((a) => RULE_ACTIONS.includes(a?.type)).map((a) => ({
+      type: a.type, stageId: str(a.stageId, 40), text: str(a.text, 2000), title: str(a.title, 160), days: num(a.days, 0, 730),
+      ownerId: str(a.ownerId, 40), tagId: str(a.tagId, 40), fieldId: str(a.fieldId, 40), value: str(a.value, 500),
+      departmentId: str(a.departmentId, 40), pipelineId: str(a.pipelineId, 40)
+    }))
+  }));
+}
+const leadFieldValue = (lead, fieldId) => {
+  if (fieldId === "__owner") return lead.owner_id || "";
+  if (fieldId === "__outcome") return lead.outcome || "";
+  return (lead.custom || {})[fieldId] ?? "";
+};
+function ruleConditionsOk(rule, lead) {
+  return (rule.conditions || []).every((c) => {
+    const v = String(leadFieldValue(lead, c.fieldId) ?? "").trim();
+    if (c.op === "filled") return !!v;
+    if (c.op === "empty") return !v;
+    if (c.op === "neq") return v.toLowerCase() !== String(c.value || "").trim().toLowerCase();
+    return v.toLowerCase() === String(c.value || "").trim().toLowerCase();
+  });
+}
+async function runRuleActions(accountId, pipe, rule, lead, byName, depth) {
+  for (const a of rule.actions || []) {
+    try {
+      if (a.type === "move" && a.stageId && a.stageId !== lead.stage && (pipe.stages || []).some((s) => s.id === a.stageId)) {
+        const prev = lead.stage;
+        const now = new Date().toISOString();
+        const st = (pipe.stages || []).find((s) => s.id === a.stageId);
+        const outcome = WON_RE.test(st?.name || "") ? "won" : LOST_RE.test(st?.name || "") ? "lost" : null;
+        const patch = { stage: a.stageId, stage_changed_at: now, ...(outcome !== (lead.outcome || null) ? { outcome, outcome_at: outcome ? now : null } : {}) };
+        await supabase.from("crm_leads").update(patch).eq("id", lead.id);
+        Object.assign(lead, patch);
+        await pushHistory(lead.id, [{ type: "stage", from: prev, to: a.stageId, fromPipeline: lead.pipeline_id, toPipeline: lead.pipeline_id, by: `Automação: ${rule.name}` }]);
+        if (depth < 3) {
+          await runStageAutomations(accountId, lead, byName, { depth: depth + 1 }).catch(() => {});
+          if (outcome) await runPipelineAutomations(accountId, lead, { type: outcome }, byName, depth + 1);
+        }
+      } else if (a.type === "message" && a.text) {
+        const conv = await leadConversation(accountId, lead, { departmentId: a.departmentId, agentId: lead.owner_id });
+        await sendTextToConversation(accountId, conv, fill(a.text, lead), { senderName: null, sign: false });
+        await pushHistory(lead.id, [{ type: "whats", text: fill(a.text, lead), by: `Automação: ${rule.name}` }]);
+      } else if (a.type === "task") {
+        await createTask(accountId, {
+          title: fill(a.title || "Falar com {nome_completo}", lead), description: `Lead do CRM: ${lead.name}${lead.phone ? ` · ${lead.phone}` : ""}\nAutomação: ${rule.name}`,
+          assigneeId: (a.ownerId && a.ownerId !== "owner" ? a.ownerId : lead.owner_id) || null, dueAt: new Date(Date.now() + (a.days ?? 1) * 86400000).toISOString(), kind: "manual",
+          conversationId: lead.conversation_id || null
+        });
+      } else if (a.type === "followup") {
+        const at = new Date(Date.now() + (a.days ?? 2) * 86400000); at.setHours(10, 0, 0, 0);
+        await supabase.from("crm_events").insert({ account_id: accountId, lead_id: lead.id, title: fill(a.title || "Follow-up {nome}", lead), kind: "followup", starts_at: at.toISOString(), owner_id: lead.owner_id || null });
+      } else if (a.type === "owner" && a.ownerId) {
+        await supabase.from("crm_leads").update({ owner_id: a.ownerId }).eq("id", lead.id);
+        lead.owner_id = a.ownerId;
+        await pushHistory(lead.id, [{ type: "owner", to: a.ownerId, by: `Automação: ${rule.name}` }]);
+      } else if (a.type === "tag" && a.tagId) {
+        const tags = [...new Set([...(lead.tag_ids || []), a.tagId])];
+        await supabase.from("crm_leads").update({ tag_ids: tags }).eq("id", lead.id);
+        lead.tag_ids = tags;
+      } else if (a.type === "field" && a.fieldId) {
+        const custom = { ...(lead.custom || {}), [a.fieldId]: fill(a.value || "", lead) };
+        await supabase.from("crm_leads").update({ custom }).eq("id", lead.id);
+        lead.custom = custom;
+      } else if (a.type === "archive") {
+        await supabase.from("crm_leads").update({ archived_at: new Date().toISOString() }).eq("id", lead.id);
+        await pushHistory(lead.id, [{ type: "archived", by: `Automação: ${rule.name}` }]);
+      } else if (a.type === "snooze") {
+        const until = new Date(Date.now() + (a.days ?? 30) * 86400000); until.setHours(8, 0, 0, 0);
+        await supabase.from("crm_leads").update({ snooze_until: until.toISOString() }).eq("id", lead.id);
+        await pushHistory(lead.id, [{ type: "snoozed", to: until.toISOString(), by: `Automação: ${rule.name}` }]);
+      } else if (a.type === "copy" && a.pipelineId) {
+        const { data: target } = await supabase.from("crm_pipelines").select("id, stages").eq("account_id", accountId).eq("id", a.pipelineId).maybeSingle();
+        if (!target) continue;
+        const stageId = (target.stages || []).some((s) => s.id === a.stageId) ? a.stageId : target.stages?.[0]?.id;
+        const { data: created } = await supabase.from("crm_leads").insert({
+          account_id: accountId, pipeline_id: target.id, stage: stageId, name: lead.name, phone: lead.phone, email: lead.email, company: lead.company,
+          owner_id: lead.owner_id, tag_ids: lead.tag_ids || [], custom: lead.custom || {}, conversation_id: lead.conversation_id || null,
+          source: `Automação: ${rule.name}`, stage_changed_at: new Date().toISOString()
+        }).select("*").single();
+        if (created && depth < 3) await runStageAutomations(accountId, created, byName, { created: true, depth: depth + 1 }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn(`[CRM] regra "${rule.name}" ação ${a.type} falhou:`, e.message);
+    }
+  }
+}
+/** Roda as regras do funil para um evento: created | moved | won | lost | field | idle | date */
+export async function runPipelineAutomations(accountId, lead, evt, byName, depth = 0) {
+  if (!lead?.pipeline_id) return;
+  const { data: pipe, error } = await supabase.from("crm_pipelines").select("id, stages, automations").eq("id", lead.pipeline_id).maybeSingle();
+  if (error || !pipe) return;
+  for (const rule of (pipe.automations || []).filter((r) => r.active !== false)) {
+    const t = rule.trigger || {};
+    if (t.type !== evt.type) continue;
+    if (evt.type === "moved" && t.stageId && t.stageId !== evt.stageId) continue;
+    if (evt.type === "field") {
+      if (!t.fieldId || !(evt.fields || []).includes(t.fieldId)) continue;
+      if (t.value && String(leadFieldValue(lead, t.fieldId)).trim().toLowerCase() !== String(t.value).trim().toLowerCase()) continue;
+    }
+    if (evt.ruleId && evt.ruleId !== rule.id) continue;
+    if (!ruleConditionsOk(rule, lead)) continue;
+    await runRuleActions(accountId, pipe, rule, lead, byName, depth);
   }
 }
 
@@ -136,6 +256,7 @@ router.patch("/pipelines/:id", async (req, res) => {
     const patch = {};
     if (req.body?.name !== undefined) patch.name = String(req.body.name).slice(0, 60);
     if (Array.isArray(req.body?.fields)) patch.fields = cleanFields(req.body.fields);
+    if (Array.isArray(req.body?.automations)) patch.automations = cleanRules(req.body.automations);
     if (Array.isArray(req.body?.messages)) patch.messages = req.body.messages.slice(0, 30).map((m) => ({ id: String(m.id || randomUUID()).slice(0, 40), title: String(m.title || "").slice(0, 60), text: String(m.text || "").slice(0, 2000) })).filter((m) => m.title && m.text);
     if (Array.isArray(req.body?.stages)) patch.stages = req.body.stages.filter((s) => s?.id && s?.name).map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff", automations: cleanAutomations(s.automations) }));
     const { data, error } = await supabase.from("crm_pipelines").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
@@ -257,7 +378,7 @@ router.post("/leads", async (req, res) => {
     const { data, error } = await supabase.from("crm_leads").insert(row).select(LEAD_SELECT).single();
     if (error) throw error;
     emitEvent(req.accountId, "lead.criado", mapLead(data));
-    runStageAutomations(req.accountId, data, req.userName);
+    runStageAutomations(req.accountId, data, req.userName, { created: true });
     res.status(201).json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
@@ -275,7 +396,7 @@ async function pushHistory(leadId, entries) {
 router.patch("/leads/:id", async (req, res) => {
   try {
     const row = leadRow(req.body || {});
-    const { data: before } = await supabase.from("crm_leads").select("stage, pipeline_id, owner_id, value").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    const { data: before } = await supabase.from("crm_leads").select("stage, pipeline_id, owner_id, value, custom, outcome").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
     if (row.stage) {
       if (before && before.stage === row.stage && (!row.pipeline_id || row.pipeline_id === before.pipeline_id)) delete row.stage;
       else row.stage_changed_at = new Date().toISOString();
@@ -302,6 +423,11 @@ router.patch("/leads/:id", async (req, res) => {
     if (error) throw error;
     emitEvent(req.accountId, "lead.atualizado", mapLead(data));
     if (row.stage) runStageAutomations(req.accountId, data, req.userName);
+    if (before && row.outcome !== undefined && row.outcome && row.outcome !== before.outcome) runPipelineAutomations(req.accountId, data, { type: row.outcome }, req.userName).catch(() => {});
+    if (before && row.custom !== undefined) {
+      const changedF = [...new Set([...Object.keys(before.custom || {}), ...Object.keys(row.custom || {})])].filter((k) => String((before.custom || {})[k] ?? "") !== String((row.custom || {})[k] ?? ""));
+      if (changedF.length) runPipelineAutomations(req.accountId, data, { type: "field", fields: changedF }, req.userName).catch(() => {});
+    }
     if (hist.length) { await pushHistory(data.id, hist); data.history = [...(data.history || []), ...hist.map((h) => ({ ...h, at: new Date().toISOString() }))]; }
     res.json(mapLead(data));
   } catch (err) { fail(res, err); }
@@ -586,6 +712,90 @@ router.delete("/tags/:id", async (req, res) => {
     if (error) throw error;
     res.sendStatus(204);
   } catch (err) { fail(res, err); }
+});
+
+
+// ---------------------------------------------------------------- Exportar CRM (ZIP com pastas e anexos)
+// ?pipelineId=&levels=mes,seguradora,produto&from=yyyy-mm-dd&to=yyyy-mm-dd&files=1&archived=1
+router.get("/export", async (req, res) => {
+  try {
+    if (!isManager(req)) return res.status(403).json({ error: "Só o gestor pode baixar o CRM." });
+    const levels = String(req.query.levels || "mes,seguradora,produto").split(",").filter((x) => ["mes", "seguradora", "produto", "etapa", "responsavel"].includes(x)).slice(0, 4);
+    const withFiles = req.query.files !== "0";
+    let q = supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", req.accountId).order("created_at", { ascending: true }).limit(10000);
+    if (req.query.pipelineId) q = q.eq("pipeline_id", req.query.pipelineId);
+    if (req.query.from) q = q.gte("created_at", `${req.query.from}T00:00:00`);
+    if (req.query.to) q = q.lte("created_at", `${req.query.to}T23:59:59`);
+    if (await hasArchiveCols()) { q = q.is("deleted_at", null); if (req.query.archived === "0") q = q.is("archived_at", null); }
+    const { data: leads, error } = await q;
+    if (error) throw error;
+    const { data: pipes } = await supabase.from("crm_pipelines").select("id, name, stages, fields").eq("account_id", req.accountId);
+    const { data: acc } = await supabase.from("accounts").select("name").eq("id", req.accountId).maybeSingle();
+    const pipeOf = new Map((pipes || []).map((p) => [p.id, p]));
+    const safe = (x, fb = "Sem nome") => String(x || fb).replace(/[\\/:*?"<>|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || fb;
+    const MESES = ["01 Janeiro", "02 Fevereiro", "03 Março", "04 Abril", "05 Maio", "06 Junho", "07 Julho", "08 Agosto", "09 Setembro", "10 Outubro", "11 Novembro", "12 Dezembro"];
+    const fieldVal = (l, re) => {
+      const fields = pipeOf.get(l.pipeline_id)?.fields || [];
+      const f = fields.find((x) => re.test(x.id) || re.test(x.label || ""));
+      return f ? (l.custom || {})[f.id] : null;
+    };
+    const levelName = (l, lv) => {
+      if (lv === "mes") { const d = new Date(l.created_at); return `${d.getFullYear()}/${MESES[d.getMonth()]}`; }
+      if (lv === "seguradora") return safe(fieldVal(l, /seguradora|^cia$|companhia/i), "Sem seguradora");
+      if (lv === "produto") return safe(fieldVal(l, /^produto|produto/i) || fieldVal(l, /ramo|tipo_seguro|tipo de seguro/i) || l.crm_lead_products?.[0]?.crm_products?.name, "Sem produto");
+      if (lv === "etapa") return safe(pipeOf.get(l.pipeline_id)?.stages?.find((s) => s.id === l.stage)?.name || l.stage, "Sem etapa");
+      if (lv === "responsavel") return safe(l.owner?.name, "Sem responsável");
+      return "Outros";
+    };
+    const stamp = new Date().toISOString().slice(0, 10);
+    const root = safe(`CRM ${acc?.name || ""} ${stamp}`);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(root)}.zip"`);
+    const zip = createZip(res);
+    // Planilha geral (abre no Excel)
+    const allFields = [...new Map((pipes || []).flatMap((p) => p.fields || []).map((f) => [f.id, f])).values()];
+    const csvCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const head = ["Nome", "Empresa", "Telefone", "E-mail", "Funil", "Etapa", "Situação", "Responsável", "Valor", "Criado em", "Arquivado", ...allFields.map((f) => f.label), "Produtos"];
+    const rows = [head.map(csvCell).join(";")];
+    let totalBytes = 0;
+    for (const l of leads || []) {
+      const p = pipeOf.get(l.pipeline_id);
+      const stage = p?.stages?.find((s) => s.id === l.stage)?.name || l.stage || "";
+      const situ = l.outcome === "won" ? "Ganho" : l.outcome === "lost" ? "Perdido" : "Em andamento";
+      const prods = (l.crm_lead_products || []).map((x) => x.crm_products?.name).filter(Boolean).join(", ");
+      rows.push([l.name, l.company, l.phone, l.email, p?.name, stage, situ, l.owner?.name, l.value, new Date(l.created_at).toLocaleDateString("pt-BR"), l.archived_at ? "Sim" : "",
+        ...allFields.map((f) => (l.custom || {})[f.id]), prods].map(csvCell).join(";"));
+      const folder = [root, ...levels.map((lv) => levelName(l, lv)), safe(`${l.name}${l.company && l.company !== l.name ? ` - ${l.company}` : ""}`)].join("/");
+      const lines = [
+        `CLIENTE: ${l.name || ""}`, l.company ? `Empresa: ${l.company}` : null, l.phone ? `Telefone: ${l.phone}` : null, l.email ? `E-mail: ${l.email}` : null,
+        `Funil: ${p?.name || ""}`, `Etapa: ${stage}`, `Situação: ${situ}${l.lost_reason ? ` (${l.lost_reason})` : ""}`, l.owner?.name ? `Responsável: ${l.owner.name}` : null,
+        l.value != null ? `Valor: R$ ${Number(l.value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : null,
+        `Criado em: ${new Date(l.created_at).toLocaleString("pt-BR")}`, "", "DADOS DO CARD",
+        ...(p?.fields || []).map((f) => `${f.label}: ${(l.custom || {})[f.id] ?? ""}`),
+        prods ? `Produtos: ${prods}` : null, "", "HISTÓRICO",
+        ...(l.history || []).filter((h) => h.type === "note" || h.type === "whats" || h.type === "stage" || h.type === "outcome").map((h) =>
+          `${h.at ? new Date(h.at).toLocaleString("pt-BR") : ""} · ${h.type === "note" ? "Anotação" : h.type === "whats" ? "WhatsApp" : h.type === "stage" ? "Mudou de etapa" : "Resultado"}${h.by ? ` (${h.by})` : ""}${h.text ? `: ${h.text}` : ""}`),
+        ...(l.checklist || []).length ? ["", "CHECKLIST", ...(l.checklist || []).map((c) => `[${c.done ? "x" : " "}] ${c.text}`)] : []
+      ].filter((x) => x !== null);
+      await zip.add(`${folder}/Dados do cliente.txt`, "\ufeff" + lines.join("\r\n"));
+      if (withFiles) {
+        for (const a of l.attachments || []) {
+          if (!a?.url || totalBytes > 1500 * 1024 * 1024) continue;
+          try {
+            const r = await fetch(a.url);
+            if (!r.ok) continue;
+            const buf = Buffer.from(await r.arrayBuffer());
+            totalBytes += buf.length;
+            await zip.add(`${folder}/Anexos/${safe(a.name, "arquivo")}`, buf);
+          } catch {}
+        }
+      }
+    }
+    await zip.add(`${root}/Planilha geral.csv`, "\ufeff" + rows.join("\r\n"));
+    await zip.finish();
+  } catch (err) {
+    if (!res.headersSent) fail(res, err); else try { res.end(); } catch {}
+  }
 });
 
 // ---------------------------------------------------------------- Produtos / serviços
