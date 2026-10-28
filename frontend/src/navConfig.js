@@ -19,7 +19,9 @@ import {
   BarChart3,
   Wallet,
   ListChecks,
-  Target
+  Target,
+  Sparkles,
+  Plug
 } from "lucide-react";
 
 export const NAV_ITEMS = [
@@ -32,8 +34,10 @@ export const NAV_ITEMS = [
   { key: "campaigns", label: "Campanhas", icon: Megaphone },
   { key: "crm", label: "CRM", icon: Target },
   { key: "tasks", label: "Tarefas", icon: ListChecks },
+  { key: "ia", label: "IA Helora", icon: Sparkles },
   { key: "reports", label: "Relatórios", icon: BarChart3 },
   { key: "channels", label: "Canais", icon: Smartphone },
+  { key: "connections", label: "Conexões", icon: Plug, ownerOnly: true },
   { key: "finance", label: "Financeiro", icon: Wallet, ownerOnly: true },
   { key: "settings", label: "Config.", icon: Settings2 }
 ];
@@ -74,6 +78,8 @@ export const SECTION_TITLES = {
   reports: "Relatórios",
   tasks: "Tarefas",
   crm: "CRM",
+  ia: "IA Helora",
+  connections: "Conexões",
   finance: "Financeiro",
   g_support: "Suporte",
   g_announcements: "Comunicados",
@@ -83,4 +89,4 @@ export const SECTION_TITLES = {
 
 // No celular o Helora funciona como app: Conversas, CRM (ou Pipeline, para quem não tem CRM) e Tarefas.
 // A ordem aqui é a ordem da barra; os 3 primeiros ficam à mostra e o resto vai para "Mais".
-export const MOBILE_NAV_KEYS = ["conversations", "crm", "deals", "tasks"];
+export const MOBILE_NAV_KEYS = ["conversations", "crm", "deals", "tasks", "ia"];

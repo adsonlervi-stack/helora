@@ -31,6 +31,8 @@ import CrmPage from "./components/CrmPage.jsx";
 import FinancePage from "./components/FinancePage.jsx";
 import TermsGate from "./components/TermsGate.jsx";
 import InstallPrompt from "./components/InstallPrompt.jsx";
+import ConnectionsPage from "./components/ConnectionsPage.jsx";
+import IaHeloraPage from "./components/IaHeloraPage.jsx";
 
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = ainda não sabemos
@@ -310,7 +312,7 @@ export default function App() {
   // Abas: a Gestora define as da empresa; o Gestor define as dos atendentes
   const tabAllowed = (key) => {
     if (profile.isSuperAdmin) return true;
-    if (tabs.enabledTabs && !["home", "conversations", "settings", "finance"].includes(key) && !tabs.enabledTabs.includes(key)) return false;
+    if (tabs.enabledTabs && !["home", "conversations", "settings", "finance", "ia", "connections"].includes(key) && !tabs.enabledTabs.includes(key)) return false;
     if (!isManager) return key === "conversations" || (tabs.agentTabs || []).includes(key);
     return true;
   };
@@ -395,6 +397,8 @@ export default function App() {
           {activeSection === "reports" && <ReportsPage />}
           {activeSection === "tasks" && <TasksPage profile={profile} onOpenConversation={openConversation} />}
           {activeSection === "crm" && <CrmPage profile={profile} onOpenConversation={openConversation} />}
+          {activeSection === "ia" && <IaHeloraPage isManager={isManager} onGo={navTo} />}
+          {activeSection === "connections" && <ConnectionsPage isManager={isManager} />}
           {activeSection === "finance" && (isManager ? <FinancePage /> : (
             <div className="page"><div className="admin-feedback error">O acesso da empresa está pausado por pendência financeira. Fale com o responsável pela conta.</div></div>
           ))}

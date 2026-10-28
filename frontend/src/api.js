@@ -431,3 +431,43 @@ export const createWebhook = (b) => api.post("/webhooks", b).then((r) => r.data)
 export const updateWebhook = (id, b) => api.patch(`/webhooks/${id}`, b).then((r) => r.data);
 export const deleteWebhook = (id) => api.delete(`/webhooks/${id}`);
 export const testWebhook = (id) => api.post(`/webhooks/${id}/test`).then((r) => r.data);
+
+// ---------- Conexões, Cérebro, Atendentes IA e IA Helora ----------
+export const integrations = {
+  list: () => api.get("/integrations").then((r) => r.data),
+  saveAI: (provider, d) => api.put(`/integrations/ai/${provider}`, d).then((r) => r.data),
+  setDefaultAI: (provider) => api.put("/integrations/ai-default", { provider }).then((r) => r.data),
+  remove: (provider) => api.delete(`/integrations/${provider}`),
+  emailPreset: (email) => api.get("/integrations/email/preset", { params: { email } }).then((r) => r.data),
+  saveEmail: (d) => api.put("/integrations/email", d, { timeout: 60000 }).then((r) => r.data),
+  syncEmail: () => api.post("/integrations/email/sync", {}, { timeout: 0 }).then((r) => r.data),
+  addForm: (d) => api.post("/integrations/forms", d).then((r) => r.data),
+  updateForm: (id, d) => api.patch(`/integrations/forms/${id}`, d).then((r) => r.data),
+  removeForm: (id) => api.delete(`/integrations/forms/${id}`),
+  canvaAuthUrl: () => api.get("/integrations/canva/auth-url").then((r) => r.data.url),
+  canvaDesigns: (q) => api.get("/integrations/canva/designs", { params: { q } }).then((r) => r.data),
+  canvaExport: (id, format) => api.post(`/integrations/canva/designs/${id}/export`, { format }, { timeout: 0 }).then((r) => r.data),
+  brainDocs: (agent) => api.get("/integrations/brain/docs", { params: agent ? { agent } : {} }).then((r) => r.data),
+  brainDoc: (id) => api.get(`/integrations/brain/docs/${id}`).then((r) => r.data),
+  brainAdd: (d) => api.post("/integrations/brain/docs", d, { timeout: 120000 }).then((r) => r.data),
+  brainUpload: (file, extra = {}) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    for (const [k, v] of Object.entries(extra)) if (v != null) fd.append(k, Array.isArray(v) ? v.join(",") : v);
+    return api.post("/integrations/brain/docs", fd, { timeout: 120000 }).then((r) => r.data);
+  },
+  brainUpdate: (id, d) => api.patch(`/integrations/brain/docs/${id}`, d).then((r) => r.data),
+  brainRefresh: (id) => api.post(`/integrations/brain/docs/${id}/refresh`, {}, { timeout: 120000 }).then((r) => r.data),
+  brainRemove: (id) => api.delete(`/integrations/brain/docs/${id}`),
+  brainAsk: (question) => api.post("/integrations/brain/ask", { question }, { timeout: 120000 }).then((r) => r.data),
+  attendantChannels: () => api.get("/integrations/attendants/channels").then((r) => r.data),
+  setChannelAttendant: (channelId, attendantId) => api.put(`/integrations/attendants/channels/${channelId}`, { attendantId }).then((r) => r.data),
+  testAttendant: (id, messages) => api.post(`/integrations/attendants/${id}/test`, { messages }, { timeout: 120000 }).then((r) => r.data),
+  studioChats: () => api.get("/integrations/studio/chats").then((r) => r.data),
+  studioChat: (id) => api.get(`/integrations/studio/chats/${id}`).then((r) => r.data),
+  studioRemoveChat: (id) => api.delete(`/integrations/studio/chats/${id}`),
+  studioSend: (d) => api.post("/integrations/studio/chat", d, { timeout: 180000 }).then((r) => r.data),
+  studioImage: (prompt, size) => api.post("/integrations/studio/image", { prompt, size }, { timeout: 180000 }).then((r) => r.data),
+  studioCanva: (d) => api.post("/integrations/studio/canva", d, { timeout: 120000 }).then((r) => r.data),
+  studioFlow: (description) => api.post("/integrations/studio/flow", { description }, { timeout: 180000 }).then((r) => r.data)
+};
