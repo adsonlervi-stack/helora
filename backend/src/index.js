@@ -6,6 +6,10 @@ import apiRoutes from "./routes/api.js";
 import adminRoutes from "./routes/admin.js";
 import crmRoutes from "./routes/crm.js";
 import aiRoutes from "./routes/ai.js";
+import integrationsRoutes, { publicFormHandler } from "./routes/integrations.js";
+import { canvaCallback } from "./integrations/canva.js";
+import { startMailSync } from "./integrations/jobs.js";
+import { startMeetingReminders } from "./meetingNotify.js";
 import { googleRouter, googleCallbackRouter } from "./google.js";
 import { pushRouter } from "./push.js";
 import { startCrmReminders } from "./crmReminders.js";
@@ -58,6 +62,11 @@ app.get("/public/plans", cors(), async (req, res) => {
     res.json([]);
   }
 });
+// Formulários (site, landing page, Google Forms): cria o lead no CRM da empresa
+app.options("/public/forms/:token", cors());
+app.post("/public/forms/:token", cors(), express.urlencoded({ extended: true, limit: "1mb" }), express.json({ limit: "1mb" }), publicFormHandler);
+// Retorno do login do Canva
+app.get("/integrations/canva/callback", canvaCallback);
 app.use("/public", cors(), publicDocs);
 app.use("/public/v1", cors(), express.json({ limit: "2mb" }), publicRoutes);
 app.use(
@@ -71,6 +80,7 @@ app.use(express.json());
 app.use("/api/admin", adminRoutes);
 app.use("/api/crm", crmRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/integrations", integrationsRoutes);
 app.use("/api/google", googleRouter);
 app.use("/api/push", pushRouter);
 app.use("/", googleCallbackRouter);
@@ -144,3 +154,5 @@ startCampaignDispatcher();
 
 // Lembretes por data do CRM (ex.: "faltam 3 dias para a viagem")
 startCrmReminders();
+startMailSync();
+startMeetingReminders();
