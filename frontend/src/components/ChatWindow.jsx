@@ -266,6 +266,9 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
               ))}
             </div>
             <button type="button" onClick={() => onAction("reply", message)}><Reply size={15} /> Responder</button>
+            {groupSender?.phone && (
+              <button type="button" onClick={() => { onAction("close", message); onStartChat?.({ phone: String(groupSender.phone).replace(/\D/g, ""), name: groupSender.name || "", text: bodyText ? `Sobre sua mensagem no grupo: "${String(bodyText).slice(0, 120)}${String(bodyText).length > 120 ? "…" : ""}"\n\n` : "" }); }}><UserRound size={15} /> Responder no particular</button>
+            )}
             <button type="button" onClick={() => onAction("forward", message)}><Forward size={15} /> Encaminhar</button>
             {message.text && <button type="button" onClick={() => onAction("copy", message)}><Copy size={15} /> Copiar</button>}
             {message.direction === "out" && (

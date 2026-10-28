@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
-import CrmLeadPage from "./CrmLeadPage.jsx";
+import CrmLeadPage, { notifyText } from "./CrmLeadPage.jsx";
 import AutomationsSheet from "./CrmAutomations.jsx";
 import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
@@ -1183,6 +1183,8 @@ function AgendaView({ ctx }) {
       const ev = await crm.createEvent({ ...newEv, startsAt: new Date(newEv.startsAt).toISOString(), leadId: newEv.leadId || null });
       setNewEv(null);
       load();
+      const nt = notifyText(ev.notifyResult);
+      if (nt) notify(nt.trim(), /não enviado|erro/i.test(nt) ? "error" : "success");
       if (ev.googleError) alert(ev.googleError);
       else if (ev.meet_link) { navigator.clipboard?.writeText(ev.meet_link).catch(() => {}); alert(`Reunião criada no Google Agenda.\nLink do Meet (copiado): ${ev.meet_link}`); }
     } catch (e) { alert(errText(e)); }
@@ -1243,6 +1245,11 @@ function AgendaView({ ctx }) {
             <Row label="Salvar no Google Agenda"><Switch checked={!!newEv.google} disabled={!g.connected} onChange={(v) => setNewEv((c) => ({ ...c, google: v }))} /></Row>
             <Row label="Criar link do Google Meet"><Switch checked={!!newEv.meet} disabled={!g.connected || !newEv.google} onChange={(v) => setNewEv((c) => ({ ...c, meet: v }))} /></Row>
             <Row label="Enviar convite ao e-mail do lead"><Switch checked={!!newEv.inviteLead} disabled={!g.connected || !newEv.google || !newEv.leadId} onChange={(v) => setNewEv((c) => ({ ...c, inviteLead: v }))} /></Row>
+          </Group>
+          <Group title="Avisar o cliente" hint={newEv.leadId ? "A mensagem sai com data, hora e o link da reunião (se tiver)." : "Escolha o lead acima para avisar o cliente."}>
+            <Row label="Mandar no WhatsApp"><Switch checked={!!newEv.notifyWhatsApp} disabled={!newEv.leadId} onChange={(v) => setNewEv((c) => ({ ...c, notifyWhatsApp: v }))} /></Row>
+            <Row label="Mandar convite por e-mail (.ics)"><Switch checked={!!newEv.notifyEmail} disabled={!newEv.leadId} onChange={(v) => setNewEv((c) => ({ ...c, notifyEmail: v }))} /></Row>
+            <Row label="Lembretes no WhatsApp (1 dia e 1 hora antes)"><Switch checked={!!newEv.reminders} disabled={!newEv.leadId} onChange={(v) => setNewEv((c) => ({ ...c, reminders: v }))} /></Row>
           </Group>
         </Sheet>
       )}

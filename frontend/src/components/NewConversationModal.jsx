@@ -24,7 +24,7 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
   const [contacts, setContacts] = useState([]);
   const [phone, setPhone] = useState(initialContact?.phone || "55");
   const [name, setName] = useState(initialContact ? realName(initialContact) : "");
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialContact?.text || "");
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);

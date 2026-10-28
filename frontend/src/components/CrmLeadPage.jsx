@@ -17,6 +17,15 @@ const fmtPhone = (p) => {
   if (d.length === 12) return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, 8)}-${d.slice(8)}`;
   return d ? `+${d}` : "";
 };
+/** Texto curto do resultado do aviso ao cliente (WhatsApp / e-mail). */
+export const notifyText = (r) => {
+  if (!r) return "";
+  if (r.error) return ` Aviso ao cliente: ${r.error}`;
+  const p = [];
+  if (r.whatsapp) p.push(`WhatsApp ${r.whatsapp === "enviado" ? "enviado ✓" : r.whatsapp.replace(/^erro: /, "não enviado — ")}`);
+  if (r.email) p.push(`e-mail ${r.email === "enviado" ? "enviado ✓" : r.email.replace(/^erro: /, "não enviado — ")}`);
+  return p.length ? ` ${p.join(" · ")}.` : "";
+};
 const daysSince = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso || Date.now()).getTime()) / 86400000));
 const when = (iso) => {
   const d = new Date(iso);
@@ -428,7 +437,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                       } catch (e) { notify(errText(e), "error"); return false; }
                     }} />
                 )}
-                {tab === "activity" && <ActivityBox onSave={async (ev) => { try { await crm.createEvent({ ...ev, leadId: lead.id, startsAt: new Date(ev.startsAt).toISOString() }); loadEvents(); notify("Atividade agendada.", "success"); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
+                {tab === "activity" && <ActivityBox onSave={async (ev) => { try { const r = await crm.createEvent({ ...ev, leadId: lead.id, startsAt: new Date(ev.startsAt).toISOString() }); loadEvents(); notify(`Atividade agendada.${notifyText(r.notifyResult)}`, /erro/.test(JSON.stringify(r.notifyResult || {})) ? "error" : "success"); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
                 {tab === "whats" && (
                   <MessageBox
                     ctx={ctx} pipe={pipe} lead={lead} f={f} custom={custom} value={value} stageName={stages[stageIdx]?.name || ""} ownerName={f.ownerId ? memberName(f.ownerId) : ""}
@@ -584,6 +593,12 @@ function ActivityBox({ onSave }) {
         <button onClick={addKind} title="Criar outro tipo de atividade (ex.: Visita, Vistoria, Assinatura)"><Plus size={13} /> Novo tipo</button>
       </div>
       <input value={ev.title} onChange={(e) => setEv((c) => ({ ...c, title: e.target.value }))} placeholder="Título" />
+      <div className="lp-notify">
+        <span>Avisar o cliente:</span>
+        <label><input type="checkbox" checked={!!ev.notifyWhatsApp} onChange={(e) => setEv((c) => ({ ...c, notifyWhatsApp: e.target.checked }))} /> WhatsApp</label>
+        <label><input type="checkbox" checked={!!ev.notifyEmail} onChange={(e) => setEv((c) => ({ ...c, notifyEmail: e.target.checked }))} /> E-mail com convite</label>
+        <label title="Pelo WhatsApp, 1 dia e 1 hora antes"><input type="checkbox" checked={!!ev.reminders} onChange={(e) => setEv((c) => ({ ...c, reminders: e.target.checked }))} /> Lembretes</label>
+      </div>
       <div className="lp-row-end">
         <input type="datetime-local" value={ev.startsAt} onChange={(e) => setEv((c) => ({ ...c, startsAt: e.target.value }))} />
         <button className="lp-primary" disabled={busy || !ev.title.trim()} onClick={async () => { setBusy(true); await onSave(ev); setBusy(false); }}><CalendarDays size={14} /> Agendar</button>

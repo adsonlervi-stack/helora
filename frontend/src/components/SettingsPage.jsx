@@ -1017,7 +1017,7 @@ document.getElementById("lead-crm").onsubmit = async (e) => {
 
 const AGENT_TAB_OPTIONS = [
   ["home", "Início"], ["overview", "Painel"], ["deals", "Pipeline"], ["crm", "CRM"], ["tasks", "Tarefas"],
-  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"]
+  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"], ["ia", "IA Helora"]
 ];
 
 /** Gestor escolhe quais abas o atendente vê. Config., Fluxos, Canais e Financeiro são só do gestor. */
@@ -1045,7 +1045,7 @@ function AgentTabsTab() {
         Abas que a sua empresa não contratou não aparecem.
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "12px 0" }}>
-        {AGENT_TAB_OPTIONS.filter(([k]) => !enabled || ["home"].includes(k) || enabled.includes(k)).map(([k, label]) => (
+        {AGENT_TAB_OPTIONS.filter(([k]) => !enabled || ["home", "ia"].includes(k) || enabled.includes(k)).map(([k, label]) => (
           <label key={k} className="bh-switch"><input type="checkbox" checked={sel.includes(k)} onChange={() => toggle(k)} /> {label}</label>
         ))}
       </div>
