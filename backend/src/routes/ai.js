@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { supabase } from "../config/db.js";
 import { requireAuth, requireOwner } from "../middleware/auth.js";
-import { aiConfigured } from "../aiClient.js";
+import { resolveAI } from "../aiClient.js";
 
 /** IA da Helora: só dentro dos Fluxos (bloco "Atendente IA"), respondendo com base nos Prompts da empresa. */
 const router = Router();
@@ -9,7 +9,10 @@ router.use(requireAuth);
 
 async function allowed(req) {
   const { data } = await supabase.from("accounts").select("enabled_tabs").eq("id", req.accountId).maybeSingle();
-  return !Array.isArray(data?.enabled_tabs) || data.enabled_tabs.includes("ai") || req.isSuperAdmin;
+  if (!Array.isArray(data?.enabled_tabs) || data.enabled_tabs.includes("ai") || req.isSuperAdmin) return true;
+  // Empresa com IA própria conectada (aba Conexões) pode usar atendentes IA
+  const ai = await resolveAI(req.accountId).catch(() => null);
+  return !!ai?.own;
 }
 const fail = (res, err) => res.status(500).json({ error: /ai_prompts/.test(err?.message || "") ? "Rode a migration 027 no Supabase." : err.message });
 
@@ -35,8 +38,10 @@ function row(b) {
 }
 
 router.get("/status", async (req, res) => {
-  const ok = await allowed(req).catch(() => false);
-  res.json({ configured: aiConfigured(), enabled: aiConfigured() && ok, allowed: ok });
+  const ai = await resolveAI(req.accountId).catch(() => null);
+  // IA conectada pela própria empresa vale mesmo sem o módulo no plano
+  const ok = ai?.own ? true : await allowed(req).catch(() => false);
+  res.json({ configured: !!ai, enabled: !!ai && ok, allowed: ok, provider: ai?.provider || null, own: !!ai?.own });
 });
 
 router.get("/prompts", async (req, res) => {
@@ -50,6 +55,7 @@ router.post("/prompts", requireOwner, async (req, res) => {
   try {
     if (!(await allowed(req))) return res.status(403).json({ error: "O módulo de IA não está liberado para a sua empresa." });
     if (!String(req.body?.name || "").trim()) return res.status(400).json({ error: "Dê um nome ao prompt." });
+    if (String(req.body?.prompt || "").trim().length < 30) return res.status(400).json({ error: "Escreva o prompt de atendimento (como a IA deve atender) — ele é obrigatório, com pelo menos 30 caracteres." });
     const { data, error } = await supabase.from("ai_prompts").insert({ ...row(req.body), account_id: req.accountId }).select().single();
     if (error) throw error;
     res.status(201).json(map(data));
@@ -57,6 +63,7 @@ router.post("/prompts", requireOwner, async (req, res) => {
 });
 router.patch("/prompts/:id", requireOwner, async (req, res) => {
   try {
+    if (req.body?.prompt !== undefined && String(req.body.prompt).trim().length < 30) return res.status(400).json({ error: "O prompt de atendimento é obrigatório (pelo menos 30 caracteres)." });
     const { data, error } = await supabase.from("ai_prompts").update(row(req.body || {})).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
     res.json(map(data));

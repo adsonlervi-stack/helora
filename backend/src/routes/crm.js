@@ -956,7 +956,19 @@ router.post("/events", async (req, res) => {
         else googleError = "Conecte sua conta Google (CRM → Agenda) para criar o evento com Meet.";
       } catch (err) { googleError = err.message; }
     }
-    res.status(201).json({ ...data, meet_link: google?.meetLink || null, googleError });
+    // Avisar o cliente (WhatsApp / e-mail com convite) e lembretes
+    let notifyResult = null;
+    if (b.leadId && (b.notifyWhatsApp || b.notifyEmail || b.reminders)) {
+      const { notifyMeeting } = await import("../meetingNotify.js");
+      notifyResult = await notifyMeeting(req.accountId, data.id, { whatsapp: !!b.notifyWhatsApp, email: !!b.notifyEmail, reminders: !!b.reminders }, req.userName).catch((e) => ({ error: e.message }));
+    }
+    res.status(201).json({ ...data, meet_link: google?.meetLink || null, googleError, notifyResult });
+  } catch (err) { fail(res, err); }
+});
+router.post("/events/:id/notify", async (req, res) => {
+  try {
+    const { notifyMeeting } = await import("../meetingNotify.js");
+    res.json(await notifyMeeting(req.accountId, req.params.id, { whatsapp: !!req.body?.whatsapp, email: !!req.body?.email, reminders: req.body?.reminders }, req.userName));
   } catch (err) { fail(res, err); }
 });
 router.patch("/events/:id", async (req, res) => {
