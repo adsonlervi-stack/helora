@@ -24,16 +24,19 @@
  * (question/options); conversation.flowVars = respostas salvas ({nome}, {email}...).
  */
 import { updateConversation, recordFlowEvent, addLabelToConversation, listMessages, supabase } from "../config/db.js";
-import { aiChat, aiConfigured, transcribeAudio } from "../aiClient.js";
+import { aiChat, resolveAI, transcribeAudio } from "../aiClient.js";
+import { brainContext } from "../integrations/brain.js";
 
 const HUMAN_TAG = "[[HUMANO]]";
 const DONE_TAG = "[[FIM]]";
 
 /** Atendente IA: responde o cliente com base no Prompt escolhido no bloco. Devolve { text, port, prompt }. */
-async function aiTurn({ accountId, conversation, node, vars, dryRun, text }) {
+async function aiTurn({ accountId, conversation, node, vars, dryRun, text, testHistory = null }) {
   const d = node.data || {};
   const { data: acc } = await supabase.from("accounts").select("name, enabled_tabs").eq("id", accountId).maybeSingle();
-  if (!aiConfigured() || (Array.isArray(acc?.enabled_tabs) && !acc.enabled_tabs.includes("ai"))) {
+  // IA conectada pela própria empresa (aba Conexões) funciona sempre; a do servidor depende do plano.
+  const aiCfg = await resolveAI(accountId).catch(() => null);
+  if (!aiCfg || (!aiCfg.own && Array.isArray(acc?.enabled_tabs) && !acc.enabled_tabs.includes("ai"))) {
     return { text: "", port: "human", prompt: null }; // sem IA disponível → passa para humano
   }
   let prompt = null;
@@ -44,7 +47,8 @@ async function aiTurn({ accountId, conversation, node, vars, dryRun, text }) {
   const historySize = prompt?.history_size || 20;
   let history = [];
   let lastIn = null;
-  if (dryRun) history = [{ role: "user", content: String(text || "Olá") }];
+  if (testHistory?.length) history = testHistory.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })).filter((m) => m.content);
+  else if (dryRun) history = [{ role: "user", content: String(text || "Olá") }];
   else {
     const msgs = await listMessages(accountId, conversation.id).catch(() => []);
     const recent = msgs.filter((m) => m.author !== "system" && (m.text || m.mediaType)).slice(-historySize);
@@ -72,16 +76,20 @@ async function aiTurn({ accountId, conversation, node, vars, dryRun, text }) {
     if (!history.length) history = [{ role: "user", content: String(text || "Olá") }];
   }
   const instructions = prompt?.prompt || d.instructions || "";
+  // Cérebro: busca o que a empresa alimentou (documentos, planilhas, sites, e-mails) sobre o que o cliente perguntou
+  const lastUser = [...history].reverse().find((m) => m.role === "user")?.content || String(text || "");
+  const brain = lastUser ? await brainContext(accountId, lastUser.slice(-1500), 5, prompt?.id || null).catch(() => "") : "";
   const system = [
     `Você é o atendente virtual de ${acc?.name || "uma empresa"} no WhatsApp. Responda em português do Brasil, de forma natural, curta e humana (sem markdown além de *negrito*).`,
     instructions ? `PROMPT DA EMPRESA (siga à risca):\n${instructions}` : "",
     d.knowledge ? `Base de conhecimento:\n${d.knowledge}` : "",
-    "Não invente preços, prazos ou políticas que não estejam no prompt.",
+    brain ? `CONHECIMENTO DA EMPRESA (trechos dos documentos que a empresa cadastrou — use para responder):\n${brain}` : "",
+    "Não invente preços, prazos ou políticas que não estejam no prompt ou no conhecimento da empresa.",
     vars?.nome ? `Nome do cliente: ${vars.nome}.` : "",
     `Se o cliente pedir para falar com uma pessoa, estiver irritado, ou você não souber responder com segurança, avise que vai transferir para um atendente e termine a mensagem com ${HUMAN_TAG}.`,
     `Se a dúvida do cliente foi resolvida e ele se despediu ou agradeceu, responda e termine com ${DONE_TAG}.`
   ].filter(Boolean).join("\n\n");
-  let out = await aiChat({ system, messages: history, maxTokens: 500 });
+  let out = await aiChat({ accountId, system, messages: history, maxTokens: 500 });
   let port = null;
   if (out.includes(HUMAN_TAG)) port = "human";
   else if (out.includes(DONE_TAG)) port = "done";
@@ -472,4 +480,25 @@ export async function runActiveFlow({ accountId, conversation, flow, text, send 
     ...rest
   });
   return true;
+}
+
+
+/** Testa um Atendente IA na tela (sem WhatsApp). messages = histórico da conversa de teste. */
+export async function testAttendant(accountId, promptId, messages) {
+  const r = await aiTurn({ accountId, conversation: null, node: { data: { promptId } }, vars: {}, dryRun: true, testHistory: messages });
+  return { text: r.text, transfer: r.port === "human", done: r.port === "done" };
+}
+
+/**
+ * Atendente IA ligado direto no canal: responde tudo com base no prompt e no cérebro.
+ * Pede um humano → transfere (setor do prompt) e a IA para de responder.
+ */
+export async function runChannelAttendant({ accountId, conversation, promptId }) {
+  const r = await aiTurn({ accountId, conversation, node: { data: { promptId } }, vars: conversation.flowVars || {}, dryRun: false });
+  if (r.port === "human") {
+    const patch = { mode: "human", isNew: false };
+    if (r.prompt?.transfer_department_id) patch.departmentId = r.prompt.transfer_department_id;
+    await updateConversation(accountId, conversation.id, patch).catch(() => {});
+  }
+  return r.text || null;
 }

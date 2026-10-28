@@ -1,7 +1,21 @@
 import { listAutoReplies, updateConversation, addCsatResponse, getBotFlow, getActiveFlow, getAccountSettings, getContactRouting } from "../config/db.js";
 import { isOpenNow, DEFAULT_OOH_MESSAGE } from "./businessHours.js";
 import { runFlow } from "./flowEngine.js";
-import { runActiveFlow } from "./flowRunner.js";
+import { runActiveFlow, runChannelAttendant } from "./flowRunner.js";
+import { supabase as attDb } from "../config/db.js";
+
+// Atendente IA ligado no canal (cache de 30s)
+const attCache = new Map();
+async function channelAttendant(channelId) {
+  if (!channelId) return null;
+  const hit = attCache.get(channelId);
+  if (hit && Date.now() - hit.at < 30000) return hit.id;
+  const { data, error } = await attDb.from("channels").select("ai_prompt_id").eq("id", channelId).maybeSingle();
+  const id = error ? null : data?.ai_prompt_id || null;
+  attCache.set(channelId, { at: Date.now(), id });
+  return id;
+}
+export const clearAttendantCache = () => attCache.clear();
 
 const RESTART_AFTER_MS = 60 * 60 * 1000; // fluxo terminou há mais de 1h → começa de novo
 
@@ -107,6 +121,18 @@ export async function handleIncoming(accountId, conversation, rawText, send) {
   }
 
   const text = normalize(rawText);
+
+  // ---------- Atendente IA no canal: responde tudo com o que a empresa alimentou ----------
+  const attendantId = await channelAttendant(conversation.channelId).catch(() => null);
+  if (attendantId) {
+    try {
+      const reply = await runChannelAttendant({ accountId, conversation, promptId: attendantId });
+      if (reply && send) { await send(reply); return null; }
+      return reply;
+    } catch (err) {
+      console.error("[Atendente IA] erro:", err.message);
+    }
+  }
 
   // ---------- Construtor de fluxos (canvas) — tem prioridade quando há um fluxo ativo ----------
   const activeFlow = await getActiveFlow(accountId, conversation.channelId);
