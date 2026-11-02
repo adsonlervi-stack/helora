@@ -2825,3 +2825,37 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .cpd-out button.on.lost { background: #ff3b30; border-color: #ff3b30; color: #fff; }
 .cpd-out button.on.open { border-color: #0071e3; color: #0071e3; background: rgba(0,113,227,.06); }
 .cpd-move { align-self: flex-start; border: 0; background: transparent; color: #0071e3; font-size: 12px; cursor: pointer; padding: 0; font-family: inherit; }
+/* ===================== V14 · Agendamento (horários livres) ===================== */
+.sp-bg { position: fixed; inset: 0; z-index: 10060; background: rgba(0,0,0,.3); display: grid; place-items: center; padding: 16px; }
+.sp { width: 860px; max-width: 100%; max-height: 92vh; overflow: auto; background: #fff; border-radius: 18px; padding: 18px 20px 20px; box-shadow: 0 30px 80px rgba(0,0,0,.25); }
+.sp-h { display: flex; justify-content: space-between; align-items: center; font-size: 17px; margin-bottom: 8px; }
+.sp-h button { border: 0; background: transparent; cursor: pointer; color: #8e8e93; }
+.sp-l { font-size: 13px; font-weight: 600; color: #3a3a3c; margin: 12px 0 6px; }
+.sp-who { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sp-who button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 4px 4px; border-radius: 999px; border: 1px solid rgba(0,0,0,.12); background: #fff; cursor: pointer; font-family: inherit; font-size: 13px; color: #1d1d1f; }
+.sp-who button.on { border-color: #0071e3; background: rgba(0,113,227,.07); color: #0071e3; font-weight: 600; }
+.sp-who .sp-cfg { padding: 7px; border-radius: 50%; }
+.sp-days { display: flex; gap: 8px; align-items: stretch; }
+.sp-arrow { border: 1px solid rgba(0,0,0,.1); background: #fff; border-radius: 10px; cursor: pointer; padding: 0 6px; color: #6e6e73; }
+.sp-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 10px 4px; border-radius: 12px; border: 1px solid rgba(0,0,0,.1); background: #fff; cursor: pointer; font-family: inherit; color: #1d1d1f; }
+.sp-day small { font-size: 11px; color: #8e8e93; text-transform: uppercase; }
+.sp-day strong { font-size: 20px; }
+.sp-day.on { background: #0071e3; border-color: #0071e3; color: #fff; }
+.sp-day.on small { color: rgba(255,255,255,.85); }
+.sp-day.off { opacity: .45; }
+.sp-sub { display: flex; align-items: center; gap: 10px; margin: 16px 0 10px; flex-wrap: wrap; }
+.sp-sub strong { font-size: 15px; }
+.sp-sub span { font-size: 12px; color: #8e8e93; margin-left: auto; }
+.sp-sub select { border: 1px solid rgba(0,113,227,.4); color: #0071e3; background: rgba(0,113,227,.06); border-radius: 8px; padding: 5px 8px; font-family: inherit; font-size: 12px; font-weight: 600; }
+.sp-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.sp-slots button { padding: 9px 0; border-radius: 9px; border: 1.5px solid rgba(0,113,227,.45); background: #fff; color: #0071e3; font-weight: 600; font-size: 14px; cursor: pointer; font-family: inherit; }
+.sp-slots button:hover { background: #0071e3; color: #fff; }
+.sp-empty { grid-column: 1 / -1; text-align: center; color: #8e8e93; padding: 20px; font-size: 13px; }
+.sp-dow { display: flex; gap: 6px; flex-wrap: wrap; }
+.sp-dow button { padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,.12); background: #fff; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; color: #6e6e73; }
+.sp-dow button.on { background: #0071e3; border-color: #0071e3; color: #fff; }
+.sp-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.sp-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: #3a3a3c; }
+.sp-form input, .sp-form select { padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,.14); font-family: inherit; font-size: 14px; }
+.sp-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+@media (max-width: 640px) { .sp-days { overflow-x: auto; } .sp-day { min-width: 58px; } }

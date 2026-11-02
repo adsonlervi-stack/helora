@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
 import { createPortal } from "react-dom";
+import SlotPicker from "./SlotPicker.jsx";
 import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
   Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin, Pencil
@@ -587,6 +588,7 @@ function TaskBox({ team, defaultOwner, leadName, onSave }) {
 }
 
 function ActivityBox({ onSave }) {
+  const [slotOpen, setSlotOpen] = useState(false);
   const [ev, setEv] = useState({ kind: "reuniao", title: "Reunião", startsAt: toLocalInput(new Date(Date.now() + 86400000)) });
   const [busy, setBusy] = useState(false);
   const [custom, setCustom] = useState([]);
@@ -618,9 +620,12 @@ function ActivityBox({ onSave }) {
         <label title="Pelo WhatsApp, 1 dia e 1 hora antes"><input type="checkbox" checked={!!ev.reminders} onChange={(e) => setEv((c) => ({ ...c, reminders: e.target.checked }))} /> Lembretes</label>
       </div>
       <div className="lp-row-end">
-        <input type="datetime-local" value={ev.startsAt} onChange={(e) => setEv((c) => ({ ...c, startsAt: e.target.value }))} />
+        <button className="lp-ghost" onClick={() => setSlotOpen(true)}><Clock size={14} /> Horários livres</button>
+        <input type="datetime-local" value={ev.startsAt} onChange={(e) => setEv((c) => ({ ...c, startsAt: e.target.value, endsAt: undefined }))} />
         <button className="lp-primary" disabled={busy || !ev.title.trim()} onClick={async () => { setBusy(true); await onSave(ev); setBusy(false); }}><CalendarDays size={14} /> Agendar</button>
       </div>
+      {ev.ownerName && <div className="lp-muted" style={{ fontSize: 12 }}>Na agenda de {ev.ownerName}</div>}
+      {slotOpen && <SlotPicker onClose={() => setSlotOpen(false)} onPick={(s) => { setEv((c) => ({ ...c, startsAt: toLocalInput(new Date(s.startsAt)), endsAt: s.endsAt, ownerId: s.ownerId, ownerName: s.ownerName })); setSlotOpen(false); }} />}
     </div>
   );
 }

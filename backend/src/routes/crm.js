@@ -12,6 +12,7 @@ import { RAMOS } from "../insuranceLists.js";
 import { createZip } from "../zip.js";
 import { getPrimaryWhatsAppChannel, findOrCreateConversation, updateConversation, createTask } from "../config/db.js";
 import { sendTextToConversation, sendMediaUrlToConversation } from "../messaging.js";
+import { getIntegration, saveIntegration } from "../integrations/store.js";
 import { resolveWhatsAppNumber } from "../whatsapp/baileysClient.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -371,6 +372,61 @@ async function outcomeForStage(pipelineId, stageId) {
   if (LOST_RE.test(st.name)) return "lost";
   return null;
 }
+
+
+// ---------------------------------------------------------------- Agendas (horários livres por pessoa: consultor, dentista…)
+const DEF_AGENDA = { active: true, days: [1, 2, 3, 4, 5], start: "08:00", end: "18:00", lunchStart: "12:00", lunchEnd: "13:00", step: 15, duration: 60 };
+const hm = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+router.get("/agendas", async (req, res) => {
+  try {
+    const it = await getIntegration(req.accountId, "agendas");
+    const { data: team } = await supabase.from("profiles").select("id, name, avatar_url").eq("account_id", req.accountId);
+    const cfg = it?.config?.members || {};
+    res.json((team || []).map((p) => ({ id: p.id, name: p.name, avatarUrl: p.avatar_url, ...DEF_AGENDA, ...(cfg[p.id] || {}) })));
+  } catch (err) { fail(res, err); }
+});
+router.put("/agendas/:id", async (req, res) => {
+  try {
+    if (!isManager(req) && req.params.id !== req.userId) return res.status(403).json({ error: "Só o gestor edita a agenda dos outros." });
+    const b = req.body || {};
+    const clean = {
+      active: b.active !== false, days: (Array.isArray(b.days) ? b.days : DEF_AGENDA.days).map(Number).filter((d) => d >= 0 && d <= 6),
+      start: /^\d{2}:\d{2}$/.test(b.start) ? b.start : DEF_AGENDA.start, end: /^\d{2}:\d{2}$/.test(b.end) ? b.end : DEF_AGENDA.end,
+      lunchStart: /^\d{2}:\d{2}$/.test(b.lunchStart) ? b.lunchStart : "", lunchEnd: /^\d{2}:\d{2}$/.test(b.lunchEnd) ? b.lunchEnd : "",
+      step: [10, 15, 20, 30, 60].includes(Number(b.step)) ? Number(b.step) : 15,
+      duration: Math.min(480, Math.max(10, parseInt(b.duration, 10) || 60))
+    };
+    const it = await getIntegration(req.accountId, "agendas");
+    const members = { ...(it?.config?.members || {}), [req.params.id]: clean };
+    await saveIntegration(req.accountId, "agendas", { members });
+    res.json({ id: req.params.id, ...clean });
+  } catch (err) { fail(res, err); }
+});
+/** Horários livres de uma pessoa num dia (horário de Brasília). */
+router.get("/agendas/:id/slots", async (req, res) => {
+  try {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : new Date().toISOString().slice(0, 10);
+    const it = await getIntegration(req.accountId, "agendas");
+    const a = { ...DEF_AGENDA, ...(it?.config?.members?.[req.params.id] || {}) };
+    const dur = Math.min(480, Math.max(10, parseInt(req.query.duration, 10) || a.duration));
+    const dow = new Date(`${date}T12:00:00-03:00`).getUTCDay();
+    if (!a.active || !a.days.includes(dow)) return res.json({ date, duration: dur, slots: [] });
+    const dayStart = new Date(`${date}T00:00:00-03:00`).getTime();
+    const { data: evs } = await supabase.from("crm_events").select("starts_at, ends_at, kind").eq("account_id", req.accountId).eq("owner_id", req.params.id)
+      .gte("starts_at", new Date(dayStart - 86400000).toISOString()).lt("starts_at", new Date(dayStart + 86400000).toISOString()).not("kind", "like", "cad_%");
+    const busy = (evs || []).map((e) => { const s = new Date(e.starts_at).getTime(); return [s, e.ends_at ? new Date(e.ends_at).getTime() : s + 60 * 60000]; });
+    const slots = [];
+    const now = Date.now();
+    for (let m = hm(a.start); m + dur <= hm(a.end); m += a.step) {
+      if (a.lunchStart && a.lunchEnd && m < hm(a.lunchEnd) && m + dur > hm(a.lunchStart)) continue;
+      const s = dayStart + m * 60000, e = s + dur * 60000;
+      if (s < now) continue;
+      if (busy.some(([bs, be]) => s < be && e > bs)) continue;
+      slots.push({ time: `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`, startsAt: new Date(s).toISOString(), endsAt: new Date(e).toISOString() });
+    }
+    res.json({ date, duration: dur, slots });
+  } catch (err) { fail(res, err); }
+});
 
 // ---------------------------------------------------------------- Carteira de clientes (CPF/CNPJ)
 router.get("/carteira", async (req, res) => {
