@@ -419,7 +419,7 @@ function FunnelView({ ctx }) {
                       const flds = fieldsOf(l);
                       const kf = flds.find((f) => f.kind);
                       const kind = kf && l.custom?.[kf.id];
-                      const chipsF = flds.filter((f) => f.card && l.custom?.[f.id]).slice(0, 4);
+                      const chipsF = flds.filter((f) => f.card && !f.kind && l.custom?.[f.id]).slice(0, 4);
                       const overdue = flds.some((f) => f.alert && l.custom?.[f.id] && daysUntil(l.custom[f.id]) < 0);
                       const tagsL = l.tagIds.map((id) => tagById.get(id)).filter(Boolean);
                       const done = (l.checklist || []).filter((c) => c.done).length;
