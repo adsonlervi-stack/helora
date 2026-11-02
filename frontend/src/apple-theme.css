@@ -2673,3 +2673,9 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .cc2-msg { margin-top: 10px; padding: 8px 10px; }
 .cc2-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,.06); gap: 8px; }
 .crm-cards { gap: 10px !important; }
+/* ===================== V14 · Título dentro da página (sem barra repetida) ===================== */
+.page-head { display: flex; align-items: center; gap: 12px; padding: 20px 28px 0; background: transparent; }
+.page-head .topbar-title { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 24px; letter-spacing: -0.02em; color: #1d1d1f; }
+.page-head .topbar-right { margin-left: auto; display: flex; gap: 8px; }
+.ch2-head { background: transparent !important; border: 0 !important; padding: 0 !important; margin-bottom: 18px; }
+.ch2-head h2, .cx2-title { font-size: 24px !important; }

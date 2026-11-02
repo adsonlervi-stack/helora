@@ -18,7 +18,7 @@ export default function TopBar({ section, hideNotifications }) {
   };
 
   return (
-    <header className="topbar lg-bar">
+    <header className="page-head">
       <h1 className="topbar-title">{SECTION_TITLES[section]}</h1>
       <div className="topbar-right">
         {!hideNotifications && notifySupported() && (

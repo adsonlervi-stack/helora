@@ -102,7 +102,7 @@ export default function ConnectionsPage({ isManager }) {
   );
   return (
     <div className="page cx2">
-      <h2 className="cx2-title">Conectores</h2>
+      <h2 className="cx2-title">Conexões</h2>
       <div className="cx2-search"><Search size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar conector" /></div>
       {err && <div className="admin-feedback error">{err}</div>}
       <div className={`cx2-ai ${data?.heloraAI?.active ? "on" : ""}`}>

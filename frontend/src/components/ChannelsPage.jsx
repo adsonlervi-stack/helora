@@ -242,7 +242,7 @@ export default function ChannelsPage() {
   return (
     <div className="page ch2">
       <div className="ch2-head">
-        <h2>Canais de comunicação</h2>
+        <h2>Canais</h2>
         <span className="ch2-count">{channels.filter(isOn).length}/{channels.length}</span>
         <span className="ch2-sp" />
         <label className="ch2-hide"><input type="checkbox" checked={hideOff} onChange={(e) => { setHideOff(e.target.checked); try { localStorage.setItem("helora_ch_hide", e.target.checked ? "1" : "0"); } catch {} }} /> Ocultar desconectados</label>
