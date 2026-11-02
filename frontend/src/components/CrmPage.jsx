@@ -718,9 +718,40 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
 }
 
 // ================================================================ Lead
+/** Novo lead: primeiro identifica o cliente (CPF, CNPJ, nome ou telefone) na base. */
+function ClientPicker({ onPick }) {
+  const [q, setQ] = useState("");
+  const [list, setList] = useState(null);
+  const t = useRef(null);
+  useEffect(() => {
+    clearTimeout(t.current);
+    if (q.trim().length < 3) { setList(null); return; }
+    t.current = setTimeout(() => crm.carteira({ q: q.trim() }).then((r) => setList(r.clients || [])).catch(() => setList([])), 300);
+  }, [q]);
+  return (
+    <div className="cp">
+      <div className="cp-title">Quem é o cliente?</div>
+      <div className="cp-search"><Search size={16} /><input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="CPF, CNPJ, nome ou telefone" /></div>
+      <div className="cp-list">
+        {list === null && q.trim().length < 3 && <div className="cp-hint">Digite pelo menos 3 caracteres para procurar na base de clientes.</div>}
+        {list && !list.length && <div className="cp-hint">Nenhum cliente encontrado com “{q}”.</div>}
+        {(list || []).slice(0, 8).map((c) => (
+          <button key={c.key} className="cp-item" onClick={() => onPick(c)}>
+            <Avatar name={c.name} size={34} />
+            <span className="cp-who"><strong>{c.name}</strong><small>{[c.doc && fmtDoc(c.doc), c.phone && `+${c.phone}`, c.company].filter(Boolean).join(" · ")}</small></span>
+            <span className="cp-n">{c.items.length} negócio{c.items.length > 1 ? "s" : ""}{c.active ? ` · ${c.active} vigente${c.active > 1 ? "s" : ""}` : ""}</span>
+          </button>
+        ))}
+      </div>
+      <button className="cp-new" onClick={() => onPick("new")}><Plus size={15} /> Cadastrar cliente novo</button>
+    </div>
+  );
+}
+
 function LeadSheet({ ctx, lead, onClose, onSaved }) {
   const { pipeline, pipelines, tags, products, team, isManager } = ctx;
   const isNew = !!lead.isNew;
+  const [client, setClient] = useState(null);
   const [files, setFiles] = useState(lead.attachments || []);
   const [checklist, setChecklist] = useState(lead.checklist || []);
   const [custom, setCustom] = useState(lead.custom || {});
@@ -831,8 +862,25 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
       footer={<>
         {!isNew && <Button variant="danger" onClick={remove} style={{ marginRight: "auto" }}><Trash2 size={14} /> Excluir</Button>}
         <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-        <Button disabled={busy || !f.name.trim()} onClick={save}>{busy ? "Salvando…" : isNew ? "Criar lead" : "Salvar"}</Button>
+        <Button disabled={busy || !f.name.trim() || (isNew && !client)} onClick={save}>{busy ? "Salvando…" : isNew ? "Criar lead" : "Salvar"}</Button>
       </>}>
+      {isNew && !client && (
+        <ClientPicker onPick={(c) => {
+          if (c !== "new") {
+            setF((x) => ({ ...x, name: c.name || x.name, phone: c.phone || x.phone, email: c.email || x.email, company: c.company || x.company }));
+            const docF = (curPipe?.fields || []).find((fd) => isDocField(fd));
+            if (docF && c.doc) setCustom((x) => ({ ...x, [docF.id]: fmtDoc(c.doc) }));
+          }
+          setClient(c);
+        }} />
+      )}
+      {isNew && client && (
+        <div className="cp-chosen">
+          {client === "new" ? <span>Cliente novo</span> : <span>Cliente: <b>{client.name}</b>{client.doc ? ` · ${fmtDoc(client.doc)}` : ""}{client.items?.length ? ` · ${client.items.length} negócio(s) na carteira` : ""}</span>}
+          <button className="lp-link sm" onClick={() => setClient(null)}>trocar</button>
+        </div>
+      )}
+      {(!isNew || client) && <>
       {!isNew && (
         <div className="crm-actionbar">
           <button type="button" onClick={openConversation} disabled={!f.phone}><MessageCircle size={16} /><span>{lead.conversationId ? "Ver conversa" : "Abrir conversa"}</span></button>
@@ -989,6 +1037,7 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
       )}
       <Group title="Anotações"><Row label="" stack><textarea rows={3} value={f.notes} onChange={set("notes")} placeholder="Observações sobre o lead" /></Row></Group>
       {err && <div className="admin-feedback error" style={{ marginTop: 12 }}>{err}</div>}
+      </>}
     </Sheet>
   );
 }
