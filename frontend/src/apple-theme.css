@@ -2640,3 +2640,10 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .ch2-icon.del { color: var(--text-muted, #8e8e93); }
 .ch2-icon:hover { background: rgba(0,0,0,.05); }
 .ch2-empty { color: var(--text-muted, #8e8e93); padding: 20px 4px; }
+.lp-note { position: relative; }
+.lp-note-acts { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; opacity: 0; transition: opacity .15s; }
+.lp-note:hover .lp-note-acts { opacity: 1; }
+.lp-note-acts button { border: 0; background: rgba(255,255,255,.85); color: #6e6e73; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; cursor: pointer; }
+.lp-note-acts button:hover { color: #0071e3; background: #fff; }
+.lp-note-acts button:last-child:hover { color: #d70015; }
+@media (hover: none) { .lp-note-acts { opacity: 1; } }

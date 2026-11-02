@@ -3,7 +3,7 @@ import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjDat
 import { createPortal } from "react-dom";
 import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
-  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin
+  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin, Pencil
 } from "lucide-react";
 import { crm, createTaskApi } from "../api.js";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
@@ -232,8 +232,9 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
           </div>
         ) : <p>{h.text}</p>}
         {h.editedAt && editNote?.id !== h.id && <small className="lp-edited">editado{h.editedBy ? ` por ${h.editedBy}` : ""} em {new Date(h.editedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</small>}
-        {!h.legacy && editNote?.id !== h.id && <button className="lp-link sm" onClick={() => setEditNote({ id: h.id, text: h.text })}>editar</button>}
-        {!h.legacy && <button className="lp-link sm" onClick={async () => { if (await askConfirm("Apagar esta anotação?")) { try { changed(await crm.deleteLeadNote(lead.id, h.id)); } catch (e) { notify(errText(e), "error"); } } }}>apagar</button>}
+        {!h.legacy && editNote?.id !== h.id && <div className="lp-note-acts">
+        <button title="Editar" onClick={() => setEditNote({ id: h.id, text: h.text })}><Pencil size={13} /></button>
+        <button title="Apagar" onClick={async () => { if (await askConfirm("Apagar esta anotação?")) { try { changed(await crm.deleteLeadNote(lead.id, h.id)); } catch (e) { notify(errText(e), "error"); } } }}><Trash2 size={13} /></button></div>}
       </div>
     )}
     {h.type === "file" && (
