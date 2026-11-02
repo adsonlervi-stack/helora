@@ -350,6 +350,74 @@ async function outcomeForStage(pipelineId, stageId) {
   return null;
 }
 
+// ---------------------------------------------------------------- Carteira de clientes (CPF/CNPJ)
+router.get("/carteira", async (req, res) => {
+  try {
+    const { data: pipes } = await supabase.from("crm_pipelines").select("id, name, stages, fields").eq("account_id", req.accountId);
+    const pipeById = new Map((pipes || []).map((p) => [p.id, p]));
+    const rows = [];
+    for (let from = 0; from < 20000; from += 1000) {
+      let q = supabase.from("crm_leads").select("id, name, phone, email, company, custom, pipeline_id, stage, value, outcome, owner_id, created_at, archived_at, conversation_id")
+        .eq("account_id", req.accountId).order("created_at", { ascending: false }).range(from, from + 999);
+      if (await hasArchiveCols()) q = q.is("deleted_at", null);
+      if (!isManager(req)) q = q.eq("owner_id", req.userId);
+      const { data, error } = await q;
+      if (error) throw error;
+      rows.push(...data);
+      if (data.length < 1000) break;
+    }
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const dayDiff = (v) => { const d = new Date(String(v).slice(0, 10) + "T00:00:00"); return isNaN(d) ? null : Math.round((d - today) / 86400000); };
+    const clients = new Map();
+    for (const l of rows) {
+      const p = pipeById.get(l.pipeline_id) || {};
+      const fields = p.fields || [];
+      const c = l.custom || {};
+      const docF = fields.find((f) => f.type === "document" && onlyDigits(c[f.id]).length >= 11);
+      const doc = docF ? onlyDigits(c[docF.id]) : "";
+      const dates = fields.filter((f) => f.type === "date" && c[f.id]);
+      const vig = dates.find((f) => f.alert) || dates.find((f) => /vig|venc|fim|renov/i.test(f.label));
+      const days = vig ? dayDiff(c[vig.id]) : null;
+      const stageName = (p.stages || []).find((s) => s.id === l.stage)?.name || "";
+      const lost = l.outcome === "lost" || /perd|cancel|recus/i.test(stageName);
+      const status = lost ? "cancelado" : days == null ? "sem_vigencia" : days < 0 ? "vencida" : days <= 30 ? "a_vencer" : "ativa";
+      const item = {
+        id: l.id, pipeline: p.name || "", stage: stageName, value: l.value != null ? Number(l.value) : null, outcome: l.outcome || null,
+        archived: !!l.archived_at, createdAt: l.created_at, conversationId: l.conversation_id,
+        details: fields.filter((f) => ["select", "text", "currency", "number"].includes(f.type) && c[f.id] && f !== docF).slice(0, 6).map((f) => ({ label: f.label, value: f.type === "currency" ? Number(c[f.id]) : c[f.id], type: f.type })),
+        vigencia: vig ? { label: vig.label, date: String(c[vig.id]).slice(0, 10), days } : null,
+        status
+      };
+      const key = doc || `n:${String(l.name || "").trim().toLowerCase()}|${onlyDigits(l.phone)}`;
+      if (!clients.has(key)) clients.set(key, { key, doc, docType: doc.length === 14 ? "CNPJ" : doc ? "CPF" : null, name: l.name, company: l.company || null, phone: l.phone || null, email: l.email || null, items: [] });
+      const cl = clients.get(key);
+      if (!cl.phone && l.phone) cl.phone = l.phone;
+      if (!cl.email && l.email) cl.email = l.email;
+      cl.items.push(item);
+    }
+    let list = [...clients.values()].map((cl) => {
+      const ativos = cl.items.filter((i) => i.status === "ativa" || i.status === "a_vencer");
+      return { ...cl, active: ativos.length, dueSoon: cl.items.filter((i) => i.status === "a_vencer").length, expired: cl.items.filter((i) => i.status === "vencida").length,
+        activeValue: ativos.reduce((t, i) => t + (i.value || 0), 0),
+        nextDue: ativos.map((i) => i.vigencia?.date).filter(Boolean).sort()[0] || null };
+    });
+    const totals = { clients: list.length, withDoc: list.filter((c) => c.doc).length, active: list.reduce((t, c) => t + c.active, 0), dueSoon: list.reduce((t, c) => t + c.dueSoon, 0), expired: list.reduce((t, c) => t + c.expired, 0), activeValue: list.reduce((t, c) => t + c.activeValue, 0) };
+    const qRaw = String(req.query.q || "").trim();
+    const qd = onlyDigits(qRaw);
+    if (qRaw) {
+      const qt = qRaw.toLowerCase();
+      list = list.filter((c) => (qd.length >= 3 && (c.doc.includes(qd) || onlyDigits(c.phone).includes(qd))) || `${c.name} ${c.company || ""} ${c.email || ""}`.toLowerCase().includes(qt));
+    }
+    const filter = String(req.query.filter || "");
+    if (filter === "ativos") list = list.filter((c) => c.active > 0);
+    if (filter === "a_vencer") list = list.filter((c) => c.dueSoon > 0);
+    if (filter === "vencidos") list = list.filter((c) => c.expired > 0 && !c.active);
+    list.sort((a, b) => (a.nextDue && b.nextDue ? a.nextDue.localeCompare(b.nextDue) : a.nextDue ? -1 : b.nextDue ? 1 : String(a.name).localeCompare(String(b.name))));
+    const page = Math.max(0, parseInt(req.query.page, 10) || 0);
+    res.json({ totals, count: list.length, clients: list.slice(page * 50, page * 50 + 50) });
+  } catch (err) { fail(res, err); }
+});
+
 router.get("/leads", async (req, res) => {
   try {
     await wakeSnoozed(req.accountId).catch(() => {});

@@ -371,6 +371,7 @@ export const crm = {
   updatePipeline: (id, d) => api.patch(`/crm/pipelines/${id}`, d).then((r) => r.data),
   deletePipeline: (id) => api.delete(`/crm/pipelines/${id}`),
   leads: (params) => api.get("/crm/leads", { params }).then((r) => r.data),
+  carteira: (params) => api.get("/crm/carteira", { params }).then((r) => r.data),
   createLead: (d) => api.post("/crm/leads", d).then((r) => r.data),
   updateLead: (id, d) => api.patch(`/crm/leads/${id}`, d).then((r) => r.data),
   deleteLead: (id) => api.delete(`/crm/leads/${id}`),

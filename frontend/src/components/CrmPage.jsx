@@ -394,10 +394,12 @@ function FunnelView({ ctx }) {
               onDrop={(e) => { e.preventDefault(); setOver(null); dragId && move(dragId, st.id); setDragId(null); }}>
               <div className="crm-col-head">
                 <span className="crm-dot" style={{ background: st.color }} />
-                <strong title={st.name}>{st.name}</strong>
+                <span className="crm-col-title">
+                  <strong title={st.name}>{st.name}</strong>
+                  <span className="crm-col-sum">{brl(items.reduce((t, x) => t + (Number(x.value) || 0), 0))}</span>
+                </span>
                 {(st.automations || []).some((a) => a.active !== false) && <span className="crm-auto-ind" title="Esta coluna tem automações"><Zap size={12} /></span>}
                 <span className="crm-count">{items.length}</span>
-                <span className="crm-col-sum">{brl(items.reduce((t, x) => t + (Number(x.value) || 0), 0))}</span>
                 {isManager && !all && (
                   <span className="crm-col-tools">
                     <button onClick={() => moveCol(st.id, -1)} title="Mover para a esquerda"><ChevronLeft size={13} /></button>

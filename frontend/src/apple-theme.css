@@ -2524,3 +2524,67 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .cc2-meta { display: inline-flex; align-items: center; gap: 3px; }
 .cc2-meta.ok { color: #248a3d; }
 @media (prefers-color-scheme: dark) { .cc2-val { color: #f5f5f7; } .cc2-chip { color: color-mix(in srgb, var(--c, #34c759) 80%, #fff); } }
+/* ===================== V14 · Quadro do CRM mais limpo (colunas coladas) ===================== */
+.crm-board { gap: 8px !important; }
+.crm-col { flex: 0 0 272px !important; border-radius: 10px !important; padding: 8px 6px 6px !important; background: rgba(118,118,128,.06) !important; border: 1px solid rgba(0,0,0,.06); }
+.crm-col-head { padding: 2px 6px 8px !important; gap: 6px !important; align-items: flex-start !important; }
+.crm-col-head .crm-dot { margin-top: 5px; width: 7px; height: 7px; }
+.crm-col-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.crm-col-title strong { text-transform: none !important; font-size: 13px !important; font-weight: 600 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crm-col-sum { display: block !important; font-size: 11px !important; color: var(--text-muted, #8e8e93) !important; margin: 1px 0 0 !important; font-weight: 500; }
+.crm-count { font-size: 11px; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 10px; display: inline-grid; place-items: center; background: rgba(118,118,128,.16); color: var(--text-muted, #6e6e73); }
+.crm-cards { gap: 6px !important; }
+.crm-card { border-radius: 8px !important; box-shadow: none !important; border: 1px solid rgba(0,0,0,.08); gap: 0 !important; }
+.crm-card:hover { transform: none !important; border-color: rgba(0,113,227,.35); box-shadow: 0 2px 8px rgba(0,0,0,.06) !important; }
+.crm-add { justify-content: center; width: 100%; }
+@media (prefers-color-scheme: dark) {
+  .crm-col { background: rgba(255,255,255,.03) !important; border-color: rgba(255,255,255,.06); }
+  .crm-card { background: #232325 !important; border-color: rgba(255,255,255,.07); }
+  .crm-col-title strong { color: #f5f5f7 !important; }
+}
+/* ===================== V14 · Carteira de clientes ===================== */
+.cart-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.cart-kpi { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; text-align: left; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(0,0,0,.08); background: var(--surface, #fff); cursor: pointer; font-family: inherit; color: inherit; }
+.cart-kpi svg { color: #0071e3; }
+.cart-kpi span { font-size: 12px; color: var(--text-muted, #8e8e93); }
+.cart-kpi strong { grid-column: 1 / -1; font-size: 20px; margin-top: 4px; }
+.cart-kpi.on { border-color: #0071e3; box-shadow: 0 0 0 2px rgba(0,113,227,.15); }
+.cart-kpi:disabled { cursor: default; }
+.cart-bar { display: flex; gap: 10px; margin: 14px 0 8px; }
+.cart-search { flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(0,0,0,.12); background: var(--surface, #fff); }
+.cart-search input { flex: 1; border: 0; outline: 0; background: transparent; height: 40px; font-size: 15px; font-family: inherit; color: inherit; }
+.cart-hint { font-size: 12px; color: var(--text-muted, #8e8e93); margin-bottom: 8px; }
+.cart-list { border: 1px solid rgba(0,0,0,.08); border-radius: 12px; overflow: hidden; background: var(--surface, #fff); }
+.cart-empty { padding: 30px; text-align: center; color: var(--text-muted, #8e8e93); }
+.cart-client { border-bottom: 1px solid rgba(0,0,0,.06); }
+.cart-row { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 0; background: transparent; cursor: pointer; text-align: left; font-family: inherit; color: inherit; }
+.cart-row:hover { background: rgba(0,113,227,.04); }
+.cart-who { flex: 1; min-width: 0; }
+.cart-who strong { display: block; font-size: 14px; }
+.cart-who small { display: block; font-size: 12px; color: var(--text-muted, #8e8e93); }
+.cart-pills { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.cart-st { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+.cart-st.ok { background: rgba(52,199,89,.14); color: #248a3d; }
+.cart-st.warn { background: rgba(255,159,10,.16); color: #b25000; }
+.cart-st.bad { background: rgba(255,59,48,.12); color: #d70015; }
+.cart-st.off { background: rgba(118,118,128,.14); color: var(--text-muted, #6e6e73); }
+.cart-next { width: 110px; font-size: 11px; color: var(--text-muted, #8e8e93); text-align: right; }
+.cart-next b { color: var(--text, #1d1d1f); font-size: 13px; }
+.cart-val { width: 110px; text-align: right; font-weight: 600; font-size: 13px; }
+.cart-items { padding: 4px 14px 12px 60px; background: rgba(118,118,128,.04); }
+.cart-contact { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted, #8e8e93); padding: 6px 0; }
+.cart-item { display: grid; grid-template-columns: 120px 1fr 150px 100px 32px; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid rgba(0,0,0,.05); }
+.cart-item-main strong { display: block; font-size: 13px; }
+.cart-item-main small { display: block; font-size: 12px; color: var(--text-muted, #8e8e93); }
+.cart-det { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 12px; }
+.cart-det em { font-style: normal; color: var(--text-muted, #8e8e93); }
+.cart-item-vig { font-size: 11px; color: var(--text-muted, #8e8e93); }
+.cart-item-vig b { color: var(--text, #1d1d1f); font-size: 13px; }
+.cart-item-vig small { display: block; }
+.cart-item-val { text-align: right; font-weight: 600; font-size: 13px; }
+.cart-more { margin: 12px auto; display: block; }
+@media (prefers-color-scheme: dark) {
+  .cart-kpi, .cart-search, .cart-list { background: #1c1c1e; border-color: rgba(255,255,255,.08); }
+  .cart-next b, .cart-item-vig b { color: #f5f5f7; }
+}
+@media (max-width: 900px) { .cart-kpis { grid-template-columns: 1fr 1fr; } .cart-next, .cart-val { display: none; } .cart-items { padding-left: 14px; } .cart-item { grid-template-columns: 1fr; gap: 4px; } }

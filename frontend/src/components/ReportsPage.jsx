@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Download, MessageCircle, CheckCircle2, Timer, Star, Search, Printer } from "lucide-react";
+import CrmCarteira from "./CrmCarteira.jsx";
 import CrmReports from "./CrmReports.jsx";
 import { getReportsApi, getAttendancesApi, getDepartments, getTeam, getChannels, getLabels } from "../api.js";
 
@@ -32,9 +33,10 @@ export default function ReportsPage() {
       <div className="dash-presets" style={{ marginBottom: 14 }}>
         <button className={view === "query" ? "active" : ""} onClick={() => setView("query")}>Consultar atendimentos</button>
         <button className={view === "summary" ? "active" : ""} onClick={() => setView("summary")}>Resumo e indicadores</button>
-        <button className={view === "crm" ? "active" : ""} onClick={() => setView("crm")}>CRM</button>
+        <button className={view === "carteira" ? "active" : ""} onClick={() => setView("carteira")}>Carteira de clientes</button>
+        <button className={view === "crm" ? "active" : ""} onClick={() => setView("crm")}>CRM (indicadores)</button>
       </div>
-      {view === "query" ? <AttendanceQuery /> : view === "crm" ? <CrmReports /> : <ReportsSummary />}
+      {view === "query" ? <AttendanceQuery /> : view === "carteira" ? <CrmCarteira /> : view === "crm" ? <CrmReports /> : <ReportsSummary />}
     </div>
   );
 }
