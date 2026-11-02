@@ -36,7 +36,7 @@ async function aiTurn({ accountId, conversation, node, vars, dryRun, text, testH
   const { data: acc } = await supabase.from("accounts").select("name, enabled_tabs").eq("id", accountId).maybeSingle();
   // IA conectada pela própria empresa (aba Conexões) funciona sempre; a do servidor depende do plano.
   const aiCfg = await resolveAI(accountId).catch(() => null);
-  if (!aiCfg || (!aiCfg.own && Array.isArray(acc?.enabled_tabs) && !acc.enabled_tabs.includes("ai"))) {
+  if (!aiCfg || (Array.isArray(acc?.enabled_tabs) && !acc.enabled_tabs.includes("ai"))) {
     return { text: "", port: "human", prompt: null }; // sem IA disponível → passa para humano
   }
   let prompt = null;

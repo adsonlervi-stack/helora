@@ -3,7 +3,6 @@
  * ChatGPT (OpenAI), Claude (Anthropic) ou Gemini (Google). Sem conexão própria,
  * usa a chave do servidor: OPENAI_API_KEY ou ANTHROPIC_API_KEY (AI_PROVIDER escolhe).
  */
-import { integrationsOf } from "./integrations/store.js";
 
 const envProvider = () => {
   const want = String(process.env.AI_PROVIDER || "").toLowerCase();
@@ -18,19 +17,36 @@ export const aiConfigured = () => !!envProvider();
 export const aiProvider = () => envProvider();
 
 /** Qual IA usar para esta empresa: a conectada por ela (preferida) ou a do servidor. */
-export async function resolveAI(accountId) {
-  if (accountId) {
-    const map = await integrationsOf(accountId).catch(() => ({}));
-    const keys = ["openai", "anthropic", "gemini"].filter((k) => map[k]?.config?.apiKey);
-    const pref = map.ai_default?.config?.provider;
-    const pick = keys.includes(pref) ? pref : keys[0];
-    if (pick) return { provider: pick, apiKey: map[pick].config.apiKey, model: map[pick].config.model || DEFAULT_MODELS[pick], own: true };
-  }
+/** IA da própria Helora (chave do servidor). As empresas não conectam IA própria: o uso é cobrado à parte. */
+export async function resolveAI(accountId) { // eslint-disable-line no-unused-vars
   const p = envProvider();
   if (!p) return null;
   const apiKey = p === "openai" ? process.env.OPENAI_API_KEY : p === "anthropic" ? process.env.ANTHROPIC_API_KEY : process.env.GEMINI_API_KEY;
   const model = p === "openai" ? process.env.OPENAI_MODEL || DEFAULT_MODELS.openai : p === "anthropic" ? process.env.AI_MODEL || DEFAULT_MODELS.anthropic : process.env.GEMINI_MODEL || DEFAULT_MODELS.gemini;
   return { provider: p, apiKey, model, own: false };
+}
+
+/** Módulo Helora IA liberado para a empresa? (contratado à parte; liberado em Gestão → abas da empresa) */
+export async function aiEnabledFor(accountId) {
+  if (!accountId) return false;
+  const { supabase } = await import("./config/db.js");
+  const { data } = await supabase.from("accounts").select("enabled_tabs").eq("id", accountId).maybeSingle();
+  return !Array.isArray(data?.enabled_tabs) || data.enabled_tabs.includes("ai");
+}
+
+/** Conta o uso de IA por empresa e por mês (para cobrança). Guardado em account_integrations (provider "ai_usage"). */
+export async function trackAIUsage(accountId, kind, units = 1) {
+  if (!accountId) return;
+  try {
+    const { supabase } = await import("./config/db.js");
+    const month = new Date().toISOString().slice(0, 7);
+    const { data } = await supabase.from("account_integrations").select("config").eq("account_id", accountId).eq("provider", "ai_usage").maybeSingle();
+    const cfg = data?.config || {};
+    const m = cfg[month] || {};
+    m[kind] = (m[kind] || 0) + units;
+    cfg[month] = m;
+    await supabase.from("account_integrations").upsert({ account_id: accountId, provider: "ai_usage", config: cfg, updated_at: new Date().toISOString() }, { onConflict: "account_id,provider" });
+  } catch (e) { console.warn("[IA] uso não registrado:", e.message); }
 }
 export async function aiConfiguredFor(accountId) { return !!(await resolveAI(accountId)); }
 
@@ -80,8 +96,11 @@ export async function callAI(cfg, { system, messages, maxTokens = 500, json = fa
 
 export async function aiChat({ system, messages, maxTokens = 500, json = false, accountId = null }) {
   const cfg = await resolveAI(accountId);
-  if (!cfg) throw new Error("IA não configurada. Conecte o ChatGPT, o Claude ou o Gemini na aba Conexões.");
-  return callAI(cfg, { system, messages, maxTokens, json });
+  if (!cfg) throw new Error("A Helora IA ainda não está ativa no servidor.");
+  const out = await callAI(cfg, { system, messages, maxTokens, json });
+  const chars = (system || "").length + (messages || []).reduce((t, m) => t + textOf(m).length, 0) + String(out || "").length;
+  trackAIUsage(accountId, "textos", 1).then(() => trackAIUsage(accountId, "caracteres", chars)).catch(() => {});
+  return out;
 }
 
 /** Transcreve o áudio do cliente (nota de voz) para texto. Usa OPENAI_API_KEY (Whisper). */

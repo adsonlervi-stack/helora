@@ -2590,3 +2590,33 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 @media (max-width: 900px) { .cart-kpis { grid-template-columns: 1fr 1fr; } .cart-next, .cart-val { display: none; } .cart-items { padding-left: 14px; } .cart-item { grid-template-columns: 1fr; gap: 4px; } }
 .cx-dest { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 13px; color: var(--text-muted, #6e6e73); }
 .cx-dest select { padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(0,0,0,.14); font-size: 13px; font-family: inherit; background: var(--surface, #fff); color: inherit; }
+/* ===================== V14 · Conectores ===================== */
+.cx2 { max-width: 980px; }
+.cx2-title { margin: 0 0 12px; font-size: 22px; }
+.cx2-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 40px; border-radius: 10px; border: 1px solid rgba(0,0,0,.14); background: var(--surface, #fff); color: var(--text-muted, #8e8e93); }
+.cx2-search input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 14px; font-family: inherit; color: var(--text, #1d1d1f); }
+.cx2-ai { display: flex; align-items: center; gap: 12px; margin: 14px 0 4px; padding: 12px 14px; border-radius: 12px; background: rgba(118,118,128,.08); color: var(--text-muted, #6e6e73); }
+.cx2-ai.on { background: rgba(0,113,227,.08); color: #0071e3; }
+.cx2-ai strong { display: block; color: var(--text, #1d1d1f); font-size: 14px; }
+.cx2-ai span { font-size: 13px; }
+.cx2-sec { margin: 20px 0 10px; font-size: 13px; font-weight: 600; color: var(--text-muted, #6e6e73); }
+.cx2-sec b { margin-left: 6px; font-weight: 500; }
+.cx2-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cx2-card { display: flex; align-items: flex-start; gap: 14px; padding: 16px; border-radius: 12px; border: 1px solid rgba(0,0,0,.09); background: var(--surface, #fff); }
+.cx2-card.on { border-color: rgba(52,199,89,.45); }
+.cx2-card .cx-brand, .cx2-logo { flex-shrink: 0; border-radius: 10px; background: rgba(118,118,128,.08); padding: 8px; box-sizing: border-box; }
+.cx2-logo { width: 40px; height: 40px; display: grid; place-items: center; color: #fff; padding: 0; }
+.cx2-body { flex: 1; min-width: 0; }
+.cx2-body strong { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.cx2-body p { margin: 3px 0; font-size: 13px; color: var(--text-muted, #6e6e73); line-height: 1.35; }
+.cx2-body small { font-size: 12px; color: var(--text-muted, #8e8e93); }
+.cx2-ok { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: #248a3d; background: rgba(52,199,89,.14); padding: 1px 7px; border-radius: 6px; }
+.cx2-btn { flex-shrink: 0; width: 34px; height: 34px; border-radius: 9px; border: 1px solid rgba(0,0,0,.14); background: transparent; display: grid; place-items: center; cursor: pointer; color: var(--text, #1d1d1f); }
+.cx2-btn:hover { border-color: #0071e3; color: #0071e3; }
+.cx2-soon { font-size: 11px; color: var(--text-muted, #8e8e93); white-space: nowrap; }
+@media (prefers-color-scheme: dark) {
+  .cx2-card, .cx2-search { background: #1c1c1e; border-color: rgba(255,255,255,.09); }
+  .cx2-btn { border-color: rgba(255,255,255,.16); color: #f5f5f7; }
+  .cx2-ai strong, .cx2-search input { color: #f5f5f7; }
+}
+@media (max-width: 760px) { .cx2-grid { grid-template-columns: 1fr; } }

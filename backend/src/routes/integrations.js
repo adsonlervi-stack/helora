@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { supabase } from "../config/db.js";
 import { requireAuth, requireOwner } from "../middleware/auth.js";
 import { integrationsOf, saveIntegration, deleteIntegration, mask, getIntegration } from "../integrations/store.js";
-import { callAI, DEFAULT_MODELS, resolveAI } from "../aiClient.js";
+import { callAI, DEFAULT_MODELS, resolveAI, aiEnabledFor } from "../aiClient.js";
 import { addDoc, readUrl, readFile, askBrain } from "../integrations/brain.js";
 import { testMail, syncMail, mailPreset } from "../integrations/mail.js";
 import { canvaAuthUrl, canvaConfigured, listDesigns, createDesign, exportDesign, CANVA_SIZES } from "../integrations/canva.js";
@@ -27,25 +27,37 @@ const isManager = (req) => req.role === "owner" || req.isSuperAdmin;
 const AI_PROVIDERS = { openai: "ChatGPT (OpenAI)", anthropic: "Claude (Anthropic)", gemini: "Gemini (Google)" };
 const BACKEND = () => (process.env.BACKEND_PUBLIC_URL || "https://backend-production-b42a.up.railway.app").replace(/\/$/, "");
 
+
+// Módulo Helora IA (contratado à parte)
+const needAI = async (req, res, next) => {
+  try {
+    if (req.isSuperAdmin || (await aiEnabledFor(req.accountId))) return next();
+    res.status(402).json({ error: "A Helora IA não está ativa no seu plano. Fale com o suporte para contratar.", code: "ai_not_enabled" });
+  } catch (e) { next(e); }
+};
+router.use(["/studio", "/brain/ask", "/attendants"], needAI);
+
 router.get("/", async (req, res) => {
   try {
     const map = await integrationsOf(req.accountId);
     const out = {};
     for (const [k, v] of Object.entries(map)) {
       const c = v.config || {};
-      if (AI_PROVIDERS[k]) out[k] = { connected: true, model: c.model || DEFAULT_MODELS[k], key: mask(c.apiKey), at: v.updated_at };
-      else if (k === "email") out[k] = { connected: true, email: c.email, fromName: c.fromName || "", imapHost: c.imapHost || "", smtpHost: c.smtpHost || "", autoSync: !!c.autoSync, lastSync: c.lastSync || null, at: v.updated_at };
+      if (k === "email") out[k] = { connected: true, email: c.email, fromName: c.fromName || "", imapHost: c.imapHost || "", smtpHost: c.smtpHost || "", autoSync: !!c.autoSync, lastSync: c.lastSync || null, at: v.updated_at };
       else if (k === "canva") out[k] = { connected: !!c.accessToken, name: c.name || null, at: v.updated_at };
       else if (k === "forms") out[k] = { connected: true, forms: (c.forms || []).map((f) => ({ ...f, url: `${BACKEND()}/public/forms/${f.token}` })) };
-      else if (k === "ai_default") out[k] = { provider: c.provider || null };
     }
     const ai = await resolveAI(req.accountId).catch(() => null);
-    res.json({ integrations: out, activeAI: ai ? { provider: ai.provider, own: ai.own } : null, canvaAvailable: canvaConfigured() });
+    const aiOn = !!ai && (await aiEnabledFor(req.accountId).catch(() => false));
+    const usage = map.ai_usage?.config?.[new Date().toISOString().slice(0, 7)] || {};
+    res.json({ integrations: out, heloraAI: { active: aiOn, ready: !!ai, usage }, activeAI: aiOn ? { provider: "helora", own: false } : null, canvaAvailable: canvaConfigured() });
   } catch (err) { fail(res, err); }
 });
 
 // IA: ChatGPT / Claude / Gemini — testa a chave antes de salvar
 router.put("/ai/:provider", requireOwner, async (req, res) => {
+  return res.status(410).json({ error: "A Helora usa a própria IA. Não é preciso conectar ChatGPT, Claude ou Gemini." });
+  // eslint-disable-next-line no-unreachable
   try {
     const provider = req.params.provider;
     if (!AI_PROVIDERS[provider]) return res.status(400).json({ error: "Provedor desconhecido." });

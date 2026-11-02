@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plug, Check, Mail, FileText, Sheet as SheetIcon, Palette, Copy, Trash2, RefreshCw, Plus, ExternalLink, Download, Sparkles, Link2 } from "lucide-react";
+import { Plug, Check, Search, Settings2, Mail, FileText, Sheet as SheetIcon, Palette, Copy, Trash2, RefreshCw, Plus, ExternalLink, Download, Sparkles, Link2 } from "lucide-react";
 import { integrations, crm } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import { askConfirm, notify } from "../dialogs.js";
@@ -55,168 +55,97 @@ const FORM_BRANDS = [
   { id: "msforms", name: "Microsoft Forms", color: "#008272", how: "Power Automate → \"Quando uma nova resposta é enviada\" → \"HTTP\" (POST, JSON com as respostas) → cole o link do formulário Helora." }
 ];
 
-/** Aba Conexões: liga o Helora às ferramentas da empresa. */
+/** Aba Conexões: catálogo simples de conectores (e-mail, Google, Canva, formulários). */
 export default function ConnectionsPage({ isManager }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [editAI, setEditAI] = useState(null);
+  const [q, setQ] = useState("");
   const [mailOpen, setMailOpen] = useState(false);
   const [formsOpen, setFormsOpen] = useState(false);
   const [canvaOpen, setCanvaOpen] = useState(false);
-  const [gLink, setGLink] = useState("");
-  const [gBusy, setGBusy] = useState(false);
+  const [gOpen, setGOpen] = useState(null);
   const load = () => integrations.list().then(setData).catch((e) => { setErr(errText(e)); setData({ integrations: {} }); });
   useEffect(() => {
     load();
-    const q = new URLSearchParams(window.location.search);
-    if (q.get("canva") === "ok") notify("Canva conectado!", "success");
-    if (q.get("canva") === "erro") notify(`Não foi possível conectar o Canva: ${q.get("msg") || ""}`, "error");
+    const u = new URLSearchParams(window.location.search);
+    if (u.get("canva") === "ok") notify("Canva conectado!", "success");
+    if (u.get("canva") === "erro") notify(`Não foi possível conectar o Canva: ${u.get("msg") || ""}`, "error");
   }, []);
   const it = data?.integrations || {};
-  const def = it.ai_default?.provider;
-
-  const addGoogle = async () => {
-    if (!gLink.trim()) return;
-    setGBusy(true);
-    try {
-      const r = await integrations.brainAdd({ url: gLink.trim() });
-      notify(`Adicionado ao cérebro (${r.chunks} trechos).`, "success");
-      setGLink("");
-    } catch (e) { notify(errText(e), "error"); }
-    setGBusy(false);
-  };
-
+  const mail = it.email?.email || "";
+  const isGmail = /@gmail\.com$/i.test(mail);
+  const isMs = /@(outlook|hotmail|live)\./i.test(mail);
+  const CONNECTORS = [
+    { id: "gmail", name: "Gmail", by: "Google", slug: "gmail", color: "#EA4335", desc: "Lê a caixa de entrada para o cérebro e envia convites de reunião pelo seu e-mail.", on: !!mail && isGmail, info: isGmail ? mail : null, open: () => setMailOpen("gmail") },
+    { id: "outlook", name: "Outlook", by: "Microsoft", color: "#0078D4", desc: "Conecte o Outlook ou Microsoft 365 da empresa para ler e enviar e-mails.", on: !!mail && isMs, info: isMs ? mail : null, open: () => setMailOpen("outlook") },
+    { id: "email", name: "Outro e-mail", by: "IMAP / SMTP", color: "#0071e3", icon: Mail, desc: "E-mail do seu domínio (Hostinger, Locaweb, Titan, Zoho…).", on: !!mail && !isGmail && !isMs, info: !isGmail && !isMs ? mail : null, open: () => setMailOpen("outro") },
+    { id: "gdocs", name: "Google Docs", by: "Google", slug: "googledocs", color: "#4285F4", desc: "Cole o link de um documento e a Helora IA aprende o conteúdo.", open: () => setGOpen("Google Docs") },
+    { id: "gsheets", name: "Google Sheets", by: "Google", slug: "googlesheets", color: "#34A853", desc: "Planilhas de preços, produtos ou clientes viram conhecimento da IA.", open: () => setGOpen("Google Sheets") },
+    { id: "gdrive", name: "Google Drive", by: "Google", slug: "googledrive", color: "#4285F4", desc: "Arquivos do Drive (PDF, apresentações) para o cérebro da empresa.", open: () => setGOpen("Google Drive") },
+    { id: "canva", name: "Canva", by: "Canva", color: "#00C4CC", desc: "Use o Canva da sua empresa: a Helora IA cria artes direto nele.", on: !!it.canva?.connected, info: it.canva?.name || null, soon: !data?.canvaAvailable && !it.canva?.connected,
+      open: () => (it.canva?.connected ? setCanvaOpen(true) : data?.canvaAvailable && integrations.canvaAuthUrl().then((u) => { window.location.href = u; }).catch((e) => notify(errText(e), "error"))) },
+    { id: "forms", name: "Formulários do site", by: "Site, Google Forms, RD Station…", color: "#7248B9", icon: SheetIcon, desc: "Quem preenche vira lead no funil e na etapa que você escolher.", on: !!it.forms?.forms?.length, info: it.forms?.forms?.length ? `${it.forms.forms.length} formulário(s)` : null, open: () => setFormsOpen(true) }
+  ];
+  const list = CONNECTORS.filter((c) => `${c.name} ${c.by} ${c.desc}`.toLowerCase().includes(q.toLowerCase()));
+  const conn = list.filter((c) => c.on), avail = list.filter((c) => !c.on);
+  const card = (c) => (
+    <div key={c.id} className={`cx2-card ${c.on ? "on" : ""}`}>
+      {c.icon ? <span className="cx2-logo" style={{ background: c.color }}><c.icon size={18} /></span> : <BrandLogo slug={c.slug} name={c.name} color={c.color} size={40} />}
+      <div className="cx2-body">
+        <strong>{c.name}{c.on && <span className="cx2-ok"><Check size={11} /> Conectado</span>}</strong>
+        <p>{c.on && c.info ? c.info : c.desc}</p>
+        <small>por {c.by}</small>
+      </div>
+      {isManager && (c.soon ? <span className="cx2-soon">Em breve</span> :
+        <button className="cx2-btn" title={c.on ? "Gerenciar" : "Conectar"} onClick={c.open}>{c.on ? <Settings2 size={16} /> : <Plus size={16} />}</button>)}
+    </div>
+  );
   return (
-    <div className="page cx-page">
-      <div className="cx-hero">
-        <div className="cx-hero-ico"><Plug size={22} /></div>
-        <div>
-          <h2>Conexões</h2>
-          <p>Ligue o Helora às ferramentas da sua empresa. Tudo o que entra aqui alimenta o <b>cérebro</b> — e a IA usa no atendimento e na Helora IA.</p>
-        </div>
-      </div>
+    <div className="page cx2">
+      <h2 className="cx2-title">Conectores</h2>
+      <div className="cx2-search"><Search size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar conector" /></div>
       {err && <div className="admin-feedback error">{err}</div>}
-      {data?.activeAI && <div className="cx-active">IA em uso: <b>{AIS.find((a) => a.id === data.activeAI.provider)?.name || data.activeAI.provider}</b>{data.activeAI.own ? " (conta da sua empresa)" : " (padrão do Helora)"}</div>}
-
-      <h3 className="cx-h3">Inteligência artificial</h3>
-      <div className="cx-grid">
-        {AIS.map((a) => {
-          const c = it[a.id];
-          return (
-            <div key={a.id} className={`cx-card ${c ? "on" : ""}`}>
-              <div className="cx-card-top">
-                <BrandLogo slug={a.slug} name={a.name} color={a.color} />
-                <div><strong>{a.name}</strong><small>{a.by}</small></div>
-                {c && <span className="cx-badge"><Check size={12} /> Conectado</span>}
-              </div>
-              <p className="cx-desc">{a.note}{c ? ` Modelo: ${c.model}.` : ""}</p>
-              <div className="cx-actions">
-                {isManager && <button className="pill-btn" onClick={() => setEditAI({ ...a, apiKey: "", model: c?.model || a.models[0], has: !!c })}>{c ? "Editar" : "Conectar"}</button>}
-                {c && isManager && (def === a.id ? <span className="cx-main">IA principal</span> : <button className="pill-btn" onClick={async () => { await integrations.setDefaultAI(a.id); load(); }}>Usar como principal</button>)}
-                {c && isManager && <button className="cx-x" title="Desconectar" onClick={async () => { if (await askConfirm(`Desconectar o ${a.name}?`)) { await integrations.remove(a.id); load(); } }}><Trash2 size={15} /></button>}
-              </div>
-            </div>
-          );
-        })}
+      <div className={`cx2-ai ${data?.heloraAI?.active ? "on" : ""}`}>
+        <Sparkles size={18} />
+        <div><strong>Helora IA</strong><span>{data?.heloraAI?.active ? "Ativa na sua empresa. Não precisa conectar nada." : "Não está no seu plano. Fale com o suporte para contratar."}</span></div>
       </div>
+      {conn.length > 0 && <><div className="cx2-sec">Conectados <b>{conn.length}</b></div><div className="cx2-grid">{conn.map(card)}</div></>}
+      <div className="cx2-sec">Disponíveis para conectar <b>{avail.length}</b></div>
+      <div className="cx2-grid">{avail.map(card)}</div>
+      {!list.length && <div className="ap-empty">Nenhum conector encontrado.</div>}
 
-      <h3 className="cx-h3">Documentos e dados</h3>
-      <div className="cx-grid">
-        <div className="cx-card on">
-          <div className="cx-card-top">
-            <span className="cx-pair"><BrandLogo slug="googledocs" name="Google Docs" color="#4285F4" size={30} /><BrandLogo slug="googlesheets" name="Google Planilhas" color="#34A853" size={30} /><BrandLogo slug="googledrive" name="Google Drive" color="#4285F4" size={30} /></span>
-            <div><strong>Google Docs e Planilhas</strong><small>Docs, Planilhas, Apresentações e Drive</small></div>
-            <span className="cx-badge"><Check size={12} /> Pronto</span>
-          </div>
-          <p className="cx-desc">Cole o link de um Documento, Planilha, Apresentação ou arquivo do Drive. No Google, deixe em <b>Compartilhar → Qualquer pessoa com o link</b>.</p>
-          {isManager && (
-            <div className="cx-inline">
-              <input placeholder="https://docs.google.com/…" value={gLink} onChange={(e) => setGLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addGoogle()} />
-              <button className="pill-btn primary" disabled={gBusy || !gLink.trim()} onClick={addGoogle}>{gBusy ? "Lendo…" : "Adicionar"}</button>
-            </div>
-          )}
-        </div>
-        <div className={`cx-card ${it.email ? "on" : ""}`}>
-          <div className="cx-card-top">
-            <span className="cx-logo" style={{ background: "#0071e3" }}><Mail size={16} /></span>
-            <div><strong>E-mail</strong><small>Qualquer provedor</small></div>
-            {it.email && <span className="cx-badge"><Check size={12} /> Conectado</span>}
-          </div>
-          <div className="cx-brands">{MAIL_BRANDS.filter((b) => b.id !== "outro").map((b) => <BrandLogo key={b.id} slug={b.slug} name={b.name} color={b.color} size={26} />)}</div>
-          <p className="cx-desc">{it.email ? <>Caixa <b>{it.email.email}</b>. {it.email.lastSync ? `Última leitura: ${new Date(it.email.lastSync).toLocaleString("pt-BR")}.` : "Ainda não leu os e-mails."}</> : "Lê a caixa de entrada para o cérebro e envia convites de reunião pelo e-mail da empresa."}</p>
-          <div className="cx-actions">
-            {isManager && <button className="pill-btn" onClick={() => setMailOpen(true)}>{it.email ? "Editar" : "Conectar"}</button>}
-            {it.email && isManager && <button className="pill-btn" onClick={async () => { try { const r = await integrations.syncEmail(); notify(`${r.added} e-mail(s) lido(s) para o cérebro.`, "success"); load(); } catch (e) { notify(errText(e), "error"); } }}><RefreshCw size={14} /> Ler agora</button>}
-            {it.email && isManager && <button className="cx-x" title="Desconectar" onClick={async () => { if (await askConfirm("Desconectar o e-mail?")) { await integrations.remove("email"); load(); } }}><Trash2 size={15} /></button>}
-          </div>
-        </div>
-        <div className={`cx-card ${it.forms?.forms?.length ? "on" : ""}`}>
-          <div className="cx-card-top">
-            <span className="cx-logo" style={{ background: "#7248b9" }}><SheetIcon size={16} /></span>
-            <div><strong>Formulários</strong><small>Site, landing page e ferramentas de formulário</small></div>
-            {!!it.forms?.forms?.length && <span className="cx-badge"><Check size={12} /> {it.forms.forms.length}</span>}
-          </div>
-          <div className="cx-brands">{FORM_BRANDS.filter((b) => b.id !== "site").map((b) => <BrandLogo key={b.id} slug={b.slug} name={b.name} color={b.color} size={26} />)}</div>
-          <p className="cx-desc">Cada formulário ganha um link. Quem preencher vira lead no CRM, no funil e etapa que você escolher.</p>
-          <div className="cx-actions">{isManager && <button className="pill-btn" onClick={() => setFormsOpen(true)}>{it.forms?.forms?.length ? "Gerenciar" : "Criar formulário"}</button>}</div>
-        </div>
-      </div>
-
-      <h3 className="cx-h3">Design</h3>
-      <div className="cx-grid">
-        <div className={`cx-card ${it.canva?.connected ? "on" : ""}`}>
-          <div className="cx-card-top">
-            <BrandLogo name="Canva" color="#00C4CC" />
-            <div><strong>Canva</strong><small>{it.canva?.name || "Artes e designs"}</small></div>
-            {it.canva?.connected && <span className="cx-badge"><Check size={12} /> Conectado</span>}
-          </div>
-          <p className="cx-desc">A Helora IA cria artes direto no seu Canva. Você também vê seus designs aqui e baixa em PNG ou PDF.</p>
-          <div className="cx-actions">
-            {!data?.canvaAvailable && !it.canva?.connected && <span className="cx-soon">Disponível em breve</span>}
-            {data?.canvaAvailable && isManager && <button className="pill-btn" onClick={async () => { try { window.location.href = await integrations.canvaAuthUrl(); } catch (e) { notify(errText(e), "error"); } }}>{it.canva?.connected ? "Reconectar" : "Conectar"}</button>}
-            {it.canva?.connected && <button className="pill-btn" onClick={() => setCanvaOpen(true)}>Ver designs</button>}
-            {it.canva?.connected && isManager && <button className="cx-x" title="Desconectar" onClick={async () => { if (await askConfirm("Desconectar o Canva?")) { await integrations.remove("canva"); load(); } }}><Trash2 size={15} /></button>}
-          </div>
-        </div>
-      </div>
-
-      {editAI && <AISheet a={editAI} onClose={() => setEditAI(null)} onSaved={() => { setEditAI(null); load(); }} />}
-      {mailOpen && <MailSheet current={it.email} onClose={() => setMailOpen(false)} onSaved={() => { setMailOpen(false); load(); }} />}
+      {mailOpen && <MailSheet preset={mailOpen} current={it.email} onClose={() => setMailOpen(false)} onSaved={() => { setMailOpen(false); load(); }}
+        onRemove={it.email ? async () => { if (await askConfirm("Desconectar o e-mail?")) { await integrations.remove("email"); setMailOpen(false); load(); } } : null}
+        onSync={it.email ? async () => { try { const r = await integrations.syncEmail(); notify(`${r.added} e-mail(s) lido(s) para o cérebro.`, "success"); load(); } catch (e) { notify(errText(e), "error"); } } : null} />}
       {formsOpen && <FormsSheet forms={it.forms?.forms || []} onClose={() => setFormsOpen(false)} reload={load} />}
-      {canvaOpen && <CanvaSheet onClose={() => setCanvaOpen(false)} />}
+      {canvaOpen && <CanvaSheet onClose={() => setCanvaOpen(false)} onRemove={async () => { if (await askConfirm("Desconectar o Canva?")) { await integrations.remove("canva"); setCanvaOpen(false); load(); } }} />}
+      {gOpen && <GoogleSheet kind={gOpen} onClose={() => setGOpen(null)} />}
     </div>
   );
 }
 
-function AISheet({ a, onClose, onSaved }) {
-  const [f, setF] = useState(a);
+function GoogleSheet({ kind, onClose }) {
+  const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState(null);
-  const save = async () => {
-    setBusy(true); setErr(null);
-    try { await integrations.saveAI(a.id, { apiKey: f.apiKey, model: f.model }); notify(`${a.name} conectado!`, "success"); onSaved(); }
-    catch (e) { setErr(errText(e)); }
+  const add = async () => {
+    setBusy(true);
+    try { const r = await integrations.brainAdd({ url: link.trim() }); notify(`Adicionado ao cérebro (${r.chunks} trechos).`, "success"); setLink(""); }
+    catch (e) { notify(errText(e), "error"); }
     setBusy(false);
   };
   return (
-    <Sheet title={`Conectar ${a.name}`} subtitle="A chave fica guardada só no servidor do Helora e é usada apenas pela sua empresa." onClose={onClose} width={520}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy || (!f.apiKey && !a.has)} onClick={save}>{busy ? "Testando…" : "Testar e salvar"}</Button></>}>
-      <Group title="Chave de API" hint={<>Crie a chave em <a href={a.keyUrl} target="_blank" rel="noreferrer">{a.keyUrl.replace("https://", "")}</a> e cole aqui. O custo de uso é cobrado pela {a.by} direto na sua conta.</>}>
-        <Row label="Chave" stack><input type="password" autoComplete="off" placeholder={a.has ? "•••• (deixe vazio para manter a atual)" : "Cole a chave"} value={f.apiKey} onChange={(e) => setF({ ...f, apiKey: e.target.value })} /></Row>
-        <Row label="Modelo">
-          <select value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })}>{a.models.map((m) => <option key={m}>{m}</option>)}</select>
-        </Row>
-      </Group>
-      {err && <div className="admin-feedback error">{err}</div>}
+    <Sheet title={kind} subtitle="No Google, deixe o arquivo em Compartilhar → Qualquer pessoa com o link." onClose={onClose} width={520}
+      footer={<><Button variant="secondary" onClick={onClose}>Fechar</Button><Button disabled={busy || !link.trim()} onClick={add}>{busy ? "Lendo…" : "Adicionar"}</Button></>}>
+      <Group><Row label="Link" stack><input autoFocus value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && link.trim() && add()} placeholder="https://docs.google.com/…" /></Row></Group>
     </Sheet>
   );
 }
 
-function MailSheet({ current, onClose, onSaved }) {
+function MailSheet({ current, preset: presetBrand, onClose, onSaved, onRemove, onSync }) {
   const [f, setF] = useState({ email: current?.email || "", password: "", fromName: current?.fromName || "", imapHost: current?.imapHost || "", smtpHost: current?.smtpHost || "", imapPort: "", smtpPort: "", autoSync: current ? !!current.autoSync : true });
   const [preset, setPreset] = useState(null);
   const [adv, setAdv] = useState(false);
-  const [brand, setBrand] = useState(null);
+  const [brand, setBrand] = useState(() => MAIL_BRANDS.find((b) => b.id === presetBrand) || null);
   const pickBrand = (b) => {
     setBrand(b);
     if (b.imapHost) setF((c) => ({ ...c, imapHost: b.imapHost, imapPort: String(b.imapPort), smtpHost: b.smtpHost, smtpPort: String(b.smtpPort) }));
@@ -237,9 +166,9 @@ function MailSheet({ current, onClose, onSaved }) {
   };
   return (
     <Sheet title="Conectar e-mail" subtitle="O Helora lê a caixa de entrada para o cérebro e envia convites pelo e-mail da empresa." onClose={onClose} width={540}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy || !f.email || (!f.password && !current)} onClick={save}>{busy ? "Testando…" : "Testar e salvar"}</Button></>}>
+      footer={<>{onRemove && <Button variant="secondary" onClick={onRemove}>Desconectar</Button>}{onSync && <Button variant="secondary" onClick={onSync}>Ler agora</Button>}<Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy || !f.email || (!f.password && !current)} onClick={save}>{busy ? "Testando…" : "Testar e salvar"}</Button></>}>
       <div className="cx-pick">
-        {MAIL_BRANDS.map((b) => (
+        {MAIL_BRANDS.filter((b) => (presetBrand === "gmail" || presetBrand === "outlook" ? b.id === presetBrand : presetBrand === "outro" ? !["gmail", "outlook"].includes(b.id) : true)).map((b) => (
           <button type="button" key={b.id} className={brand?.id === b.id ? "on" : ""} onClick={() => pickBrand(b)}>
             <BrandLogo slug={b.slug} name={b.name} color={b.color} size={26} /><span>{b.name}</span>
           </button>
@@ -352,7 +281,7 @@ function onSubmit(e) {
   );
 }
 
-function CanvaSheet({ onClose }) {
+function CanvaSheet({ onClose, onRemove }) {
   const [list, setList] = useState(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(null);
@@ -364,7 +293,7 @@ function CanvaSheet({ onClose }) {
     setBusy(null);
   };
   return (
-    <Sheet title="Designs do Canva" onClose={onClose} width={760}>
+    <Sheet title="Designs do Canva" onClose={onClose} width={760} footer={onRemove ? <Button variant="secondary" onClick={onRemove}>Desconectar Canva</Button> : null}>
       <div className="cx-inline" style={{ marginBottom: 12 }}><input placeholder="Buscar design" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} /><button className="pill-btn" onClick={load}>Buscar</button></div>
       {list === null && <div className="ap-empty">Carregando…</div>}
       <div className="cx-designs">

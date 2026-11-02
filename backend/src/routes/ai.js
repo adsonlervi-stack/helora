@@ -9,10 +9,7 @@ router.use(requireAuth);
 
 async function allowed(req) {
   const { data } = await supabase.from("accounts").select("enabled_tabs").eq("id", req.accountId).maybeSingle();
-  if (!Array.isArray(data?.enabled_tabs) || data.enabled_tabs.includes("ai") || req.isSuperAdmin) return true;
-  // Empresa com IA própria conectada (aba Conexões) pode usar atendentes IA
-  const ai = await resolveAI(req.accountId).catch(() => null);
-  return !!ai?.own;
+  return !Array.isArray(data?.enabled_tabs) || data.enabled_tabs.includes("ai") || !!req.isSuperAdmin;
 }
 const fail = (res, err) => res.status(500).json({ error: /ai_prompts/.test(err?.message || "") ? "Rode a migration 027 no Supabase." : err.message });
 
@@ -40,7 +37,7 @@ function row(b) {
 router.get("/status", async (req, res) => {
   const ai = await resolveAI(req.accountId).catch(() => null);
   // IA conectada pela própria empresa vale mesmo sem o módulo no plano
-  const ok = ai?.own ? true : await allowed(req).catch(() => false);
+  const ok = await allowed(req).catch(() => false);
   res.json({ configured: !!ai, enabled: !!ai && ok, allowed: ok, provider: ai?.provider || null, own: !!ai?.own });
 });
 

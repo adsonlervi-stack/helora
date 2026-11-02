@@ -27,7 +27,7 @@ export default function IaHeloraPage({ isManager, onGo }) {
         </div>
       </div>
       {noAI && (
-        <div className="ih-warn">Nenhuma IA conectada ainda. {isManager ? <>Conecte o <b>ChatGPT</b>, o <b>Claude</b> ou o <b>Gemini</b> na aba <button className="lp-link" onClick={() => onGo?.("connections")}>Conexões</button>.</> : "Peça ao gestor para conectar uma IA na aba Conexões."}</div>
+        <div className="ih-warn">A Helora IA não está ativa no plano da sua empresa. Fale com o suporte para contratar.</div>
       )}
       {tab === "criar" && <Studio canva={!!status?.integrations?.canva?.connected} isManager={isManager} />}
       {tab === "cerebro" && <BrainTab isManager={isManager} />}

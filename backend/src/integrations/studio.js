@@ -1,7 +1,7 @@
 // IA Helora: assistente que cria coisas para a empresa (textos, imagens, fluxos, artes no Canva),
 // usando a IA que a empresa conectou e o cérebro da empresa.
 import { supabase, listDepartments, createFlow } from "../config/db.js";
-import { aiChat, resolveAI } from "../aiClient.js";
+import { aiChat, resolveAI, trackAIUsage } from "../aiClient.js";
 import { integrationsOf } from "./store.js";
 import { brainContext } from "./brain.js";
 import { uploadMedia } from "../storage.js";
@@ -37,14 +37,14 @@ export async function studioChat(accountId, messages) {
 /** Gera imagem com a IA conectada (ChatGPT/OpenAI ou Gemini). Devolve { url }. */
 export async function studioImage(accountId, prompt, size = "1024x1024") {
   const map = await integrationsOf(accountId);
-  const openaiKey = map.openai?.config?.apiKey || process.env.OPENAI_API_KEY;
-  const geminiKey = map.gemini?.config?.apiKey || process.env.GEMINI_API_KEY;
-  const pref = map.ai_default?.config?.provider;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const pref = process.env.AI_IMAGE_PROVIDER || "";
   const p = String(prompt || "").trim().slice(0, 3000);
   if (!p) throw new Error("Descreva a imagem.");
   let buf = null;
   const useGemini = geminiKey && (pref === "gemini" || !openaiKey);
-  if (!openaiKey && !geminiKey) throw new Error("Para gerar imagens, conecte o ChatGPT (OpenAI) ou o Gemini na aba Conexões. O Claude não gera imagens.");
+  if (!openaiKey && !geminiKey) throw new Error("A geração de imagens da Helora IA ainda não está ativa no servidor.");
   if (useGemini) {
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent", {
       method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": geminiKey },
@@ -68,6 +68,7 @@ export async function studioImage(accountId, prompt, size = "1024x1024") {
     else throw new Error("A OpenAI não devolveu imagem.");
   }
   const url = await uploadMedia({ accountId, buffer: buf, extension: "png", contentType: "image/png" });
+  trackAIUsage(accountId, "imagens", 1).catch(() => {});
   return { url, buffer: buf };
 }
 
