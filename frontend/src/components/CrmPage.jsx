@@ -243,7 +243,7 @@ function FunnelView({ ctx }) {
   const openConv = async (l) => {
     try {
       const r = await crm.openLeadConversation(l.id);
-      ctx.onOpenConversation?.(r.conversationId);
+      window.dispatchEvent(new CustomEvent("helora:float-chat", { detail: `${r.conversationId}|${Date.now()}` }));
     } catch (e) { notify(errText(e), "error"); }
   };
   const saveStages = async (next) => {

@@ -18,6 +18,7 @@ import FlowsPage from "./components/FlowsPage.jsx";
 import ResetPasswordPage from "./components/ResetPasswordPage.jsx";
 import CampaignsPage from "./components/CampaignsPage.jsx";
 import SupportChat from "./components/SupportChat.jsx";
+import FloatingChat from "./components/FloatingChat.jsx";
 import { notifyEvent } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
@@ -105,6 +106,8 @@ export default function App() {
   const [profileRetryKey, setProfileRetryKey] = useState(0);
   const [pendingConversationId, setPendingConversationId] = useState(() => { try { const c = new URLSearchParams(window.location.search).get("c"); if (c) window.history.replaceState(null, "", window.location.pathname); return c || null; } catch { return null; } });
   const [newConversationContact, setNewConversationContact] = useState(null);
+  const [floatOpen, setFloatOpen] = useState(null);
+  useEffect(() => { const on = (e) => setFloatOpen(e.detail ? `${e.detail}` : null); window.addEventListener("helora:float-chat", on); return () => window.removeEventListener("helora:float-chat", on); }, []);
   const [showSupport, setShowSupport] = useState(false);
   // Veio do link "recuperar senha" do e-mail?
   const [recovery, setRecovery] = useState(
@@ -445,6 +448,7 @@ export default function App() {
       )}
 
       {showSupport && !isHeloraPanel && <SupportChat onClose={() => setShowSupport(false)} />}
+      {!isHeloraPanel && activeSection !== "conversations" && <FloatingChat conversations={conversations} onOpenFull={openConversation} openId={floatOpen} />}
 
       {showConnectModal && (
         <WhatsAppConnectModal
