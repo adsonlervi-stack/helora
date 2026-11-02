@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { createPortal } from "react-dom";
+import { ChevronDown, Check, Plus } from "lucide-react";
 import { crm } from "../api.js";
 import { notify } from "../dialogs.js";
 import { fmtDoc, docStatus, onlyDigits } from "../docs.js";
@@ -27,42 +29,71 @@ export function fieldOptions(fd, custom = {}) {
  * escreve outra opção (ex.: seguradora ou produto que não está na lista).
  */
 export function SelectField({ fd, value, onChange, custom, className, onAddOption }) {
-  const free = fd.free !== false; // todo campo de lista aceita escrever outra opção
+  const free = fd.free !== false;
   const opts = fieldOptions(fd, custom);
   const v = value ?? "";
-  const outside = !!v && !opts.includes(v);
-  const [typing, setTyping] = useState(free && outside);
-  const inputRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [pos, setPos] = useState(null);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { if (free && outside) setTyping(true); }, [outside, free]);
-
-  if (typing) {
-    return (
-      <span className={`crm-free ${className || ""}`}>
-        <input ref={inputRef} value={v} onChange={(e) => onChange(e.target.value)} placeholder={`Escreva ${fd.label.toLowerCase()}`} />
-        {onAddOption && v.trim() && !opts.includes(v.trim()) && (
-          <button type="button" className="add" disabled={saving} title="Salvar esta opção na lista do funil"
-            onClick={async () => { setSaving(true); const ok = await onAddOption(fd, v.trim()); setSaving(false); if (ok) setTyping(false); }}>
-            {saving ? "…" : "+ Salvar na lista"}
-          </button>
-        )}
-        <button type="button" onClick={() => { setTyping(false); if (outside) onChange(""); }} title="Voltar para a lista">Lista</button>
-      </span>
-    );
-  }
+  const btnRef = useRef(null);
+  const popRef = useRef(null);
+  const place = () => {
+    const r = btnRef.current?.getBoundingClientRect(); if (!r) return;
+    const w = Math.max(r.width, 240);
+    const below = window.innerHeight - r.bottom > 300 || r.top < 300;
+    setPos({ left: Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8), width: w, ...(below ? { top: r.bottom + 6 } : { bottom: window.innerHeight - r.top + 6 }) });
+  };
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const close = (e) => { if (!popRef.current?.contains(e.target) && !btnRef.current?.contains(e.target)) setOpen(false); };
+    const key = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", key);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", key); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [open]);
+  const all = [...opts, ...(v && !opts.includes(v) ? [v] : [])];
+  const t = q.trim();
+  const shown = t ? all.filter((o) => o.toLowerCase().includes(t.toLowerCase())) : all;
+  const exact = all.some((o) => o.toLowerCase() === t.toLowerCase());
+  const pick = (o) => { onChange(o); setOpen(false); setQ(""); };
   return (
-    <select
-      className={className}
-      value={v}
-      onChange={(e) => {
-        if (e.target.value === OTHER) { setTyping(true); onChange(""); setTimeout(() => inputRef.current?.focus(), 30); return; }
-        onChange(e.target.value);
-      }}
-    >
-      <option value="">—</option>
-      {[...opts, ...(outside ? [v] : [])].map((o) => <option key={o} value={o}>{o}</option>)}
-      {free && <option value={OTHER}>✏️ Escrever outra / adicionar…</option>}
-    </select>
+    <>
+      <button type="button" ref={btnRef} className={`hsel ${className || ""} ${open ? "open" : ""} ${v ? "" : "empty"}`} onClick={() => setOpen((x) => !x)}>
+        <span>{v || "Selecionar"}</span>
+        <ChevronDown size={14} />
+      </button>
+      {open && pos && createPortal(
+        <div ref={popRef} className="hsel-pop" style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom }}>
+          {(all.length > 6 || free) && (
+            <input autoFocus className="hsel-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder={free ? "Buscar ou escrever outra…" : "Buscar…"}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (shown[0] && (!free || exact || !t)) pick(shown[0]); else if (free && t) pick(t); } }} />
+          )}
+          <div className="hsel-list">
+            {v && <button type="button" className="hsel-opt clear" onClick={() => pick("")}>Limpar</button>}
+            {shown.map((o) => (
+              <button type="button" key={o} className={`hsel-opt ${o === v ? "on" : ""}`} onClick={() => pick(o)}>
+                <span>{o}</span>{o === v && <Check size={14} />}
+              </button>
+            ))}
+            {!shown.length && !t && <div className="hsel-empty">Nenhuma opção.</div>}
+            {free && t && !exact && (
+              <div className="hsel-new">
+                <button type="button" className="hsel-opt" onClick={() => pick(t)}><span>Usar “{t}”</span></button>
+                {onAddOption && <button type="button" className="hsel-opt add" disabled={saving}
+                  onClick={async () => { setSaving(true); const ok = await onAddOption(fd, t); setSaving(false); if (ok) pick(t); }}>
+                  <Plus size={14} /> {saving ? "Salvando…" : `Adicionar “${t}” à lista`}
+                </button>}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 
