@@ -1039,6 +1039,7 @@ router.post("/conversations/:id/avatar", async (req, res) => {
   const v = req.body?.avatar;
   if (v !== null && !/^avatar:[mf]:\d{1,2}$/.test(String(v || ""))) return res.status(400).json({ error: "Avatar inválido." });
   if (conversation.avatarUrl && !/^avatar:/.test(conversation.avatarUrl) && !req.body?.force) return res.status(400).json({ error: "Este contato já tem foto do WhatsApp." });
+  // A foto real sempre ganha do bonequinho: quando chegar, substitui sozinha
   await setConversationAvatar(conversation.id, v || null);
   res.json({ ok: true, avatarUrl: v || null });
 });

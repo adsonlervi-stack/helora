@@ -737,7 +737,10 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
           console.error(`[Bot] Erro ao processar mensagem (${conversation.id}):`, err.message);
         }
 
-        if (conversation.isNew && !conversation.avatarUrl) {
+        // Sem foto (ou só com o bonequinho): tenta buscar a foto real, no máximo a cada 12 h por conversa
+        const noPhoto = !conversation.avatarUrl || /^avatar:/.test(conversation.avatarUrl);
+        if (noPhoto && Date.now() - (photoTried.get(conversation.id) || 0) > 12 * 3600000) {
+          photoTried.set(conversation.id, Date.now());
           sock
             .profilePictureUrl(jid, "image")
             .then((url) => url && setConversationAvatar(conversation.id, url))
@@ -896,6 +899,8 @@ function parseButtons(raw) {
   }
   return null;
 }
+
+const photoTried = new Map();
 
 export async function sendWhatsAppMediaUrl(channelId, jid, { url, mediaType, caption, fileName, mimetype }) {
   const cloud = await getCloudChannel(channelId);
