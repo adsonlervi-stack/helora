@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Plug, Check, Search, Settings2, Mail, FileText, Sheet as SheetIcon, Palette, Copy, Trash2, RefreshCw, Plus, ExternalLink, Download, Sparkles, Link2 } from "lucide-react";
-import { integrations, crm } from "../api.js";
+import { integrations, crm, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import { askConfirm, notify } from "../dialogs.js";
 
@@ -64,6 +64,8 @@ export default function ConnectionsPage({ isManager }) {
   const [formsOpen, setFormsOpen] = useState(false);
   const [canvaOpen, setCanvaOpen] = useState(false);
   const [gOpen, setGOpen] = useState(null);
+  const [gcal, setGcal] = useState(null);
+  useEffect(() => { googleStatusApi().then(setGcal).catch(() => setGcal({})); }, []);
   const load = () => integrations.list().then(setData).catch((e) => { setErr(errText(e)); setData({ integrations: {} }); });
   useEffect(() => {
     load();
@@ -79,6 +81,8 @@ export default function ConnectionsPage({ isManager }) {
     { id: "gmail", name: "Gmail", by: "Google", slug: "gmail", color: "#EA4335", desc: "Lê a caixa de entrada para o cérebro e envia convites de reunião pelo seu e-mail.", on: !!mail && isGmail, info: isGmail ? mail : null, open: () => setMailOpen("gmail") },
     { id: "outlook", name: "Outlook", by: "Microsoft", color: "#0078D4", desc: "Conecte o Outlook ou Microsoft 365 da empresa para ler e enviar e-mails.", on: !!mail && isMs, info: isMs ? mail : null, open: () => setMailOpen("outlook") },
     { id: "email", name: "Outro e-mail", by: "IMAP / SMTP", color: "#0071e3", icon: Mail, desc: "E-mail do seu domínio (Hostinger, Locaweb, Titan, Zoho…).", on: !!mail && !isGmail && !isMs, info: !isGmail && !isMs ? mail : null, open: () => setMailOpen("outro") },
+    { id: "gcal", name: "Google Agenda", by: "Google", slug: "googlecalendar", color: "#4285F4", desc: "Sua agenda Google no Helora: horários ocupados somem do agendamento e as reuniões entram na sua agenda.", on: !!gcal?.connected, info: gcal?.connected ? "Conectada (sua conta)" : null, soon: gcal && !gcal.configured,
+      open: () => (gcal?.connected ? (askConfirm("Desconectar sua agenda Google?").then((ok) => ok && googleDisconnectApi().then(() => googleStatusApi().then(setGcal)))) : googleAuthUrlApi().then((u) => { window.location.href = u; }).catch((e) => notify(errText(e), "error"))) },
     { id: "gdocs", name: "Google Docs", by: "Google", slug: "googledocs", color: "#4285F4", desc: "Cole o link de um documento e a Helora IA aprende o conteúdo.", open: () => setGOpen("Google Docs") },
     { id: "gsheets", name: "Google Sheets", by: "Google", slug: "googlesheets", color: "#34A853", desc: "Planilhas de preços, produtos ou clientes viram conhecimento da IA.", open: () => setGOpen("Google Sheets") },
     { id: "gdrive", name: "Google Drive", by: "Google", slug: "googledrive", color: "#4285F4", desc: "Arquivos do Drive (PDF, apresentações) para o cérebro da empresa.", open: () => setGOpen("Google Drive") },
@@ -96,7 +100,7 @@ export default function ConnectionsPage({ isManager }) {
         <p>{c.on && c.info ? c.info : c.desc}</p>
         <small>por {c.by}</small>
       </div>
-      {isManager && (c.soon ? <span className="cx2-soon">Em breve</span> :
+      {(isManager || c.id === "gcal") && (c.soon ? <span className="cx2-soon">Em breve</span> :
         <button className="cx2-btn" title={c.on ? "Gerenciar" : "Conectar"} onClick={c.open}>{c.on ? <Settings2 size={16} /> : <Plus size={16} />}</button>)}
     </div>
   );

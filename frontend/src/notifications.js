@@ -130,6 +130,8 @@ export function notifyEvent(type, title, body, onClick) {
   const p = getNotifyPrefs()[type];
   if (!p?.on) return;
   playSound(p.sound);
+  // Com o Helora aberto na tela: aviso no canto inferior direito, dentro do sistema
+  if (!document.hidden) { try { window.dispatchEvent(new CustomEvent("helora:toast-notify", { detail: { type, title, body, onClick } })); } catch {} }
   if (!notifyEnabled() || (!document.hidden && document.hasFocus()) || (pushActive() && /message|new/.test(type))) return;
   try {
     const n = new Notification(title, { body, icon: "/favicon.png", tag: `${type}-${title}` });

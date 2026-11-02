@@ -625,7 +625,7 @@ function ActivityBox({ onSave }) {
         <button className="lp-primary" disabled={busy || !ev.title.trim()} onClick={async () => { setBusy(true); await onSave(ev); setBusy(false); }}><CalendarDays size={14} /> Agendar</button>
       </div>
       {ev.ownerName && <div className="lp-muted" style={{ fontSize: 12 }}>Na agenda de {ev.ownerName}</div>}
-      {slotOpen && <SlotPicker onClose={() => setSlotOpen(false)} onPick={(s) => { setEv((c) => ({ ...c, startsAt: toLocalInput(new Date(s.startsAt)), endsAt: s.endsAt, ownerId: s.ownerId, ownerName: s.ownerName })); setSlotOpen(false); }} />}
+      {slotOpen && <SlotPicker onClose={() => setSlotOpen(false)} onPick={(s) => { setEv((c) => ({ ...c, startsAt: toLocalInput(new Date(s.startsAt)), endsAt: s.endsAt, ownerId: s.ownerId, ownerName: s.ownerName, google: s.google, meet: false })); setSlotOpen(false); }} />}
     </div>
   );
 }

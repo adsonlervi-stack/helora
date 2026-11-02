@@ -1139,7 +1139,7 @@ export default function ChatWindow({
                 ref={inputRef}
                 rows={1}
                 className="composer-text"
-                placeholder={offline ? "WhatsApp desconectado" : "Mensagem  ·  / para respostas prontas"}
+                placeholder={offline ? "WhatsApp desconectado" : window.innerWidth < 700 ? "Mensagem" : "Mensagem  ·  / para respostas prontas"}
                 value={text}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
                 onInput={(e) => { const t = e.currentTarget; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }}

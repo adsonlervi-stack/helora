@@ -67,6 +67,23 @@ export async function createGoogleEvent(userId, { title, startsAt, endsAt, descr
   return { eventId: ev.id, htmlLink: ev.htmlLink, meetLink: ev.hangoutLink || ev.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri || null };
 }
 
+/** Horários ocupados na agenda Google do usuário entre duas datas: [[início, fim], …] em ms. */
+export async function googleBusy(userId, from, to) {
+  if (!googleConfigured()) return [];
+  const token = await accessTokenFor(userId).catch(() => null);
+  if (!token) return [];
+  const u = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
+  u.searchParams.set("timeMin", new Date(from).toISOString());
+  u.searchParams.set("timeMax", new Date(to).toISOString());
+  u.searchParams.set("singleEvents", "true");
+  u.searchParams.set("maxResults", "100");
+  const r = await fetch(u, { headers: { authorization: `Bearer ${token}` } });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return [];
+  return (d.items || []).filter((e) => e.status !== "cancelled" && e.transparency !== "transparent" && e.start?.dateTime)
+    .map((e) => [new Date(e.start.dateTime).getTime(), new Date(e.end?.dateTime || e.start.dateTime).getTime()]);
+}
+
 export async function deleteGoogleEvent(userId, eventId) {
   try {
     const token = await accessTokenFor(userId);

@@ -19,6 +19,7 @@ import ResetPasswordPage from "./components/ResetPasswordPage.jsx";
 import CampaignsPage from "./components/CampaignsPage.jsx";
 import SupportChat from "./components/SupportChat.jsx";
 import FloatingChat from "./components/FloatingChat.jsx";
+import NotifyToasts from "./components/NotifyToasts.jsx";
 import { notifyEvent } from "./notifications.js";
 import { getConversations, getWhatsAppStatus, getAccount, getActingAccount, leaveAccount } from "./api.js";
 import { supabase } from "./supabaseClient.js";
@@ -448,7 +449,8 @@ export default function App() {
       )}
 
       {showSupport && !isHeloraPanel && <SupportChat onClose={() => setShowSupport(false)} />}
-      {!isHeloraPanel && activeSection !== "conversations" && <FloatingChat conversations={conversations} onOpenFull={openConversation} openId={floatOpen} />}
+      <NotifyToasts />
+      {!isHeloraPanel && <FloatingChat conversations={conversations} onOpenFull={openConversation} openId={floatOpen} />}
 
       {showConnectModal && (
         <WhatsAppConnectModal

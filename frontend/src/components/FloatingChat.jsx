@@ -34,11 +34,11 @@ export default function FloatingChat({ conversations = [], onOpenFull, openId })
       {open && (
         <div className="fchat">
           <div className="fchat-h">
-            {sel ? <button className="fchat-i" onClick={() => setSel(null)}><ChevronLeft size={18} /></button> : null}
+
             {sel && conv ? <><Avatar name={conv.name} url={conv.avatarUrl} size={30} /><span className="fchat-n"><strong>{conv.name}</strong><small>{conv.phone ? `+${conv.phone}` : conv.channelName || ""}</small></span></>
               : sel ? <span className="fchat-n"><strong>Conversa</strong><small>Carregando…</small></span> : <span className="fchat-n"><strong>Conversas</strong><small>{unread ? `${unread} não lida(s)` : "Tudo em dia"}</small></span>}
             {sel && <button className="fchat-i" title="Abrir na aba Conversas" onClick={() => { onOpenFull?.(sel); setOpen(false); }}><ExternalLink size={16} /></button>}
-            <button className="fchat-i" onClick={() => setOpen(false)}><X size={18} /></button>
+            <button className="fchat-i" onClick={() => { setOpen(false); setSel(null); }}><X size={18} /></button>
           </div>
           {!sel ? (
             <>
@@ -73,10 +73,6 @@ export default function FloatingChat({ conversations = [], onOpenFull, openId })
           )}
         </div>
       )}
-      <button className="fchat-fab" onClick={() => setOpen((v) => !v)} title="Conversas">
-        {open ? <X size={22} /> : <MessageCircle size={22} />}
-        {!open && unread > 0 && <b>{unread > 99 ? "99+" : unread}</b>}
-      </button>
     </>
   );
 }

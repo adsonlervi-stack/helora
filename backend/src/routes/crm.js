@@ -2,7 +2,7 @@ import { Router } from "express";
 import { supabase } from "../config/db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { enforceTabs } from "../governance.js";
-import { createGoogleEvent, deleteGoogleEvent } from "../google.js";
+import { createGoogleEvent, deleteGoogleEvent, googleBusy } from "../google.js";
 import { emitEvent } from "../webhooks.js";
 import multer from "multer";
 import { randomUUID } from "crypto";
@@ -382,7 +382,9 @@ router.get("/agendas", async (req, res) => {
     const it = await getIntegration(req.accountId, "agendas");
     const { data: team } = await supabase.from("profiles").select("id, name, avatar_url").eq("account_id", req.accountId);
     const cfg = it?.config?.members || {};
-    res.json((team || []).map((p) => ({ id: p.id, name: p.name, avatarUrl: p.avatar_url, ...DEF_AGENDA, ...(cfg[p.id] || {}) })));
+    const { data: gt } = await supabase.from("google_tokens").select("user_id").in("user_id", (team || []).map((p) => p.id));
+    const g = new Set((gt || []).map((x) => x.user_id));
+    res.json((team || []).map((p) => ({ id: p.id, name: p.name, avatarUrl: p.avatar_url, google: g.has(p.id), ...DEF_AGENDA, ...(cfg[p.id] || {}) })));
   } catch (err) { fail(res, err); }
 });
 router.put("/agendas/:id", async (req, res) => {
@@ -415,6 +417,7 @@ router.get("/agendas/:id/slots", async (req, res) => {
     const { data: evs } = await supabase.from("crm_events").select("starts_at, ends_at, kind").eq("account_id", req.accountId).eq("owner_id", req.params.id)
       .gte("starts_at", new Date(dayStart - 86400000).toISOString()).lt("starts_at", new Date(dayStart + 86400000).toISOString()).not("kind", "like", "cad_%");
     const busy = (evs || []).map((e) => { const s = new Date(e.starts_at).getTime(); return [s, e.ends_at ? new Date(e.ends_at).getTime() : s + 60 * 60000]; });
+    busy.push(...(await googleBusy(req.params.id, dayStart, dayStart + 86400000).catch(() => [])));
     const slots = [];
     const now = Date.now();
     for (let m = hm(a.start); m + dur <= hm(a.end); m += a.step) {
@@ -1144,7 +1147,7 @@ router.post("/events", async (req, res) => {
           attendee = b.inviteLead ? lead?.email || null : null;
           leadName = lead?.name || "";
         }
-        google = await createGoogleEvent(req.userId, {
+        google = await createGoogleEvent(b.ownerId || req.userId, {
           title: leadName ? `${data.title} · ${leadName}` : data.title, startsAt: data.starts_at, endsAt: data.ends_at,
           description: data.notes || "", attendeeEmail: attendee, meet: b.meet !== false
         });

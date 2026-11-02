@@ -30,10 +30,11 @@ export default function SlotPicker({ onPick, onClose, defaultOwner }) {
         <div className="sp-l">Agenda de</div>
         <div className="sp-who">
           {agendas.map((a) => (
-            <button key={a.id} className={a.id === who ? "on" : ""} onClick={() => setWho(a.id)}><Avatar name={a.name} url={a.avatarUrl} size={24} /> {a.name || "Sem nome"}</button>
+            <button key={a.id} className={a.id === who ? "on" : ""} onClick={() => setWho(a.id)}><Avatar name={a.name} url={a.avatarUrl} size={24} /> {a.name || "Sem nome"}{a.google && <span className="sp-g" title="Agenda Google conectada">G</span>}</button>
           ))}
           {ag && <button className="sp-cfg" title="Horários desta agenda" onClick={() => setCfg(true)}><Settings2 size={15} /></button>}
         </div>
+        {ag && !ag.google && <div className="sp-hint">A agenda Google de {ag.name} não está conectada. Os horários consideram só o que está no Helora. Conecte em Conexões → Google Agenda.</div>}
         <div className="sp-l">Dia</div>
         <div className="sp-days">
           <button className="sp-arrow" onClick={() => shift(-7)}><ChevronLeft size={16} /></button>
@@ -52,7 +53,7 @@ export default function SlotPicker({ onPick, onClose, defaultOwner }) {
           </select>
         </div>
         <div className="sp-slots">
-          {data?.slots.map((s) => <button key={s.time} onClick={() => onPick({ ...s, ownerId: who, ownerName: ag?.name })}>{s.time}</button>)}
+          {data?.slots.map((s) => <button key={s.time} onClick={() => onPick({ ...s, ownerId: who, ownerName: ag?.name, google: !!ag?.google })}>{s.time}</button>)}
           {data && !data.slots.length && <div className="sp-empty">Nenhum horário livre neste dia.</div>}
         </div>
       </div>
