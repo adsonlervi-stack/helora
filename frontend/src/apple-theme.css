@@ -2704,3 +2704,11 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .set-crumb { display: flex; align-items: center; gap: 6px; margin: 0 0 18px; color: #8e8e93; }
 .set-crumb button { border: 0; background: transparent; padding: 0; font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: #8e8e93; cursor: pointer; }
 .set-crumb button:hover { color: #0071e3; }
+/* Cabeçalho da coluna do CRM: centralizado e com respiro */
+.crm-col-head { padding: 12px 14px 12px 18px !important; align-items: center !important; gap: 8px !important; min-height: 46px; box-sizing: border-box; margin: 0 2px 10px; }
+.crm-col-head::before { width: 3px !important; top: 10px !important; bottom: 10px !important; left: 6px !important; border-radius: 3px; }
+.crm-col-head .crm-dot { display: none; }
+.crm-col-title { justify-content: center; }
+.crm-col-title strong { font-size: 14px !important; line-height: 1.25; }
+.crm-col-tools { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: #fff; border-radius: 8px; padding: 2px; box-shadow: 0 0 0 .5px rgba(0,0,0,.08); }
+.crm-count { margin-left: 4px; }
