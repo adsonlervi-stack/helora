@@ -1,3 +1,4 @@
+import { askPrompt } from "../dialogs.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Building2, TrendingUp, AlertTriangle, Wallet, CheckCircle2, Plus } from "lucide-react";
@@ -24,6 +25,7 @@ import {
   adminChargeInvoice,
   adminTestEmail,
   adminUploadBoleto,
+  adminSetPayLink,
   getAdminCredits,
   getAdminCreditLedger,
   setAdminMonthlyCredits,
@@ -140,7 +142,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
         <Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar alterações"}</Button>
       </>}
     >
-      <Group title="Plano e cobrança" hint={f.billingMethod === "asaas" ? "Automática: o sistema gera a fatura, cobra por PIX no Asaas, manda os e-mails e bloqueia 2 dias após o vencimento sem pagamento." : "Manual: crie a cobrança em Gestão → Cobranças e anexe o boleto. Nada é cobrado ou bloqueado automaticamente."}>
+      <Group title="Plano e cobrança" hint={f.billingMethod === "asaas" ? "Automática: o sistema gera a fatura, cobra por PIX no Asaas, manda os e-mails e bloqueia 2 dias após o vencimento sem pagamento." : "Manual: crie a cobrança em Gestão → Cobranças e cole o link de pagamento da Pagar.me. Nada é bloqueado automaticamente."}>
         <Row label="Plano">
           <select value={planId} onChange={(e) => pickPlan(e.target.value)}>
             <option value="">Personalizado</option>
@@ -153,7 +155,7 @@ export function CommercialEditor({ account, onClose, onSaved }) {
         <Row label="Forma de cobrança">
           <select value={f.billingMethod} onChange={set("billingMethod")}>
             <option value="asaas">Recorrente automática (Asaas · PIX)</option>
-            <option value="manual">Manual (você anexa o boleto)</option>
+            <option value="manual">Manual (link da Pagar.me)</option>
           </select>
         </Row>
         <Row label="Servidor nº"><input type="number" min="1" value={f.serverId} onChange={(e) => setF((c) => ({ ...c, serverId: e.target.value.replace(/\D/g, "") }))} placeholder="1" /></Row>
@@ -333,20 +335,15 @@ export function InvoicesTab() {
                     <option value="transferencia">Transferência</option>
                     <option value="dinheiro">Dinheiro</option>
                   </select>
-                  <button
-                    className="pill-btn"
-                    title="Gerar a cobrança PIX no Asaas"
-                    onClick={async () => {
-                      try {
-                        const r = await adminChargeInvoice(i.id);
-                        setMsg({ type: "success", text: `PIX gerado no Asaas (${r.asaasPaymentId}).` });
-                      } catch (e) {
-                        setMsg({ type: "error", text: errText(e) });
-                      }
-                    }}
-                  >
-                    PIX
-                  </button>
+                  <button className="pill-btn primary" title="Colar o link de pagamento (Pagar.me)" onClick={async () => {
+                    const url = await askPrompt("Link de pagamento da Pagar.me (PIX ou boleto)", i.invoice_url || "", { okText: "Salvar e enviar" });
+                    if (url === null) return;
+                    try {
+                      const r = await adminSetPayLink(i.id, url.trim());
+                      setMsg({ type: "success", text: !url.trim() ? "Link removido." : r.emailed ? "Link salvo e enviado por e-mail para a empresa." : "Link salvo (aparece no Financeiro da empresa)." });
+                      load();
+                    } catch (e) { setMsg({ type: "error", text: errText(e) }); }
+                  }}>{i.invoice_url ? "Link ✓" : "Link de pagamento"}</button>
                   <label className="pill-btn" style={{ cursor: "pointer" }} title="Anexar o boleto (vai para o Financeiro da empresa e por e-mail)">
                     {i.boleto_url ? "Boleto ✓" : "Boleto"}
                     <input type="file" accept=".pdf,image/*" style={{ display: "none" }} onChange={async (e) => {

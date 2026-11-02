@@ -482,6 +482,29 @@ router.delete("/masters/:id", async (req, res) => {
   }
 });
 
+// Link de pagamento (Pagar.me ou outro) colado manualmente na cobrança → Financeiro da empresa + e-mail
+router.post("/invoices/:id/link", async (req, res) => {
+  try {
+    const url = String(req.body?.url || "").trim();
+    if (url && !/^https?:\/\//i.test(url)) return res.status(400).json({ error: "Cole um link que comece com https://" });
+    const { data: inv, error } = await supabase.from("invoices").select("*, accounts(name, contact_email, contact_name)").eq("id", req.params.id).maybeSingle();
+    if (error || !inv) return res.status(404).json({ error: "Cobrança não encontrada." });
+    const { error: upErr } = await supabase.from("invoices").update({ invoice_url: url || null }).eq("id", inv.id);
+    if (upErr) throw upErr;
+    let emailed = false;
+    if (url && req.body?.send !== false && inv.accounts?.contact_email && emailConfigured()) {
+      const due = inv.due_date ? inv.due_date.split("-").reverse().join("/") : "";
+      emailed = await sendMail({
+        to: inv.accounts.contact_email, name: inv.accounts.contact_name || inv.accounts.name, label: "Fatura disponível",
+        subject: `Sua fatura Helora ${inv.reference || ""} está disponível`, title: "Sua fatura chegou",
+        message: `A fatura de ${inv.reference || "este mês"} de ${Number(inv.amount || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}${due ? `, com vencimento em ${due},` : ""} está disponível. Pague por PIX ou boleto no link.`,
+        buttonText: "Pagar fatura", buttonLink: url, note: "O link também fica em Financeiro, dentro do sistema."
+      }).then(() => true).catch(() => false);
+    }
+    res.json({ ok: true, emailed });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Boleto anexado manualmente na cobrança → fica no Financeiro da empresa e vai por e-mail
 router.post("/invoices/:id/boleto", upload.single("file"), async (req, res) => {
   try {

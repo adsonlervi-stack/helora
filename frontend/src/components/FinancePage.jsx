@@ -23,7 +23,7 @@ export default function FinancePage() {
     <div className="page finance-page">
       {d.account.blocked && (
         <div className="admin-feedback error" style={{ marginBottom: 16 }}>
-          Acesso pausado por falta de pagamento. Pague pelo PIX abaixo e a liberação é automática.
+          Acesso pausado por falta de pagamento. Pague a fatura em aberto abaixo para liberar.
         </div>
       )}
       {pixFor && <PixModal invoice={pixFor} onClose={() => setPixFor(null)} onPaid={() => { setPixFor(null); load(); setTimeout(() => window.location.reload(), 800); }} />}
@@ -73,7 +73,7 @@ export default function FinancePage() {
                     <td>{i.paidAt ? date(i.paidAt) : "—"}</td>
                     <td>{(i.status === "pending" || i.status === "overdue") && d.account.billingMethod === "asaas" && <button className="pill-btn primary" onClick={() => setPixFor(i)}>Pagar com PIX</button>}
                       {i.boletoUrl && <a className="pill-btn" href={i.boletoUrl} target="_blank" rel="noreferrer">Boleto</a>}
-                      {i.paymentLink && i.status === "pending" && <a className="pill-btn" href={i.paymentLink} target="_blank" rel="noreferrer"><ExternalLink size={13} /></a>}</td>
+                      {i.paymentLink && i.status !== "paid" && i.status !== "canceled" && <a className="pill-btn primary" href={i.paymentLink} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Pagar</a>}</td>
                   </tr>
                 );
               })}

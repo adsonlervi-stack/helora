@@ -416,6 +416,7 @@ export const adminMasters = () => api.get("/admin/masters").then((r) => r.data);
 export const adminCreateMaster = (d) => api.post("/admin/masters", d).then((r) => r.data);
 export const adminUpdateMaster = (id, d) => api.patch(`/admin/masters/${id}`, d);
 export const adminDeleteMaster = (id) => api.delete(`/admin/masters/${id}`);
+export const adminSetPayLink = (id, url) => api.post(`/admin/invoices/${id}/link`, { url }).then((r) => r.data);
 export const adminUploadBoleto = (id, file) => { const fd = new FormData(); fd.append("file", file); return api.post(`/admin/invoices/${id}/boleto`, fd).then((r) => r.data); };
 
 // ---- V6: IA (só nos fluxos) ----
