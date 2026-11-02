@@ -2588,3 +2588,5 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
   .cart-next b, .cart-item-vig b { color: #f5f5f7; }
 }
 @media (max-width: 900px) { .cart-kpis { grid-template-columns: 1fr 1fr; } .cart-next, .cart-val { display: none; } .cart-items { padding-left: 14px; } .cart-item { grid-template-columns: 1fr; gap: 4px; } }
+.cx-dest { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 13px; color: var(--text-muted, #6e6e73); }
+.cx-dest select { padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(0,0,0,.14); font-size: 13px; font-family: inherit; background: var(--surface, #fff); color: inherit; }

@@ -302,12 +302,12 @@ function onSubmit(e) {
       {nf && (
         <Group title="Novo formulário">
           <Row label="Nome"><input value={nf.name} onChange={(e) => setNf({ ...nf, name: e.target.value })} placeholder="Ex.: Cotação de seguro auto (site)" /></Row>
-          <Row label="Funil">
+          <Row label="Funil do CRM onde o lead vai cair">
             <select value={nf.pipelineId} onChange={(e) => { const p = pipes.find((x) => x.id === e.target.value); setNf({ ...nf, pipelineId: e.target.value, stage: p?.stages?.[0]?.id || "" }); }}>
               {pipes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Row>
-          <Row label="Etapa">
+          <Row label="Etapa de entrada">
             <select value={nf.stage} onChange={(e) => setNf({ ...nf, stage: e.target.value })}>{(pipes.find((p) => p.id === nf.pipelineId)?.stages || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
           </Row>
           <Row label="Guardar respostas também no cérebro"><Switch checked={nf.toBrain} onChange={(v) => setNf({ ...nf, toBrain: v })} /></Row>
@@ -320,6 +320,16 @@ function onSubmit(e) {
           <div className="cx-form-head">
             <div><strong>{f.name}</strong><small>{pipeName(f.pipelineId)} · {f.count || 0} envio(s){f.lastAt ? ` · último ${new Date(f.lastAt).toLocaleString("pt-BR")}` : ""}</small></div>
             <button className="cx-x" title="Apagar" onClick={async () => { if (await askConfirm(`Apagar o formulário "${f.name}"? O link para de funcionar.`)) { await integrations.removeForm(f.id); reload(); } }}><Trash2 size={15} /></button>
+          </div>
+          <div className="cx-dest">
+            <span>Os leads caem em</span>
+            <select value={f.pipelineId || pipes[0]?.id || ""} onChange={async (e) => { const p = pipes.find((x) => x.id === e.target.value); try { await integrations.updateForm(f.id, { pipelineId: e.target.value, stage: p?.stages?.[0]?.id || null }); await reload(); notify("Funil atualizado.", "success"); } catch (er) { notify(errText(er), "error"); } }}>
+              {pipes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <span>na etapa</span>
+            <select value={f.stage || ""} onChange={async (e) => { try { await integrations.updateForm(f.id, { stage: e.target.value }); await reload(); notify("Etapa atualizada.", "success"); } catch (er) { notify(errText(er), "error"); } }}>
+              {(pipes.find((p) => p.id === (f.pipelineId || pipes[0]?.id))?.stages || []).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+            </select>
           </div>
           <div className="cx-inline"><input readOnly value={f.url} /><button className="pill-btn" onClick={() => copy(f.url)}><Copy size={13} /> Copiar link</button></div>
           <div className="cx-pick sm">
