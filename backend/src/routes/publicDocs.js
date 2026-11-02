@@ -11,7 +11,7 @@ const op = (tag, summary, extra = {}) => ({ tags: [tag], summary, responses: { 2
 export const spec = {
   openapi: "3.0.3",
   info: {
-    title: "Helora — API Pública",
+    title: "Helora, API Pública",
     version: "1.0",
     description: "API simples para integrar a Helora ao seu sistema.\n\n**Autenticação:** envie o header `X-API-Key` com a chave criada em Configurações → API.\n\n**Limite:** 120 requisições por minuto.\n\n**Webhooks:** cadastre URLs em Configurações → API para receber eventos (`mensagem.recebida`, `atendimento.finalizado`, `lead.criado`…). Cada POST traz o header `X-Helora-Signature` = HMAC-SHA256 do corpo com o segredo do webhook."
   },
@@ -54,7 +54,7 @@ export const spec = {
     "/crm/funis": { get: op("CRM", "Funis e etapas") },
     "/crm/leads": {
       get: op("CRM", "Lista leads", { parameters: [P("funilId", ""), P("etapa", ""), P("telefone", ""), P("busca", ""), ...pag] }),
-      post: op("CRM", "Cria lead. Use 'produto' para identificar o formulário/produto e 'campos' para os campos do funil", { requestBody: body({ nome: "Maria Souza", telefone: "5561999998888", email: "", empresa: "", produto: "Seguro Auto (ou lista: [\"Auto\", \"Vida\"])", formulario: "Cotação auto - home do site", funil: "Corretora de seguros (nome) — ou funilId", etapa: "A tratar (nome ou id)", campos: { type: "object", description: "Campos do funil pelo nome ou id. Ex.: {\"Tipo de negócio\": \"Venda nova\", \"Seguradora\": \"Porto Seguro\", \"Vigência\": \"21/11/2026\"}" }, valor: { type: "number" }, responsavelId: "", origem: "", observacoes: "" }, ["nome"]) })
+      post: op("CRM", "Cria lead. Use 'produto' para identificar o formulário/produto e 'campos' para os campos do funil", { requestBody: body({ nome: "Maria Souza", telefone: "5561999998888", email: "", empresa: "", produto: "Seguro Auto (ou lista: [\"Auto\", \"Vida\"])", formulario: "Cotação auto - home do site", funil: "Corretora de seguros (nome), ou funilId", etapa: "A tratar (nome ou id)", campos: { type: "object", description: "Campos do funil pelo nome ou id. Ex.: {\"Tipo de negócio\": \"Venda nova\", \"Seguradora\": \"Porto Seguro\", \"Vigência\": \"21/11/2026\"}" }, valor: { type: "number" }, responsavelId: "", origem: "", observacoes: "" }, ["nome"]) })
     },
     "/crm/leads/{id}": {
       patch: op("CRM", "Atualiza lead / muda de etapa", { parameters: [id], requestBody: body({ etapa: "", valor: { type: "number" }, nome: "", responsavelId: "" }) }),

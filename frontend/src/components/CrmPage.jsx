@@ -1201,7 +1201,7 @@ function ImportSheet({ ctx, onClose, onDone }) {
             {allFields.map(([field, label]) => (
               <Row key={field} label={label}>
                 <select value={map[field] || ""} onChange={(e) => setMap((m) => ({ ...m, [field]: e.target.value }))}>
-                  <option value="">— não importar —</option>
+                  <option value="">Não importar</option>
                   {headers.map((h) => <option key={h} value={h}>{h}</option>)}
                 </select>
               </Row>
@@ -1274,7 +1274,7 @@ function AgendaView({ ctx }) {
         <Button variant="secondary" onClick={() => setWeekStart((d) => new Date(d.getTime() - 7 * 86400000))}><ChevronLeft size={15} /></Button>
         <Button variant="secondary" onClick={() => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); setWeekStart(d); }}>Hoje</Button>
         <Button variant="secondary" onClick={() => setWeekStart((d) => new Date(d.getTime() + 7 * 86400000))}><ChevronRight size={15} /></Button>
-        <strong style={{ fontSize: 17 }}>{days[0].toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – {days[6].toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</strong>
+        <strong style={{ fontSize: 17 }}>{days[0].toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} a {days[6].toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</strong>
         <div style={{ flex: 1 }} />
         {g.configured && (g.connected
           ? <Button variant="secondary" title={g.email || ""} onClick={async () => { if (await askConfirm("Desconectar sua conta Google?")) { await googleDisconnectApi(); setG((x) => ({ ...x, connected: false })); } }}>🟢 Google Agenda</Button>
@@ -1459,7 +1459,7 @@ function ProductsView({ ctx }) {
             <Row label="Nome"><input autoFocus value={edit.name} onChange={(e) => setEdit((c) => ({ ...c, name: e.target.value }))} placeholder={edit.parentId ? "Ex: Auto passeio" : "Ex: Automóvel"} /></Row>
             <Row label="Dentro de">
               <select value={edit.parentId || ""} onChange={(e) => setEdit((c) => ({ ...c, parentId: e.target.value || null }))}>
-                <option value="">— produto principal —</option>
+                <option value="">Produto principal</option>
                 {roots.filter((r) => r.id !== edit.id).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </Row>

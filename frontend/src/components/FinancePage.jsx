@@ -23,7 +23,7 @@ export default function FinancePage() {
     <div className="page finance-page">
       {d.account.blocked && (
         <div className="admin-feedback error" style={{ marginBottom: 16 }}>
-          Seu acesso está pausado por falta de pagamento. Pague a fatura em aberto pelo PIX abaixo — a liberação é automática em poucos segundos.
+          Seu acesso está pausado por falta de pagamento. Pague a fatura em aberto pelo PIX abaixo, a liberação é automática em poucos segundos.
         </div>
       )}
       {pixFor && <PixModal invoice={pixFor} onClose={() => setPixFor(null)} onPaid={() => { setPixFor(null); load(); setTimeout(() => window.location.reload(), 800); }} />}
@@ -123,7 +123,7 @@ function PixModal({ invoice, onClose, onPaid }) {
         {pix && (
           <>
             {pix.encodedImage && <img alt="QR Code PIX" src={`data:image/png;base64,${pix.encodedImage}`} style={{ width: 230, height: 230, margin: "8px auto" }} />}
-            <div className="cv-muted" style={{ fontSize: 12, marginBottom: 8 }}>Abra o app do banco, escolha PIX e leia o QR Code — ou copie o código:</div>
+            <div className="cv-muted" style={{ fontSize: 12, marginBottom: 8 }}>Abra o app do banco, escolha PIX e leia o QR Code, ou copie o código:</div>
             <textarea readOnly className="response" value={pix.payload || ""} rows={3} style={{ width: "100%", fontSize: 11 }} />
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 10 }}>
               <button className="pill-btn primary" onClick={() => { navigator.clipboard.writeText(pix.payload || ""); setCopied(true); }}>{copied ? "Copiado ✓" : "Copiar código PIX"}</button>

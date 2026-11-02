@@ -22,8 +22,8 @@ export const notifyText = (r) => {
   if (!r) return "";
   if (r.error) return ` Aviso ao cliente: ${r.error}`;
   const p = [];
-  if (r.whatsapp) p.push(`WhatsApp ${r.whatsapp === "enviado" ? "enviado ✓" : r.whatsapp.replace(/^erro: /, "não enviado — ")}`);
-  if (r.email) p.push(`e-mail ${r.email === "enviado" ? "enviado ✓" : r.email.replace(/^erro: /, "não enviado — ")}`);
+  if (r.whatsapp) p.push(`WhatsApp ${r.whatsapp === "enviado" ? "enviado ✓" : r.whatsapp.replace(/^erro: /, "não enviado: ")}`);
+  if (r.email) p.push(`e-mail ${r.email === "enviado" ? "enviado ✓" : r.email.replace(/^erro: /, "não enviado: ")}`);
   return p.length ? ` ${p.join(" · ")}.` : "";
 };
 const daysSince = (iso) => Math.max(0, Math.floor((Date.now() - new Date(iso || Date.now()).getTime()) / 86400000));

@@ -48,7 +48,7 @@ export default function TicketActions({
       <button
         type="button"
         className="ticket-action-btn"
-        title={inQueue ? "Já está na fila (sem atendente atribuído)" : "Devolver para a fila — remove o atendente responsável"}
+        title={inQueue ? "Já está na fila (sem atendente atribuído)" : "Devolver para a fila, remove o atendente responsável"}
         onClick={handleMoveToQueue}
         disabled={inQueue}
       >

@@ -4,6 +4,7 @@ import { Attendants } from "./IaHeloraPage.jsx";
 import {
   Trash2,
   Bot,
+  ChevronRight,
   ArrowLeft,
   MessageSquareText,
   MessagesSquare,
@@ -112,10 +113,16 @@ const CARDS = [
 
 export default function SettingsPage({ onGoToChannels, canManage = false, apiEnabled = false }) {
   const [tab, setTab] = useState(null);
+  useEffect(() => {
+    const on = (e) => e.detail === "settings" && setTab(null);
+    window.addEventListener("helora:nav-reset", on);
+    return () => window.removeEventListener("helora:nav-reset", on);
+  }, []);
 
   if (tab === null) {
     return (
       <div className="page">
+        <h1 className="set-title">Configurações</h1>
         <div className="settings-grid">
           {CARDS.filter((c) => (!c.ownerOnly || canManage) && (c.key !== "api" || apiEnabled)).map(({ key, label, desc, icon: Icon, external }) => (
             <button
@@ -139,12 +146,10 @@ export default function SettingsPage({ onGoToChannels, canManage = false, apiEna
 
   return (
     <div className="page">
-      <button className="settings-back-btn" onClick={() => setTab(null)}>
-        <ArrowLeft size={14} style={{ marginRight: 6, verticalAlign: -2 }} />
-        Configurações
-      </button>
-      <div className="card-title" style={{ marginBottom: 16 }}>
-        {current?.label}
+      <div className="set-crumb">
+        <button onClick={() => setTab(null)}>Configurações</button>
+        <ChevronRight size={18} />
+        <h1>{current?.label}</h1>
       </div>
 
       {tab === "aiagents" && canManage && <Attendants isManager={canManage} />}
@@ -347,7 +352,7 @@ function CannedResponsesTab({ canManage }) {
     <div className="card">
       <div className="card-title">Respostas prontas do atendente</div>
       <div className="card-subtitle">
-        Atalhos que o <strong>atendente</strong> escolhe manualmente ao digitar no chat — é só
+        Atalhos que o <strong>atendente</strong> escolhe manualmente ao digitar no chat, é só
         digitar <code>/</code> seguido do atalho e escolher na lista.
       </div>
 
@@ -429,7 +434,7 @@ function LabelsTab() {
     <div className="card">
       <div className="card-title">Etiquetas</div>
       <div className="card-subtitle">
-        Organize as conversas por assunto, urgência ou qualquer critério — aparecem na lista de
+        Organize as conversas por assunto, urgência ou qualquer critério, aparecem na lista de
         conversas e podem ser usadas como filtro.
       </div>
 
@@ -911,7 +916,7 @@ document.getElementById("lead").onsubmit = async (e) => {
         </form>
         {created && (
           <div className="api-key-new">
-            <strong>Copie agora — ela não aparece de novo:</strong>
+            <strong>Copie agora, ela não aparece de novo:</strong>
             <code>{created.key}</code>
             <button className="pill-btn" onClick={() => copy(created.key)}><Copy size={14} /> Copiar</button>
           </div>

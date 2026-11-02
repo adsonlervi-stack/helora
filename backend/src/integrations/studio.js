@@ -27,7 +27,7 @@ export async function studioChat(accountId, messages) {
     "Você cria: posts e legendas para redes sociais, textos de campanha de WhatsApp, e-mails, roteiros de vídeo, propostas comerciais, respostas para clientes, scripts de atendimento, ideias de conteúdo e análises.",
     "Entregue o conteúdo pronto para usar (sem enrolação). Para redes sociais, inclua sugestão de legenda e hashtags. Mensagens de WhatsApp: curtas, com *negrito* do WhatsApp quando ajudar, sem markdown de títulos.",
     "Se o pedido for uma imagem/arte, descreva a ideia e diga que a pessoa pode clicar em \"Gerar imagem\" ou \"Criar no Canva\". Se for um fluxo de atendimento, diga que ela pode clicar em \"Criar fluxo\".",
-    ctx ? `CONHECIMENTO DA EMPRESA (use quando for relevante; não invente o que não estiver aqui — preços, prazos, coberturas):\n${ctx}` : "A empresa ainda não alimentou o cérebro. Se precisar de dados específicos (preços, produtos), peça para a pessoa informar ou adicionar no Cérebro (aba Conexões).",
+    ctx ? `CONHECIMENTO DA EMPRESA (use quando for relevante; não invente o que não estiver aqui, preços, prazos, coberturas):\n${ctx}` : "A empresa ainda não alimentou o cérebro. Se precisar de dados específicos (preços, produtos), peça para a pessoa informar ou adicionar no Cérebro (aba Conexões).",
     facts.leads != null ? `Dados do Helora: ${facts.leads} leads no CRM, ${facts.openConv ?? 0} conversas em aberto.` : ""
   ].filter(Boolean).join("\n\n");
   const reply = await aiChat({ accountId, system, messages: msgs, maxTokens: 1500 });

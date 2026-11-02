@@ -79,7 +79,7 @@ export default function ScheduledMessagesTab() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">Agendar mensagem</div>
         <div className="card-subtitle">
-          Escolha uma conversa, escreva o texto e a data/hora — o sistema envia sozinho quando
+          Escolha uma conversa, escreva o texto e a data/hora, o sistema envia sozinho quando
           chegar a hora (verifica a cada minuto).
         </div>
 
@@ -90,7 +90,7 @@ export default function ScheduledMessagesTab() {
               <option value="">Selecione uma conversa...</option>
               {conversations.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name || "Sem nome"} — {c.platform}
+                  {c.name || "Sem nome"} · {c.platform}
                 </option>
               ))}
             </select>

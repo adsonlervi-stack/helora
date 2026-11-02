@@ -5,7 +5,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn(
-    "VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY não configurados — veja o .env.example"
+    "VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY não configurados. Veja o .env.example"
   );
 }
 

@@ -30,7 +30,7 @@ const MAIL_BRANDS = [
   { id: "yahoo", name: "Yahoo", color: "#6001D2", imapHost: "imap.mail.yahoo.com", imapPort: 993, smtpHost: "smtp.mail.yahoo.com", smtpPort: 465, tip: "Gere uma senha de app em Conta Yahoo → Segurança da conta." },
   { id: "icloud", name: "iCloud", slug: "icloud", color: "#3693F3", imapHost: "imap.mail.me.com", imapPort: 993, smtpHost: "smtp.mail.me.com", smtpPort: 587, tip: "Use uma senha específica de app (appleid.apple.com → Iniciar sessão e segurança)." },
   { id: "zoho", name: "Zoho Mail", slug: "zoho", color: "#E42527", imapHost: "imap.zoho.com", imapPort: 993, smtpHost: "smtp.zoho.com", smtpPort: 465, tip: "Ative o acesso IMAP em Configurações do Zoho Mail → Contas de e-mail." },
-  { id: "proton", name: "Proton Mail", slug: "protonmail", color: "#6D4AFF", imapHost: "127.0.0.1", imapPort: 1143, smtpHost: "127.0.0.1", smtpPort: 1025, tip: "O Proton só libera IMAP pelo Proton Bridge (programa no computador) — não funciona em servidor. Prefira outro provedor." },
+  { id: "proton", name: "Proton Mail", slug: "protonmail", color: "#6D4AFF", imapHost: "127.0.0.1", imapPort: 1143, smtpHost: "127.0.0.1", smtpPort: 1025, tip: "O Proton só libera IMAP pelo Proton Bridge (programa no computador), não funciona em servidor. Prefira outro provedor." },
   { id: "hostinger", name: "Hostinger", slug: "hostinger", color: "#673DE6", imapHost: "imap.hostinger.com", imapPort: 993, smtpHost: "smtp.hostinger.com", smtpPort: 465 },
   { id: "locaweb", name: "Locaweb", color: "#E2001A", imapHost: "email-ssl.com.br", imapPort: 993, smtpHost: "email-ssl.com.br", smtpPort: 465 },
   { id: "uol", name: "UOL", color: "#F5A100", imapHost: "imap.uol.com.br", imapPort: 993, smtpHost: "smtps.uol.com.br", smtpPort: 465 },

@@ -139,7 +139,7 @@ export async function exportConversation(res, accountId, conversationId, opts = 
     totalMidias: [...media.values()].filter((v) => v.file).length,
     exportadoPor: opts.exportedBy || "",
     exportadoEm: `${dt(now.toISOString())} (horário de Brasília) · ${now.toISOString()} (UTC)`,
-    sistema: "Helora — plataforma de atendimento",
+    sistema: "Helora, plataforma de atendimento",
     fusoHorario: "America/Sao_Paulo (UTC−03:00)"
   };
 
@@ -157,7 +157,7 @@ export async function exportConversation(res, accountId, conversationId, opts = 
 
   // ---- Relatório (abre no navegador; Ctrl+P salva em PDF) ----
   const mediaHashTable = rows.filter((r) => r.midiaSha256);
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de conversa — ${esc(meta.contato || meta.telefoneContato)}</title>
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de conversa, ${esc(meta.contato || meta.telefoneContato)}</title>
 <style>
 body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px;font-size:12px}
 h1{font-size:18px;margin:0 0 4px} h2{font-size:14px;margin:24px 0 8px;border-bottom:1px solid #999;padding-bottom:4px}

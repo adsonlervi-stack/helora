@@ -69,7 +69,7 @@ export default function SupportChat({ onClose }) {
         <div className="support-waiting">
           <Clock size={15} />
           <span>
-            Seu chamado está na fila{thread.queuePosition ? ` (posição ${thread.queuePosition})` : ""}. Pode continuar escrevendo —
+            Seu chamado está na fila{thread.queuePosition ? ` (posição ${thread.queuePosition})` : ""}. Pode continuar escrevendo,
             avisamos aqui quando alguém entrar.
           </span>
         </div>

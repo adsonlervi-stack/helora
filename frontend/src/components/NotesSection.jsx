@@ -27,7 +27,7 @@ export default function NotesSection({ conversationId }) {
 
   return (
     <div>
-      <p className="notes-panel-hint">Visíveis só para a equipe — nunca são enviadas ao cliente.</p>
+      <p className="notes-panel-hint">Visíveis só para a equipe, nunca são enviadas ao cliente.</p>
 
       <form className="notes-form" onSubmit={handleSubmit}>
         <textarea

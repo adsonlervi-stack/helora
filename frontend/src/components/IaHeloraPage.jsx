@@ -121,7 +121,7 @@ function Studio({ canva, isManager }) {
             <div className="ih-empty">
               <span className="ih-orb big"><Sparkles size={28} /></span>
               <h3>O que vamos criar hoje?</h3>
-              <p>Textos, posts, campanhas, e-mails, imagens, artes no Canva e fluxos de atendimento — usando o que a sua empresa ensinou no Cérebro.</p>
+              <p>Textos, posts, campanhas, e-mails, imagens, artes no Canva e fluxos de atendimento, usando o que a sua empresa ensinou no Cérebro.</p>
               <div className="ih-ideas">{IDEAS.map((i) => <button key={i} onClick={() => send(i)}>{i}</button>)}</div>
             </div>
           )}
@@ -190,7 +190,7 @@ export function Attendants({ isManager }) {
   return (
     <div className="ih-att">
       <div className="ih-card">
-        <div className="ih-card-head"><div><h3>Canais</h3><p>Escolha qual atendente IA responde em cada número. Com um atendente ligado, ele responde tudo sozinho — e passa para um humano quando o cliente pedir ou quando não souber.</p></div></div>
+        <div className="ih-card-head"><div><h3>Canais</h3><p>Escolha qual atendente IA responde em cada número. Com um atendente ligado, ele responde tudo sozinho, e passa para um humano quando o cliente pedir ou quando não souber.</p></div></div>
         {!channels.length && <div className="ap-empty">Nenhum canal cadastrado.</div>}
         {channels.map((c) => (
           <div key={c.id} className="ih-ch">
@@ -258,7 +258,7 @@ function AttendantSheet({ a, isManager, onClose, onSaved }) {
       {tab === "instr" && (
         <>
           <Group title="Quem é este atendente">
-            <Row label="Nome"><input value={f.name} onChange={set("name")} placeholder="Ex.: Ana — Atendimento Seguros" /></Row>
+            <Row label="Nome"><input value={f.name} onChange={set("name")} placeholder="Ex.: Ana, Atendimento Seguros" /></Row>
             <Row label="Prompt de atendimento (obrigatório)" stack>
               <textarea rows={9} value={f.prompt} onChange={set("prompt")} placeholder={"Ex.: Você é a Ana, da Parcer Seguros. Atenda com simpatia, pergunte o nome do cliente e qual seguro ele procura (auto, vida, residencial, empresarial). Para cotação, peça os dados necessários. Nunca informe preço sem cotação. Em caso de sinistro, transfira para um atendente."} />
             </Row>

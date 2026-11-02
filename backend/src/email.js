@@ -38,7 +38,7 @@ export async function sendEmail(templateEnvVar, params) {
     return sendMail({
       to: params.to_email, name: params.to_name, subject: "Redefinir sua senha – Helora", title: "Redefinir sua senha",
       message: "Recebemos um pedido para redefinir a sua senha. Toque no botão abaixo para criar uma nova. O link vale por 1 hora.",
-      buttonText: "Criar nova senha", buttonLink: params.reset_link, note: "Não foi você? Pode ignorar este e-mail — sua senha continua a mesma."
+      buttonText: "Criar nova senha", buttonLink: params.reset_link, note: "Não foi você? Pode ignorar este e-mail, sua senha continua a mesma."
     });
   return sendMail({
     to: params.to_email, name: params.to_name, subject: params.title, title: params.title, message: params.message,

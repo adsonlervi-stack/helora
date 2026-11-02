@@ -92,7 +92,7 @@ export default function LoginPage() {
         <div className="login2-hero">
           <span className="login2-pill">WhatsApp · Instagram · Messenger</span>
           <h2>Todo o atendimento da sua empresa em um só lugar.</h2>
-          <p>Bot que responde 24h, equipe organizada por setores, pipeline de vendas e campanhas — tudo conectado ao seu WhatsApp.</p>
+          <p>Bot que responde 24h, equipe organizada por setores, pipeline de vendas e campanhas, tudo conectado ao seu WhatsApp.</p>
 
           <div className="login2-chat">
             <div className="lc-head">

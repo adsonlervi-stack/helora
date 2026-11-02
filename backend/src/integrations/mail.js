@@ -39,7 +39,7 @@ export async function testMail(raw) {
   if (!c.email || !c.password) throw new Error("Informe o e-mail e a senha.");
   if (!c.imapHost || !c.smtpHost) throw new Error("Não reconheci o provedor deste e-mail. Preencha os servidores IMAP e SMTP (o seu provedor informa).");
   const imap = await imapClient(c);
-  try { await imap.connect(); } catch (e) { throw new Error(`Não consegui entrar na caixa de entrada (IMAP): ${e.responseText || e.message}. Confira a senha${mailPreset(c.email)?.note ? ` — ${mailPreset(c.email).note}` : ""}.`); }
+  try { await imap.connect(); } catch (e) { throw new Error(`Não consegui entrar na caixa de entrada (IMAP): ${e.responseText || e.message}. Confira a senha${mailPreset(c.email)?.note ? `, ${mailPreset(c.email).note}` : ""}.`); }
   await imap.logout().catch(() => {});
   const t = await smtpTransport(c);
   try { await t.verify(); } catch (e) { throw new Error(`Login de envio (SMTP) falhou: ${e.message}`); }

@@ -29,7 +29,7 @@ export function chunkText(text, size = 1200) {
 /** Guarda (ou atualiza, quando tem ref) um documento no cérebro. */
 export async function addDoc(accountId, { source = "texto", title, url = null, ref = null, content, meta = {}, createdBy = null, agentIds = null }) {
   const text = String(content || "").slice(0, MAX_DOC_CHARS);
-  if (text.trim().length < 3) throw new Error("O conteúdo está vazio — não há texto para guardar.");
+  if (text.trim().length < 3) throw new Error("O conteúdo está vazio, não há texto para guardar.");
   const chunks = chunkText(text);
   let doc = null;
   if (ref) {

@@ -71,6 +71,7 @@ export default function App() {
         if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight) el.scrollTo({ top: 0, behavior: "smooth" });
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
+      window.dispatchEvent(new CustomEvent("helora:nav-reset", { detail: key }));
       return;
     }
     setSection(key);
@@ -366,7 +367,7 @@ export default function App() {
             <button onClick={leaveAccount}>Sair da empresa</button>
           </div>
         )}
-        {!["home", "channels", "campaigns", "agents", "connections", "ia", "conversations"].includes(activeSection) && <TopBar section={activeSection} hideNotifications={isHeloraPanel} />}
+        {!["home", "channels", "campaigns", "agents", "connections", "ia", "conversations", "settings"].includes(activeSection) && <TopBar section={activeSection} hideNotifications={isHeloraPanel} />}
 
         <div className="shell-content">
           {activeSection === "home" && (

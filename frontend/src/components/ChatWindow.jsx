@@ -411,7 +411,7 @@ function ScheduleModal({ conversation, initialText, onClose, defaultSign }) {
         {recurrence === "monthly" && <label className="login-field"><span>Dia do mês</span><input type="number" min="1" max="28" value={recurDay} onChange={(e) => setRecurDay(e.target.value)} /></label>}
         {recurrence === "interval" && <label className="login-field"><span>Repetir a cada (dias)</span><input type="number" min="1" max="365" value={recurEvery} onChange={(e) => setRecurEvery(e.target.value)} /></label>}
         {recurrence !== "none" && (
-          <label className="bh-switch"><input type="checkbox" checked={needsAttachment} onChange={(e) => setNeedsAttachment(e.target.checked)} /> O anexo muda a cada envio (ex.: boleto) — me pedir o arquivo antes de enviar</label>
+          <label className="bh-switch"><input type="checkbox" checked={needsAttachment} onChange={(e) => setNeedsAttachment(e.target.checked)} /> O anexo muda a cada envio (ex.: boleto), me pedir o arquivo antes de enviar</label>
         )}
         {!needsAttachment && (
           <label className="login-field"><span>Anexo (opcional)</span><input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} /></label>

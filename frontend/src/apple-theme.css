@@ -2697,3 +2697,10 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 /* ===================== V14 · Telas ocupam a largura toda ===================== */
 .page, .cx-page, .ih-page, .home2, .cx2 { max-width: none !important; }
 .page { padding-left: 28px; padding-right: 28px; }
+/* Títulos de página padronizados */
+.page-head { padding: 24px 28px 0 !important; }
+.page-head .topbar-title, .set-title, .set-crumb h1, .ch2-head h2, .cx2-title, .ih-title h2 { font-family: var(--font-display); font-size: 24px !important; font-weight: 700; letter-spacing: -0.02em; color: #1d1d1f; margin: 0; }
+.set-title { margin: 0 0 18px; }
+.set-crumb { display: flex; align-items: center; gap: 6px; margin: 0 0 18px; color: #8e8e93; }
+.set-crumb button { border: 0; background: transparent; padding: 0; font-family: var(--font-display); font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: #8e8e93; cursor: pointer; }
+.set-crumb button:hover { color: #0071e3; }

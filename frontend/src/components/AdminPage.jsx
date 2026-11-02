@@ -250,7 +250,7 @@ function UsersTab() {
           <div className="role-legend-card">
             <span className="team-role-badge agent">Atendente</span>
             <p>
-              Só vê conversas do(s) próprio(s) setor(es) ou atribuídas diretamente a ele — não
+              Só vê conversas do(s) próprio(s) setor(es) ou atribuídas diretamente a ele, não
               acessa Setores, Equipe nem Canais.
             </p>
           </div>
@@ -329,7 +329,7 @@ function AnnouncementsTab() {
         <div className="card">
           <div className="card-title">Enviar comunicado</div>
           <div className="card-subtitle">
-            Aparece no Início de quem se encaixa no destino escolhido — dá pra avisar sobre
+            Aparece no Início de quem se encaixa no destino escolhido, dá pra avisar sobre
             manutenções, novidades ou instabilidades.
           </div>
 
@@ -373,7 +373,7 @@ function AnnouncementsTab() {
                   <option value="">Selecione um usuário...</option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.name || "Sem nome"} — {u.accountName}
+                      {u.name || "Sem nome"} · {u.accountName}
                     </option>
                   ))}
                 </select>

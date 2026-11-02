@@ -153,7 +153,7 @@ export async function emailContract({ userId, accountId }) {
     const recipients = [...new Set([u?.user?.email, acc?.contact_email].filter(Boolean))];
     for (const to of recipients) {
       await sendMail({
-        to, name: acc?.name || "Cliente", label: "Contrato", subject: "Contrato Helora aceito — sua cópia",
+        to, name: acc?.name || "Cliente", label: "Contrato", subject: "Contrato Helora aceito, sua cópia",
         title: "Contrato de prestação de serviços",
         message: `O contrato da Helora para ${acc?.name || "sua empresa"} foi aceito em ${when} por ${u?.user?.email || "um gestor"}.\n\nGuarde este e-mail como comprovante. A íntegra do contrato está no link abaixo.`,
         buttonText: "Ver o contrato", buttonLink: `${appUrl()}/contrato.html`, note: "Dúvidas? Responda este e-mail ou fale com o suporte dentro do sistema."

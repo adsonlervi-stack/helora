@@ -49,7 +49,7 @@ export function DashboardTab() {
     return (
       <div className="admin-feedback error">
         {error}
-        {/invoices|column/i.test(error) && " — rode o arquivo migration_012_gestao_cobrancas.sql no Supabase."}
+        {/invoices|column/i.test(error) && ", rode o arquivo migration_012_gestao_cobrancas.sql no Supabase."}
       </div>
     );
   if (!d) return <div className="card">Carregando…</div>;
@@ -439,7 +439,7 @@ export function SupportTab() {
     return (
       <div className="admin-feedback error">
         {error}
-        {/support/i.test(error) && " — rode o arquivo migration_013_contatos_suporte.sql no Supabase."}
+        {/support/i.test(error) && ", rode o arquivo migration_013_contatos_suporte.sql no Supabase."}
       </div>
     );
 
@@ -547,7 +547,7 @@ export function CreditsTab() {
   };
 
   if (error && !rows.length)
-    return <div className="admin-feedback error">{error}{/credit/i.test(error) && " — rode o arquivo migration_015 no Supabase."}</div>;
+    return <div className="admin-feedback error">{error}{/credit/i.test(error) && ", rode o arquivo migration_015 no Supabase."}</div>;
 
   return (
     <div className="support-admin">

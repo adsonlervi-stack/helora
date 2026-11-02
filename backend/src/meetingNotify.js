@@ -57,14 +57,14 @@ export async function notifyMeeting(accountId, eventId, channels = {}, byName = 
   if (channels.email) {
     if (!lead.email) result.email = "erro: o cliente não tem e-mail no card";
     else {
-      const subject = `Convite: ${ev.title}${company ? ` · ${company}` : ""} — ${new Date(ev.starts_at).toLocaleDateString("pt-BR", { timeZone: TZ })} ${fmtTime(ev.starts_at)}`;
-      const body = `Olá${first ? `, ${first}` : ""}!\n\nSua ${ev.title}${company ? ` com a ${company}` : ""} está agendada para ${when}.${ev.meet_link ? `\n\nLink da reunião: ${ev.meet_link}` : ""}${ev.notes ? `\n\n${ev.notes}` : ""}\n\nO convite está em anexo — abra para adicionar à sua agenda.`;
+      const subject = `Convite: ${ev.title}${company ? ` · ${company}` : ""}, ${new Date(ev.starts_at).toLocaleDateString("pt-BR", { timeZone: TZ })} ${fmtTime(ev.starts_at)}`;
+      const body = `Olá${first ? `, ${first}` : ""}!\n\nSua ${ev.title}${company ? ` com a ${company}` : ""} está agendada para ${when}.${ev.meet_link ? `\n\nLink da reunião: ${ev.meet_link}` : ""}${ev.notes ? `\n\n${ev.notes}` : ""}\n\nO convite está em anexo, abra para adicionar à sua agenda.`;
       try {
         const ics = buildIcs({ uid: ev.id, title: `${ev.title}${company ? ` · ${company}` : ""}`, startsAt: ev.starts_at, endsAt: ev.ends_at, description: body, location: ev.meet_link || "", attendeeEmail: lead.email });
         const sent = await sendCompanyMail(accountId, { to: lead.email, subject, text: body, attachments: [{ filename: "convite.ics", content: ics, contentType: "text/calendar; charset=utf-8; method=REQUEST" }], icalEvent: undefined });
         if (sent) result.email = "enviado";
         else {
-          const ok = await sendMail({ to: lead.email, name: lead.name, label: "Reunião", subject, title: ev.title, message: body.replace("O convite está em anexo — abra para adicionar à sua agenda.", "Toque no botão para adicionar à sua agenda."), buttonText: "Adicionar à agenda", buttonLink: gcalLink({ title: ev.title, startsAt: ev.starts_at, endsAt: ev.ends_at, details: ev.meet_link || "" }) });
+          const ok = await sendMail({ to: lead.email, name: lead.name, label: "Reunião", subject, title: ev.title, message: body.replace("O convite está em anexo, abra para adicionar à sua agenda.", "Toque no botão para adicionar à sua agenda."), buttonText: "Adicionar à agenda", buttonLink: gcalLink({ title: ev.title, startsAt: ev.starts_at, endsAt: ev.ends_at, details: ev.meet_link || "" }) });
           result.email = ok === false ? "erro: conecte o e-mail da empresa na aba Conexões" : "enviado";
         }
       } catch (err) { result.email = `erro: ${err.message}`; }

@@ -83,7 +83,7 @@ async function aiTurn({ accountId, conversation, node, vars, dryRun, text, testH
     `Você é o atendente virtual de ${acc?.name || "uma empresa"} no WhatsApp. Responda em português do Brasil, de forma natural, curta e humana (sem markdown além de *negrito*).`,
     instructions ? `PROMPT DA EMPRESA (siga à risca):\n${instructions}` : "",
     d.knowledge ? `Base de conhecimento:\n${d.knowledge}` : "",
-    brain ? `CONHECIMENTO DA EMPRESA (trechos dos documentos que a empresa cadastrou — use para responder):\n${brain}` : "",
+    brain ? `CONHECIMENTO DA EMPRESA (trechos dos documentos que a empresa cadastrou, use para responder):\n${brain}` : "",
     "Não invente preços, prazos ou políticas que não estejam no prompt ou no conhecimento da empresa.",
     vars?.nome ? `Nome do cliente: ${vars.nome}.` : "",
     `Se o cliente pedir para falar com uma pessoa, estiver irritado, ou você não souber responder com segurança, avise que vai transferir para um atendente e termine a mensagem com ${HUMAN_TAG}.`,
@@ -436,7 +436,7 @@ export async function runGraph(ctx) {
     } else if (node.type === "lookup") {
       let lead = null;
       try { lead = await findLeadByPhone(accountId, vars.telefone, d.pipelineId || null); } catch (err) { console.warn("[Fluxo] consulta CRM:", err.message); }
-      if (!lead && dryRun) log.push("🔎 (cliente não encontrado no CRM — no teste o número é fictício)");
+      if (!lead && dryRun) log.push("🔎 (cliente não encontrado no CRM, no teste o número é fictício)");
       if (lead) {
         Object.assign(vars, leadVars(lead));
         track(node.id, "reply", "found");

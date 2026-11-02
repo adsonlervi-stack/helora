@@ -12,13 +12,13 @@ const TYPE_LABELS = {
 export function nodeLabel(node, index) {
   if (!node) return "";
   const preview = (node.text || "").trim().replace(/\s+/g, " ").slice(0, 34);
-  return `${index + 1}. ${TYPE_LABELS[node.type] || node.type}${preview ? " — " + preview : ""}`;
+  return `${index + 1}. ${TYPE_LABELS[node.type] || node.type}${preview ? ": " + preview : ""}`;
 }
 
 function NextNodeSelect({ value, onChange, nodeOrder, excludeId, allowEnd = true }) {
   return (
     <select className="flow-select" value={value || ""} onChange={(e) => onChange(e.target.value || null)}>
-      <option value="">{allowEnd ? "— encerra o roteiro aqui —" : "— escolha um nó —"}</option>
+      <option value="">{allowEnd ? "Encerra o roteiro aqui" : "Escolha um nó"}</option>
       {nodeOrder
         .filter((n) => n.id !== excludeId)
         .map((n, i) => (

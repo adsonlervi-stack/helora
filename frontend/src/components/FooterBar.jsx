@@ -37,7 +37,7 @@ export default function FooterBar({ note, canEdit, onUpdated }) {
               rows={3}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Ex: Helora v1.0 — atualizado em 08/07/2026"
+              placeholder="Ex: Helora v1.0, atualizado em 08/07/2026"
               autoFocus
             />
             <button className="connect-btn" style={{ marginTop: 12 }} onClick={save}>

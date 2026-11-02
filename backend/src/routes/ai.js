@@ -52,7 +52,7 @@ router.post("/prompts", requireOwner, async (req, res) => {
   try {
     if (!(await allowed(req))) return res.status(403).json({ error: "O módulo de IA não está liberado para a sua empresa." });
     if (!String(req.body?.name || "").trim()) return res.status(400).json({ error: "Dê um nome ao prompt." });
-    if (String(req.body?.prompt || "").trim().length < 30) return res.status(400).json({ error: "Escreva o prompt de atendimento (como a IA deve atender) — ele é obrigatório, com pelo menos 30 caracteres." });
+    if (String(req.body?.prompt || "").trim().length < 30) return res.status(400).json({ error: "Escreva o prompt de atendimento (como a IA deve atender), ele é obrigatório, com pelo menos 30 caracteres." });
     const { data, error } = await supabase.from("ai_prompts").insert({ ...row(req.body), account_id: req.accountId }).select().single();
     if (error) throw error;
     res.status(201).json(map(data));

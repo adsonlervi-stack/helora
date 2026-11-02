@@ -110,7 +110,7 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
       setMsg({
         type: "success",
         text: `Sincronização feita: ${r.fromWhatsApp} contato(s) recebidos do WhatsApp e ${r.fromConversations} novo(s) a partir das conversas.${
-          r.fromWhatsApp === 0 ? " Se a agenda não veio, desconecte e conecte o WhatsApp de novo em Canais — o celular envia a agenda ao vincular." : ""
+          r.fromWhatsApp === 0 ? " Se a agenda não veio, desconecte e conecte o WhatsApp de novo em Canais, o celular envia a agenda ao vincular." : ""
         }`
       });
       load();

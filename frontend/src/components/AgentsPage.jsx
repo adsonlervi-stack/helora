@@ -193,7 +193,7 @@ export default function AgentsPage() {
 
       {errors.length > 0 && (
         <div className="flow-errors">
-          <strong>Não deu pra salvar — corrija antes:</strong>
+          <strong>Não deu pra salvar, corrija antes:</strong>
           <ul>
             {errors.map((e, i) => (
               <li key={i}>{e}</li>
