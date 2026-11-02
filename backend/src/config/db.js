@@ -947,7 +947,17 @@ export async function addMessage({
   return mapMessage(msgRow);
 }
 
-export async function listMessages(accountId, conversationId) {
+export async function listMessages(accountId, conversationId, opts = {}) {
+  if (opts.limit) {
+    let q = supabase.from("messages").select("*").eq("account_id", accountId).eq("conversation_id", conversationId);
+    if (opts.before) q = q.lt("timestamp", opts.before);
+    const { data, error } = await q.order("timestamp", { ascending: false }).limit(opts.limit + 1);
+    if (error) throw error;
+    const more = data.length > opts.limit;
+    const page = data.slice(0, opts.limit).reverse().map(mapMessage);
+    page.hasMore = more;
+    return page;
+  }
   const { data, error } = await supabase
     .from("messages")
     .select("*")

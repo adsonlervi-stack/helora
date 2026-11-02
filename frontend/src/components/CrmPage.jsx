@@ -580,8 +580,12 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
   const TYPE_HINT = { text: "Nome, apólice, placa…", textarea: "Observações, negociação", number: "Nº de vidas, parcelas", currency: "Prêmio, comissão", date: "Vigência, nascimento", select: "Seguradora, ramo, status", document: "Valida e busca dados do CNPJ" };
   const upd = (i, patch) => setList((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const move = (i, d) => setList((l) => { const a = [...l]; const j = i + d; if (j < 0 || j >= a.length) return a; [a[i], a[j]] = [a[j], a[i]]; return a; });
+  const [dragI, setDragI] = useState(null);
+  const dropAt = (to) => { if (dragI === null || dragI === to) return; setList((l) => { const a = [...l]; const [x] = a.splice(dragI, 1); a.splice(to, 0, x); return a; }); setOpenI(null); setDragI(null); };
   const save = async () => {
-    setBusy(true);
+    const semTexto = list.find((f) => (f.reminders || []).some((r) => !String(r.text || "").trim()));
+    if (semTexto) { setErr(`Escreva a mensagem do lembrete em “${semTexto.label || "campo de data"}” ou remova o lembrete.`); return; }
+    setBusy(true); setErr(null);
     try {
       await crm.updatePipeline(pipeline.id, { fields: list.filter((f) => f.label.trim()).map((f) => ({ ...f, options: f.type === "select" ? String(f.options || "").split("\n") : undefined })) });
       onSaved();
@@ -593,12 +597,11 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
       footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar campos"}</Button></>}>
       <Group>
         {list.map((f, i) => (
-          <div key={f.id || i} className="crm-field-edit">
+          <div key={f.id || i} className={`crm-field-edit ${dragI === i ? "dragging" : ""}`}
+            onDragOver={(e) => { if (dragI !== null) e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); dropAt(i); }}>
             <div className="crm-field-row">
-              <span className="crm-field-order">
-                <button type="button" className="fi-icon" onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp size={13} /></button>
-                <button type="button" className="fi-icon" onClick={() => move(i, 1)} disabled={i === list.length - 1}><ArrowDown size={13} /></button>
-              </span>
+              <span className="crm-field-grip" draggable title="Arraste para mudar a ordem"
+                onDragStart={(e) => { setDragI(i); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => setDragI(null)}><GripVertical size={15} /></span>
               <span className="crm-field-ico" title={FIELD_TYPE_LABEL[f.type]}>{TYPE_ICON[f.type] || "Aa"}</span>
               <input className="crm-field-label" value={f.label} onChange={(e) => upd(i, { label: e.target.value })} onFocus={() => setOpenI(i)} placeholder="Nome do campo (ex.: Apólice)" />
               {f.card && <span className="crm-field-chip">No card</span>}

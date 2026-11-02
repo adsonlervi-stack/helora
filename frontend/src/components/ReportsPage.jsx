@@ -62,7 +62,8 @@ function AttendanceQuery() {
       .catch((e) => setError(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
   };
-  useEffect(gerar, []);
+  const [shown, setShown] = useState(100);
+  useEffect(() => setShown(100), [rows]);
   const head = ["Bilhete", "Status", "Nome", "Contato", "Canal", "Agente", "Setor", "Etiquetas", "Aberto em", "Fechado em"];
   const line = (r) => [r.ticket, STATUS_LABEL[r.status] || r.status, r.name, r.phone ? "+" + r.phone : "", r.channel, r.agent || "", r.department || "", r.labels.join(", "), dt(r.createdAt), r.resolvedAt ? dt(r.resolvedAt) : ""];
   const excel = () => {
@@ -119,10 +120,12 @@ function AttendanceQuery() {
         <table className="rep-table">
           <thead><tr>{head.map((h) => <th key={h}>{h}</th>)}</tr></thead>
           <tbody>
-            {(rows || []).map((r) => (
+            {(rows || []).slice(0, shown).map((r) => (
               <tr key={r.id}>{line(r).map((v, i) => <td key={i}>{i === 2 ? <strong>{v}</strong> : v}</td>)}</tr>
             ))}
             {rows && !rows.length && <tr><td colSpan={head.length} className="cv-muted">Nenhum atendimento com esses filtros.</td></tr>}
+            {!rows && !loading && <tr><td colSpan={head.length} className="cv-muted">Escolha os filtros e clique em Gerar.</td></tr>}
+            {rows && rows.length > shown && <tr><td colSpan={head.length}><button className="pill-btn" onClick={() => setShown((n) => n + 100)}>Mostrar mais ({rows.length - shown} restantes)</button></td></tr>}
           </tbody>
         </table>
       </div>

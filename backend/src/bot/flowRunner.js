@@ -50,7 +50,7 @@ async function aiTurn({ accountId, conversation, node, vars, dryRun, text, testH
   if (testHistory?.length) history = testHistory.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })).filter((m) => m.content);
   else if (dryRun) history = [{ role: "user", content: String(text || "Olá") }];
   else {
-    const msgs = await listMessages(accountId, conversation.id).catch(() => []);
+    const msgs = await listMessages(accountId, conversation.id, { limit: Math.max(60, historySize * 3) }).catch(() => []);
     const recent = msgs.filter((m) => m.author !== "system" && (m.text || m.mediaType)).slice(-historySize);
     lastIn = [...recent].reverse().find((m) => m.direction === "in") || null;
     // Áudio do cliente → transcreve e a IA responde em texto. Outras mídias → mensagem padrão.

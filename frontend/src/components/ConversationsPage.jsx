@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useRef, useCallback, useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 import ChatWindow from "./ChatWindow.jsx";
 import NewConversationModal from "./NewConversationModal.jsx";
@@ -53,12 +53,31 @@ export default function ConversationsPage({
 
   // Conversa aberta de fora (CRM, tarefas) que ainda não está na lista carregada
   const [extraConv, setExtraConv] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const loadingOlder = useRef(false);
+  const loadOlder = useCallback(async () => {
+    if (loadingOlder.current || !selectedId) return false;
+    const first = messages.find((m) => !String(m.id).startsWith("tmp-"));
+    if (!first?.timestamp) return false;
+    loadingOlder.current = true;
+    try {
+      const data = await getConversationMessages(selectedId, { limit: 60, before: first.timestamp });
+      setHasMore(!!data.hasMore);
+      if (data.messages?.length) setMessages((prev) => { const ids = new Set(prev.map((m) => m.id)); return [...data.messages.filter((m) => !ids.has(m.id)), ...prev]; });
+      return !!data.messages?.length;
+    } catch { return false; } finally { loadingOlder.current = false; }
+  }, [selectedId, messages]);
   const loadMessages = useCallback((id) => {
     getConversationMessages(id).then((data) => {
+      setHasMore(!!data.hasMore);
       if (data.conversation) setExtraConv(data.conversation);
       setMessages((prev) => {
         const pending = prev.filter((m) => String(m.id).startsWith("tmp-") && m.conversationId !== "x");
-        return pending.length && prev[0]?.conversationId === id ? [...data.messages, ...pending] : data.messages;
+        const same = prev.find((m) => !String(m.id).startsWith("tmp-"))?.conversationId === id;
+        const firstTs = data.messages[0]?.timestamp;
+        const older = same && firstTs ? prev.filter((m) => !String(m.id).startsWith("tmp-") && m.timestamp < firstTs) : [];
+        const base = [...older, ...data.messages];
+        return pending.length && prev[0]?.conversationId === id ? [...base, ...pending] : base;
       });
     }).catch((e) => {
       const st = e?.response?.status;
@@ -270,6 +289,8 @@ export default function ConversationsPage({
       <ChatWindow
         conversation={selectedConversation}
         messages={messages}
+        hasMore={hasMore}
+        onLoadOlder={loadOlder}
         onSend={handleSend}
         onSendMedia={handleSendMedia}
         onSendAudio={handleSendAudio}

@@ -92,7 +92,7 @@ export default function ConnectionsPage({ isManager }) {
         <div className="cx-hero-ico"><Plug size={22} /></div>
         <div>
           <h2>Conexões</h2>
-          <p>Ligue o Helora às ferramentas da sua empresa. Tudo o que entra aqui alimenta o <b>cérebro</b> — e a IA usa no atendimento e na IA Helora.</p>
+          <p>Ligue o Helora às ferramentas da sua empresa. Tudo o que entra aqui alimenta o <b>cérebro</b> — e a IA usa no atendimento e na Helora IA.</p>
         </div>
       </div>
       {err && <div className="admin-feedback error">{err}</div>}
@@ -170,7 +170,7 @@ export default function ConnectionsPage({ isManager }) {
             <div><strong>Canva</strong><small>{it.canva?.name || "Artes e designs"}</small></div>
             {it.canva?.connected && <span className="cx-badge"><Check size={12} /> Conectado</span>}
           </div>
-          <p className="cx-desc">A IA Helora cria artes direto no seu Canva. Você também vê seus designs aqui e baixa em PNG ou PDF.</p>
+          <p className="cx-desc">A Helora IA cria artes direto no seu Canva. Você também vê seus designs aqui e baixa em PNG ou PDF.</p>
           <div className="cx-actions">
             {!data?.canvaAvailable && !it.canva?.connected && <span className="cx-soon">Disponível em breve</span>}
             {data?.canvaAvailable && isManager && <button className="pill-btn" onClick={async () => { try { window.location.href = await integrations.canvaAuthUrl(); } catch (e) { notify(errText(e), "error"); } }}>{it.canva?.connected ? "Reconectar" : "Conectar"}</button>}

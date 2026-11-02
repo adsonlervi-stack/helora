@@ -31,6 +31,7 @@ import CrmPage from "./components/CrmPage.jsx";
 import FinancePage from "./components/FinancePage.jsx";
 import TermsGate from "./components/TermsGate.jsx";
 import InstallPrompt from "./components/InstallPrompt.jsx";
+import NotifyPrompt from "./components/NotifyPrompt.jsx";
 import ConnectionsPage from "./components/ConnectionsPage.jsx";
 import IaHeloraPage from "./components/IaHeloraPage.jsx";
 
@@ -431,6 +432,7 @@ export default function App() {
 
       {!isHeloraPanel && <TermsGate />}
       <InstallPrompt />
+      <NotifyPrompt />
 
       {showProfile && (
         <ProfileModal

@@ -241,11 +241,11 @@ input, select, textarea { font-family: var(--font-body); }
 /* Campo de mensagem */
 .composer-wrap { border-radius: 0 !important; box-shadow: 0 -1px 0 var(--glass-edge) !important; padding: 10px 14px !important; }
 .composer { gap: 8px; align-items: center; background: transparent !important; border: 0 !important; }
-.composer input {
+.composer input, .composer textarea.composer-text {
   flex: 1; height: 40px; border-radius: 20px !important; border: 1px solid rgba(0,0,0,.1) !important;
   background: rgba(255,255,255,.9) !important; padding: 0 16px !important; font-size: 15px;
 }
-.composer input:focus { outline: none; border-color: #0071e3 !important; box-shadow: var(--glow-brand); }
+.composer input:focus, .composer textarea.composer-text:focus { outline: none; border-color: #0071e3 !important; box-shadow: var(--glow-brand); }
 .composer-icon-btn { border-radius: 50% !important; width: 36px; height: 36px; background: transparent !important; color: var(--text-muted) !important; }
 .composer-icon-btn:hover { background: rgba(118,118,128,.12) !important; }
 .composer-send {
@@ -714,7 +714,7 @@ input, select, textarea { font-family: var(--font-body); }
   background: rgba(255,59,48,.08); color: #c4291e; font-size: 13.5px;
 }
 .composer.disabled { opacity: .55; pointer-events: none; filter: grayscale(.4); }
-.composer input:disabled { background: transparent; }
+.composer input:disabled, .composer textarea.composer-text:disabled { background: transparent; }
 .attach-wrap { position: relative; display: inline-flex; }
 .attach-menu {
   position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 30; min-width: 220px; padding: 6px; border-radius: 16px;
@@ -1991,7 +1991,7 @@ img, video { max-width: 100%; }
   .desk-only { display: none !important; }
   .attach-menu .mob-only { display: flex !important; }
   .composer { gap: 6px !important; padding: 0 !important; min-width: 0; width: 100%; }
-  .composer input { min-width: 0 !important; width: 100%; flex: 1 1 auto; height: 40px; font-size: 16px; }
+  .composer input, .composer textarea.composer-text { min-width: 0 !important; width: 100%; flex: 1 1 auto; height: 40px; font-size: 16px; }
   .composer-wrap { padding: 8px 10px calc(8px + env(safe-area-inset-bottom)) !important; }
   .composer .composer-icon-btn, .composer .composer-send { width: 38px; height: 38px; min-width: 38px; flex: 0 0 38px; }
   .composer .rec-bar { flex: 1; min-width: 0; font-size: 13px; }
@@ -2296,7 +2296,7 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .lp-notify > span { font-weight: 600; color: #6e6e73; }
 .lp-notify label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
 
-/* ===================== V13 · IA Helora ===================== */
+/* ===================== V13 · Helora IA ===================== */
 .ih-page { max-width: 1280px; }
 .ih-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .ih-title { display: flex; gap: 12px; align-items: center; }
@@ -2429,3 +2429,24 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .cx-how p { margin: 4px 0 8px; font-size: 13.5px; line-height: 1.45; color: #3a3a3c; }
 .ih-req { font-size: 12.5px; color: #b25000; background: #fff5e6; border-radius: 8px; padding: 6px 10px; margin-top: 6px; }
 .ih-req.ok { color: #1f8a3c; background: rgba(52,199,89,.1); }
+.crm-field-grip { display: inline-flex; align-items: center; cursor: grab; color: var(--text-secondary, #8e8e93); padding: 2px; border-radius: 6px; }
+.crm-field-grip:active { cursor: grabbing; }
+.crm-field-edit.dragging { opacity: .45; }
+.composer { align-items: flex-end; }
+.composer textarea.composer-text { resize: none; min-height: 40px; height: 40px; max-height: 160px; line-height: 20px; padding: 9px 16px !important; font-family: inherit; overflow-y: auto; }
+.msg-older { text-align: center; font-size: 12px; color: var(--text-muted, #8e8e93); padding: 8px 0; }
+.notify-prompt { position: fixed; right: 18px; bottom: 18px; z-index: 900; display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 14px; background: var(--surface, #fff); box-shadow: 0 10px 30px rgba(0,0,0,.18); border: 1px solid rgba(0,0,0,.08); font-size: 13px; max-width: calc(100vw - 36px); }
+@media (prefers-color-scheme: dark) { .notify-prompt { background: #2c2c2e; border-color: rgba(255,255,255,.08); } }
+.lp-note-edit textarea { width: 100%; box-sizing: border-box; }
+.lp-edited { display: block; font-size: 11px; color: var(--text-muted, #8e8e93); margin-top: 2px; }
+.lp-msg-files { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; align-items: center; }
+.lp-msg-file { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 6px 3px 8px; border-radius: 8px; background: rgba(118,118,128,.12); }
+.lp-msg-file button { border: 0; background: transparent; cursor: pointer; display: inline-flex; color: inherit; padding: 2px; }
+.reply-form textarea.response { flex: 1 1 260px; min-height: 64px; resize: vertical; font-family: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(0,0,0,.12); }
+.reply-response { white-space: pre-wrap; }
+.bubble-buttons { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.bubble-btn { display: block; text-align: center; padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(0,113,227,.25); background: rgba(0,113,227,.06); color: #0071e3; font-size: 13px; text-decoration: none; cursor: pointer; font-family: inherit; }
+.bubble-btn:hover:not(:disabled) { background: rgba(0,113,227,.14); }
+.bubble-btn:disabled { cursor: default; opacity: .75; }
+.bubble-btn small { color: var(--text-muted, #8e8e93); }
+.bubble-buttons-foot { color: var(--text-muted, #8e8e93); font-size: 11px; }

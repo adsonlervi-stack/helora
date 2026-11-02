@@ -1036,13 +1036,19 @@ router.get("/conversations/:id/messages", async (req, res) => {
   const conversation = await getConversation(req.accountId, req.params.id);
   if (!(await assertConversationAccess(req, res, conversation))) return;
 
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 0, 0), 500);
+  const before = req.query.before ? String(req.query.before) : undefined;
+  if (before && limit) {
+    const older = await listMessages(req.accountId, req.params.id, { limit, before });
+    return res.json({ messages: older, hasMore: older.hasMore });
+  }
   await markConversationSeen(req.accountId, req.params.id);
-  const messages = await listMessages(req.accountId, req.params.id);
+  const messages = await listMessages(req.accountId, req.params.id, limit ? { limit } : {});
   if (conversation.unread > 0 && conversation.platform === "whatsapp") {
     const ids = messages.filter((m) => m.direction === "in" && m.whatsappMessageId).slice(-Math.min(conversation.unread + 2, 50)).map((m) => m.whatsappMessageId);
     markWhatsAppRead(conversation.channelId, conversation.externalId, ids).catch(() => {});
   }
-  res.json({ conversation, messages });
+  res.json({ conversation, messages, hasMore: !!messages.hasMore });
 });
 
 // Exportação para fins judiciais: ZIP com relatório, transcrição, JSON, mídias e hashes SHA-256

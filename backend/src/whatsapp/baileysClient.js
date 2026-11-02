@@ -645,6 +645,12 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         }
       }
 
+      // Mensagens com botões / lista (de empresas e robôs) e respostas a botões
+      if (!text && !mediaKey) {
+        const bx = parseButtons(inner);
+        if (bx) { text = bx.text; if (bx.buttons.length) extra = { ...(extra || {}), type: extra?.type || "buttons", buttons: bx.buttons, footer: bx.footer || null }; }
+      }
+
       if (pendingMedia) extra = { ...(extra || {}), pendingMedia };
       if (!text && !mediaUrl && !extra) continue; // ignora tipos não suportados sem conteúdo
 
@@ -846,14 +852,59 @@ export async function fetchWhatsAppAvatar(channelId, jid) {
 
 
 /** Envia mídia a partir de uma URL pública (campanhas e API). */
-export async function sendWhatsAppMediaUrl(channelId, jid, { url, mediaType, caption }) {
+/** Lê mensagens interativas (botões, lista, template) e respostas a elas. */
+function parseButtons(raw) {
+  let m = raw || {};
+  for (let i = 0; i < 4; i++) {
+    const w = m.viewOnceMessage || m.viewOnceMessageV2 || m.ephemeralMessage || m.documentWithCaptionMessage || m.viewOnceMessageV2Extension;
+    if (w?.message) m = w.message; else break;
+  }
+  const resp =
+    m.buttonsResponseMessage?.selectedDisplayText || m.templateButtonReplyMessage?.selectedDisplayText ||
+    m.listResponseMessage?.title || m.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    (() => { try { const j = JSON.parse(m.interactiveResponseMessage?.nativeFlowResponseMessage?.paramsJson || "null"); return j?.title || j?.display_text || j?.id || null; } catch { return null; } })() ||
+    m.interactiveResponseMessage?.body?.text;
+  if (resp) return { text: String(resp), buttons: [] };
+  const out = (text, buttons, footer) => ({ text: String(text || "").trim() || "Mensagem com botões", buttons: buttons.filter((b) => b.text).slice(0, 20), footer });
+  if (m.buttonsMessage) {
+    const b = m.buttonsMessage;
+    return out(b.contentText || b.text, (b.buttons || []).map((x) => ({ id: x.buttonId || "", text: x.buttonText?.displayText || "", kind: "reply" })), b.footerText);
+  }
+  const ht = m.templateMessage?.hydratedTemplate || m.templateMessage?.hydratedFourRowTemplate;
+  if (ht) {
+    return out(ht.hydratedContentText, (ht.hydratedButtons || []).map((x) =>
+      x.quickReplyButton ? { id: x.quickReplyButton.id || "", text: x.quickReplyButton.displayText, kind: "reply" } :
+      x.urlButton ? { text: x.urlButton.displayText, url: x.urlButton.url, kind: "url" } :
+      x.callButton ? { text: x.callButton.displayText, phone: x.callButton.phoneNumber, kind: "call" } : {}), ht.hydratedFooterText);
+  }
+  if (m.listMessage) {
+    const l = m.listMessage;
+    const rows = (l.sections || []).flatMap((sec) => (sec.rows || []).map((r) => ({ id: r.rowId || "", text: r.title, desc: r.description || null, section: sec.title || null, kind: "list" })));
+    return out([l.title, l.description].filter(Boolean).join("\n"), rows, l.footerText);
+  }
+  if (m.interactiveMessage) {
+    const it = m.interactiveMessage;
+    const btns = (it.nativeFlowMessage?.buttons || []).map((x) => {
+      let p = {}; try { p = JSON.parse(x.buttonParamsJson || "{}"); } catch {}
+      if (x.name === "cta_url") return { text: p.display_text, url: p.url, kind: "url" };
+      if (x.name === "cta_call") return { text: p.display_text, phone: p.phone_number, kind: "call" };
+      if (x.name === "cta_copy") return { text: p.display_text, copy: p.copy_code, kind: "copy" };
+      if (x.name === "single_select") return (p.sections || []).flatMap((sec) => (sec.rows || []).map((r) => ({ id: r.id || "", text: r.title, desc: r.description || null, kind: "list" })));
+      return { id: p.id || "", text: p.display_text, kind: "reply" };
+    }).flat();
+    return out([it.header?.title, it.body?.text].filter(Boolean).join("\n"), btns, it.footer?.text);
+  }
+  return null;
+}
+
+export async function sendWhatsAppMediaUrl(channelId, jid, { url, mediaType, caption, fileName, mimetype }) {
   const cloud = await getCloudChannel(channelId);
   if (cloud) return cloudSendMediaLink(cloud, jid, { url, mediaType, caption });
   const conn = connections.get(channelId);
   if (!conn?.sock) throw new Error("Este dispositivo de WhatsApp não está conectado.");
   const payload =
     mediaType === "video" ? { video: { url }, caption } :
-    mediaType === "document" ? { document: { url }, caption, fileName: url.split("/").pop() || "arquivo" } :
+    mediaType === "document" ? { document: { url }, caption, fileName: fileName || url.split("/").pop() || "arquivo", ...(mimetype ? { mimetype } : {}) } :
     { image: { url }, caption };
   const sent = await conn.sock.sendMessage(jid, payload);
   return sent?.key?.id || null;

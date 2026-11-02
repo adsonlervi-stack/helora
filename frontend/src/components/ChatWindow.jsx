@@ -138,7 +138,7 @@ function ChatImage({ src }) {
   );
 }
 
-function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat, isGroup, onDownload }) {
+function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat, isGroup, onDownload, onButton }) {
   if (message.author === "system" || message.extra?.type === "event") return <EventPill message={message} />;
   const deleted = !!message.deletedAt;
   // Grupo: quem mandou (novo formato em extra.sender; antigo vinha "*Nome:* texto")
@@ -236,6 +236,19 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
             )}
 
             {bodyText && <div className="bubble-text"><WaText text={bodyText} /></div>}
+            {Array.isArray(extra?.buttons) && extra.buttons.length > 0 && (
+              <div className="bubble-buttons">
+                {extra.footer && <small className="bubble-buttons-foot">{extra.footer}</small>}
+                {extra.buttons.map((b, i) => (
+                  b.kind === "url" ? <a key={i} className="bubble-btn" href={b.url} target="_blank" rel="noreferrer">🔗 {b.text}</a> :
+                  b.kind === "call" ? <a key={i} className="bubble-btn" href={`tel:${b.phone}`}>📞 {b.text}</a> :
+                  b.kind === "copy" ? <button key={i} type="button" className="bubble-btn" onClick={() => navigator.clipboard?.writeText(b.copy || "")}>📋 {b.text}</button> :
+                  <button key={i} type="button" className="bubble-btn" disabled={message.direction !== "in" || !onButton} title={b.desc || "Responder com esta opção"} onClick={() => onButton?.(b, message)}>
+                    {b.kind === "list" ? "☰ " : "↩ "}{b.text}{b.desc ? <small> · {b.desc}</small> : null}
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         )}
 
@@ -523,6 +536,8 @@ const EMOJIS = "😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 😉 😍
 export default function ChatWindow({
   conversation,
   messages,
+  hasMore = false,
+  onLoadOlder,
   onSend,
   onSendMedia,
   onSendAudio,
@@ -572,6 +587,7 @@ export default function ChatWindow({
   const cancelRecRef = useRef(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
+  useEffect(() => { const t = inputRef.current; if (t && t.tagName === "TEXTAREA") { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; } }, [text]);
   // Correção ortográfica enquanto digita (sugestões clicáveis acima do campo)
   const [spell, setSpell] = useState([]);
   useEffect(() => {
@@ -666,11 +682,23 @@ export default function ChatWindow({
     getTeam().then(setTeam).catch(console.error);
   }, []);
 
+  // Rola para o fim só quando chega mensagem nova (não ao carregar as antigas)
+  const lastIdRef = useRef(null);
+  const keepPos = useRef(null);
   useEffect(() => {
-    if (listRef.current) {
-      listRef.current.scrollTop = listRef.current.scrollHeight;
-    }
-  }, [messages.length]);
+    const el = listRef.current;
+    if (!el) return;
+    if (keepPos.current != null) { el.scrollTop = el.scrollHeight - keepPos.current; keepPos.current = null; }
+    const last = messages[messages.length - 1]?.id;
+    if (last !== lastIdRef.current) { lastIdRef.current = last; el.scrollTop = el.scrollHeight; }
+  }, [messages]);
+  const onListScroll = async (e) => {
+    const el = e.currentTarget;
+    if (!hasMore || !onLoadOlder || el.scrollTop > 120) return;
+    keepPos.current = el.scrollHeight - el.scrollTop;
+    const ok = await onLoadOlder();
+    if (!ok) keepPos.current = null;
+  };
 
   // Troca de conversa: limpa resposta/menu
   useEffect(() => {
@@ -940,7 +968,8 @@ export default function ChatWindow({
 
       <div className="chat-body">
         <div className="chat-column">
-          <div className="message-list" ref={listRef}>
+          <div className="message-list" ref={listRef} onScroll={onListScroll}>
+            {hasMore && <div className="msg-older">Role para cima para ver mensagens anteriores</div>}
             {messages.map((m) => (
               <MessageBubble
                 key={m.id}
@@ -952,6 +981,7 @@ export default function ChatWindow({
                 onAction={handleAction}
                 onRetry={onRetry}
                 onStartChat={onStartChat}
+                onButton={offline ? null : (b, msg) => onSend(b.text, signOn, quotedOf(msg))}
               />
             ))}
             {clientTyping && (
@@ -1105,10 +1135,24 @@ export default function ChatWindow({
                   <button type="button" className="rec-cancel" title="Descartar áudio" onClick={cancelRecording}><Trash size={15} /> Descartar</button>
                 </div>
               ) : (
-              <input
+              <textarea
                 ref={inputRef}
+                rows={1}
+                className="composer-text"
                 placeholder={offline ? "WhatsApp desconectado" : "Mensagem  ·  / para respostas prontas"}
                 value={text}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
+                onInput={(e) => { const t = e.currentTarget; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }}
+                onPaste={async (e) => {
+                  const it = [...(e.clipboardData?.items || [])].find((x) => x.kind === "file");
+                  if (!it || offline) return;
+                  e.preventDefault();
+                  const f = it.getAsFile(); if (!f) return;
+                  const named = f.name && f.name !== "image.png" ? f : new File([f], `print-${Date.now()}.${(f.type.split("/")[1] || "png")}`, { type: f.type });
+                  const file = f.type.startsWith("image/") ? await compressImage(named) : named;
+                  setPendingFile({ file, url: URL.createObjectURL(file), caption: text });
+                  if (text) handleTextChange("");
+                }}
                 disabled={offline}
                 spellCheck
                 lang="pt-BR"

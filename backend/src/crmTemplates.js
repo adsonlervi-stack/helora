@@ -227,10 +227,11 @@ export function cleanCustom(obj, fields) {
   if (!obj || typeof obj !== "object") return {};
   const allowed = fields?.length ? new Set(fields.map((f) => f.id)) : null;
   const out = {};
-  for (const [k, v] of Object.entries(obj).slice(0, 40)) {
-    if (allowed && !allowed.has(k)) continue;
+  for (const [k, v] of Object.entries(obj).slice(0, 120)) {
+    if (allowed && !allowed.has(k) && !k.startsWith("__")) continue;
     if (v === null || v === undefined || v === "") continue;
-    out[String(k).slice(0, 40)] = typeof v === "number" ? v : String(v).slice(0, 2000);
+    if (typeof v === "object") { try { const j = JSON.stringify(v); if (j.length <= 20000) out[String(k).slice(0, 40)] = JSON.parse(j); } catch {} continue; }
+    out[String(k).slice(0, 40)] = typeof v === "number" || typeof v === "boolean" ? v : String(v).slice(0, 5000);
   }
   return out;
 }

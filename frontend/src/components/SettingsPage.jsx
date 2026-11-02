@@ -1,7 +1,9 @@
 import { askConfirm, askPrompt } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
+import { Attendants } from "./IaHeloraPage.jsx";
 import {
   Trash2,
+  Bot,
   ArrowLeft,
   MessageSquareText,
   MessagesSquare,
@@ -56,6 +58,7 @@ import BusinessHoursEditor from "./BusinessHoursEditor.jsx";
 import { SOUNDS, NOTIFY_EVENTS, getNotifyPrefs, setNotifyPrefs, playSound, enableNotify, notifyEnabled } from "../notifications.js";
 
 const CARDS = [
+  { key: "aiagents", label: "Atendentes IA", desc: "IA que responde sozinha em cada canal", icon: Bot, ownerOnly: true },
   {
     key: "attendance",
     label: "Atendimento",
@@ -144,6 +147,7 @@ export default function SettingsPage({ onGoToChannels, canManage = false, apiEna
         {current?.label}
       </div>
 
+      {tab === "aiagents" && canManage && <Attendants isManager={canManage} />}
       {tab === "auto" && <AutoRepliesTab />}
       {tab === "canned" && <CannedResponsesTab canManage={canManage} />}
       {tab === "attendance" && canManage && <AttendanceTab />}
@@ -354,9 +358,12 @@ function CannedResponsesTab({ canManage }) {
           value={shortCode}
           onChange={(e) => setShortCode(e.target.value)}
         />
-        <input
+        <textarea
           className="response"
-          placeholder="Texto completo da resposta..."
+          rows={3}
+          spellCheck
+          lang="pt-BR"
+          placeholder="Texto completo da resposta (Enter pula linha)"
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
@@ -1017,7 +1024,7 @@ document.getElementById("lead-crm").onsubmit = async (e) => {
 
 const AGENT_TAB_OPTIONS = [
   ["home", "Início"], ["overview", "Painel"], ["deals", "Pipeline"], ["crm", "CRM"], ["tasks", "Tarefas"],
-  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"], ["ia", "IA Helora"]
+  ["contacts", "Contatos"], ["campaigns", "Campanhas"], ["reports", "Relatórios"], ["ia", "Helora IA"]
 ];
 
 /** Gestor escolhe quais abas o atendente vê. Config., Fluxos, Canais e Financeiro são só do gestor. */

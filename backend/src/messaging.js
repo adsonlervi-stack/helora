@@ -110,11 +110,11 @@ export async function sendSpecialToConversation(accountId, conversation, extra, 
 
 
 /** Mídia por URL (usada nas mensagens agendadas com anexo). */
-export async function sendMediaUrlToConversation(accountId, conversation, { url, mediaType, caption }, { senderName, sign = false, fromBot = false } = {}) {
+export async function sendMediaUrlToConversation(accountId, conversation, { url, mediaType, caption, fileName, mimetype }, { senderName, sign = false, fromBot = false } = {}) {
   if (conversation.platform !== "whatsapp") throw new Error("Anexo agendado só funciona no WhatsApp.");
   const channelId = await whatsappChannel(accountId, conversation);
   const text = caption ? signText(caption, senderName, sign) : "";
-  const whatsappMessageId = await sendWhatsAppMediaUrl(channelId, conversation.externalId, { url, mediaType, caption: text || undefined });
+  const whatsappMessageId = await sendWhatsAppMediaUrl(channelId, conversation.externalId, { url, mediaType, caption: text || undefined, fileName, mimetype });
   const message = await addMessage({
     accountId, conversationId: conversation.id, direction: "out", author: fromBot ? "bot" : "operator",
     text, mediaUrl: url, mediaType, whatsappMessageId, senderName: senderName || null, status: "sent"

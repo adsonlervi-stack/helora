@@ -10,7 +10,7 @@ import { askConfirm, notify } from "../dialogs.js";
 const errText = (e) => e?.response?.data?.error || e?.message || "Erro";
 const copy = (t) => { navigator.clipboard?.writeText(t); notify("Copiado.", "success"); };
 
-/** IA Helora: criar conteúdo, atendentes IA nos canais e o cérebro da empresa. */
+/** Helora IA: criar conteúdo, atendentes IA nos canais e o cérebro da empresa. */
 export default function IaHeloraPage({ isManager, onGo }) {
   const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("ia") || "criar");
   const [status, setStatus] = useState(null);
@@ -19,9 +19,9 @@ export default function IaHeloraPage({ isManager, onGo }) {
   return (
     <div className="page ih-page">
       <div className="ih-head">
-        <div className="ih-title"><span className="ih-orb"><Sparkles size={20} /></span><div><h2>IA Helora</h2><p>Cria para a sua empresa, atende os clientes e aprende com o que você ensina.</p></div></div>
+        <div className="ih-title"><span className="ih-orb"><Sparkles size={20} /></span><div><h2>Helora IA</h2><p>Cria para a sua empresa, atende os clientes e aprende com o que você ensina.</p></div></div>
         <div className="ih-tabs">
-          {[["criar", "Criar", Sparkles], ["atendentes", "Atendentes IA", Bot], ["cerebro", "Cérebro", Brain]].map(([k, l, I]) => (
+          {[["criar", "Criar", Sparkles], ["cerebro", "Cérebro", Brain]].map(([k, l, I]) => (
             <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}><I size={15} /> {l}</button>
           ))}
         </div>
@@ -30,7 +30,6 @@ export default function IaHeloraPage({ isManager, onGo }) {
         <div className="ih-warn">Nenhuma IA conectada ainda. {isManager ? <>Conecte o <b>ChatGPT</b>, o <b>Claude</b> ou o <b>Gemini</b> na aba <button className="lp-link" onClick={() => onGo?.("connections")}>Conexões</button>.</> : "Peça ao gestor para conectar uma IA na aba Conexões."}</div>
       )}
       {tab === "criar" && <Studio canva={!!status?.integrations?.canva?.connected} isManager={isManager} />}
-      {tab === "atendentes" && <Attendants isManager={isManager} />}
       {tab === "cerebro" && <BrainTab isManager={isManager} />}
     </div>
   );
@@ -87,7 +86,7 @@ function Studio({ canva, isManager }) {
   const toCanva = async (imageUrl, title) => {
     setBusy("canva");
     try {
-      const r = await integrations.studioCanva({ title: (title || lastPrompt() || "Arte da IA Helora").slice(0, 80), size, imageUrl });
+      const r = await integrations.studioCanva({ title: (title || lastPrompt() || "Arte da Helora IA").slice(0, 80), size, imageUrl });
       setMsgs((m) => [...m, { role: "assistant", content: `Design criado no Canva: **${r.title || "novo design"}**`, canvaUrl: r.editUrl, kind: "canva" }]);
       if (r.editUrl) window.open(r.editUrl, "_blank");
     } catch (e) { notify(errText(e), "error"); }
@@ -179,7 +178,7 @@ function renderText(t) {
 // ------------------------------------------------------------ Atendentes IA
 const BLANK = { name: "", prompt: "", historySize: 20, maxTurns: 20, transferDepartmentId: "", transferMessageEnabled: true, transferMessage: "Vou te transferir para um dos nossos atendentes, só um instante! 😊", processImages: false, unsupportedMediaMessage: "" };
 
-function Attendants({ isManager }) {
+export function Attendants({ isManager }) {
   const [list, setList] = useState(null);
   const [channels, setChannels] = useState([]);
   const [edit, setEdit] = useState(null);
@@ -420,7 +419,7 @@ function BrainTab({ isManager }) {
         )}
       </div>
       <div className="ih-card">
-        <div className="ih-card-head"><div><h3>Conhecimento da empresa</h3><p>Vale para a IA Helora e para todos os atendentes IA. E-mails e Google Docs também podem entrar pela aba Conexões.</p></div></div>
+        <div className="ih-card-head"><div><h3>Conhecimento da empresa</h3><p>Vale para a Helora IA e para todos os atendentes IA. E-mails e Google Docs também podem entrar pela aba Conexões.</p></div></div>
         <Knowledge isManager={isManager} />
       </div>
     </div>

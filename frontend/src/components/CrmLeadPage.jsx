@@ -217,11 +217,22 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
     setCustom((c) => ({ ...c, __pinned: next.join(",") }));
     schedule();
   };
+  const [editNote, setEditNote] = useState(null);
   const tlBody = (h) => (
   <div className="lp-tl-body">
     {h.type === "note" && (
       <div className="lp-note">
-        <p>{h.text}</p>
+        {editNote?.id === h.id ? (
+          <div className="lp-note-edit">
+            <textarea rows={3} spellCheck lang="pt-BR" value={editNote.text} onChange={(e) => setEditNote({ ...editNote, text: e.target.value })} autoFocus />
+            <div className="lp-row-end">
+              <button className="lp-ghost" onClick={() => setEditNote(null)}>Cancelar</button>
+              <button className="lp-primary" disabled={!editNote.text.trim()} onClick={async () => { try { changed(await crm.editLeadNote(lead.id, h.id, editNote.text.trim())); setEditNote(null); } catch (e) { notify(errText(e), "error"); } }}>Salvar</button>
+            </div>
+          </div>
+        ) : <p>{h.text}</p>}
+        {h.editedAt && editNote?.id !== h.id && <small className="lp-edited">editado{h.editedBy ? ` por ${h.editedBy}` : ""} em {new Date(h.editedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</small>}
+        {!h.legacy && editNote?.id !== h.id && <button className="lp-link sm" onClick={() => setEditNote({ id: h.id, text: h.text })}>editar</button>}
         {!h.legacy && <button className="lp-link sm" onClick={async () => { if (await askConfirm("Apagar esta anotação?")) { try { changed(await crm.deleteLeadNote(lead.id, h.id)); } catch (e) { notify(errText(e), "error"); } } }}>apagar</button>}
       </div>
     )}
@@ -442,8 +453,8 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                   <MessageBox
                     ctx={ctx} pipe={pipe} lead={lead} f={f} custom={custom} value={value} stageName={stages[stageIdx]?.name || ""} ownerName={f.ownerId ? memberName(f.ownerId) : ""}
                     onOpen={openConversation}
-                    onSend={async (text) => {
-                      try { await flush(); const r = await crm.sendLeadMessage(lead.id, text); changed(r.lead); notify("Mensagem enviada pelo WhatsApp.", "success"); return true; }
+                    onSend={async (text, files) => {
+                      try { await flush(); const r = await crm.sendLeadMessage(lead.id, text, files); changed(r.lead); notify("Mensagem enviada pelo WhatsApp.", "success"); return true; }
                       catch (e) { notify(errText(e), "error"); return false; }
                     }}
                   />
@@ -641,8 +652,11 @@ function MessageBox({ ctx, pipe, lead, f, custom, value, stageName, ownerName, o
   const saved = pipe?.messages || [];
   const list = saved.length ? saved : DEFAULT_MESSAGES;
   const [text, setText] = useState("");
+  const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [manage, setManage] = useState(false);
+  const boxFile = useRef(null);
+  const addBoxFile = async (file) => { try { const r = await crm.uploadMessageFile(file); setFiles((l) => [...l, r].slice(0, 5)); } catch (e) { notify(errText(e), "error"); } };
   const fieldVars = (pipe?.fields || []).map((fd) => [fd.id, fd.label]);
   const fmt = (fd, v) => (fd?.type === "date" && v ? String(v).slice(0, 10).split("-").reverse().join("/") : fd?.type === "currency" && v ? brl(v) : v);
   const fill = (t) => String(t || "")
@@ -655,20 +669,38 @@ function MessageBox({ ctx, pipe, lead, f, custom, value, stageName, ownerName, o
     .replace(/\{meu_nome\}/g, String(ctx.profile?.name || "").split(" ")[0])
     .replace(/\{([a-z0-9_]+)\}/g, (m, k) => { const fd = (pipe?.fields || []).find((x) => x.id === k); return fd ? (custom[k] ? fmt(fd, custom[k]) : m) : m; });
   const missing = (text.match(/\{[a-z0-9_]+\}/g) || []);
-  const send = async () => { setBusy(true); if (await onSend(text.trim())) setText(""); setBusy(false); };
+  const send = async () => { setBusy(true); if (await onSend(text.trim(), files)) { setText(""); setFiles([]); } setBusy(false); };
   return (
     <div className="lp-msgs">
       <div className="lp-msg-list">
-        {list.map((m) => <button key={m.id} className="lp-msg-pill" onClick={() => setText(fill(m.text))} title={m.text}>{m.title}</button>)}
+        {list.map((m) => <button key={m.id} className="lp-msg-pill" onClick={() => { setText(fill(m.text)); setFiles(m.files || []); }} title={m.text}>{m.files?.length ? "📎 " : ""}{m.title}</button>)}
         {ctx.isManager && <button className="lp-msg-pill ghost" onClick={() => setManage(true)}>{saved.length ? "Editar mensagens" : "+ Criar mensagens do funil"}</button>}
       </div>
-      <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder={f.phone ? "Escolha uma mensagem pronta acima ou escreva aqui…" : "Cadastre o telefone do cliente para enviar mensagens."} />
+      <textarea rows={4} spellCheck lang="pt-BR" value={text} onChange={(e) => setText(e.target.value)}
+        onPaste={(e) => { const it = [...(e.clipboardData?.items || [])].find((x) => x.kind === "file"); if (it) { e.preventDefault(); const fl = it.getAsFile(); fl && addBoxFile(fl); } }}
+        placeholder={f.phone ? "Escolha uma mensagem pronta acima ou escreva aqui…" : "Cadastre o telefone do cliente para enviar mensagens."} />
+      {files.length > 0 && <div className="lp-msg-files">{files.map((fl, i) => <span key={i} className="lp-msg-file">📎 {fl.name}<button onClick={() => setFiles((l) => l.filter((_, j) => j !== i))}><X size={11} /></button></span>)}</div>}
+      <input ref={boxFile} type="file" hidden onChange={(e) => { const fl = e.target.files?.[0]; e.target.value = ""; fl && addBoxFile(fl); }} />
       {missing.length > 0 && <div className="lp-warn">Faltam dados no card: {missing.join(", ")}. Preencha o campo ou edite o texto antes de enviar.</div>}
       <div className="lp-row-end">
         <button className="lp-ghost" onClick={onOpen} disabled={!f.phone}><MessageCircle size={14} /> {lead.conversationId ? "Ver conversa" : "Abrir conversa"}</button>
-        <button className="lp-primary" disabled={!f.phone || !text.trim() || busy || missing.length > 0} onClick={send}><Send size={14} /> {busy ? "Enviando…" : "Enviar pelo WhatsApp"}</button>
+        <button className="lp-ghost" onClick={() => boxFile.current?.click()} disabled={!f.phone || files.length >= 5}><Paperclip size={14} /> Anexo</button>
+        <button className="lp-primary" disabled={!f.phone || (!text.trim() && !files.length) || busy || missing.length > 0} onClick={send}><Send size={14} /> {busy ? "Enviando…" : "Enviar pelo WhatsApp"}</button>
       </div>
       {manage && <MessagesEditor ctx={ctx} pipe={pipe} initial={saved.length ? saved : DEFAULT_MESSAGES} vars={[...BASE_VARS, ...fieldVars]} onClose={() => setManage(false)} />}
+    </div>
+  );
+}
+
+function MsgFiles({ files, onChange }) {
+  const ref = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const add = async (file) => { setBusy(true); try { const r = await crm.uploadMessageFile(file); onChange([...files, r].slice(0, 5)); } catch (e) { notify(errText(e), "error"); } setBusy(false); };
+  return (
+    <div className="lp-msg-files">
+      {files.map((fl, i) => <span key={i} className="lp-msg-file">📎 {fl.name}<button onClick={() => onChange(files.filter((_, j) => j !== i))}><X size={11} /></button></span>)}
+      {files.length < 5 && <button className="lp-link sm" disabled={busy} onClick={() => ref.current?.click()}>{busy ? "Enviando…" : "+ anexo"}</button>}
+      <input ref={ref} type="file" hidden onChange={(e) => { const fl = e.target.files?.[0]; e.target.value = ""; fl && add(fl); }} />
     </div>
   );
 }
@@ -689,7 +721,7 @@ function MessagesEditor({ ctx, pipe, initial, vars, onClose }) {
   };
   const save = async () => {
     setBusy(true);
-    try { await crm.updatePipeline(pipe.id, { messages: list.filter((m) => m.title.trim() && m.text.trim()) }); await ctx.loadPipelines(); notify("Mensagens salvas.", "success"); onClose(); }
+    try { await crm.updatePipeline(pipe.id, { messages: list.filter((m) => m.title.trim() && (m.text.trim() || m.files?.length)) }); await ctx.loadPipelines(); notify("Mensagens salvas.", "success"); onClose(); }
     catch (e) { notify(errText(e), "error"); }
     setBusy(false);
   };
@@ -706,7 +738,8 @@ function MessagesEditor({ ctx, pipe, initial, vars, onClose }) {
                 <input value={m.title} onChange={(e) => setList((l) => l.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} placeholder="Nome (ex.: Primeiro contato)" />
                 <button className="lp-icon sm" onClick={() => setList((l) => l.filter((_, j) => j !== i))}><Trash2 size={13} /></button>
               </div>
-              <textarea ref={(el) => (refs.current[i] = el)} rows={3} value={m.text} onFocus={() => setFocus(i)} onChange={(e) => setList((l) => l.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} placeholder="Olá {nome}, tudo bem?…" />
+              <MsgFiles files={m.files || []} onChange={(fl) => setList((l) => l.map((x, j) => (j === i ? { ...x, files: fl } : x)))} />
+              <textarea ref={(el) => (refs.current[i] = el)} rows={4} spellCheck lang="pt-BR" value={m.text} onFocus={() => setFocus(i)} onChange={(e) => setList((l) => l.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} placeholder="Olá {nome}, tudo bem?…" />
             </div>
           ))}
         </div>

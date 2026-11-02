@@ -85,8 +85,8 @@ export function leaveAccount() {
 
 // ---- Conversas ----
 export const getConversations = () => api.get("/conversations").then((r) => r.data);
-export const getConversationMessages = (id) =>
-  api.get(`/conversations/${id}/messages`).then((r) => r.data);
+export const getConversationMessages = (id, params = { limit: 60 }) =>
+  api.get(`/conversations/${id}/messages`, { params }).then((r) => r.data);
 export const sendMessage = (id, text, sign = true, quotedId = null) =>
   api.post(`/conversations/${id}/send`, { text, sign, quotedId }).then((r) => r.data);
 export const sendSpecialApi = (id, payload) => api.post(`/conversations/${id}/send-special`, payload).then((r) => r.data);
@@ -398,8 +398,10 @@ export const crm = {
   lead: (id) => api.get(`/crm/leads/${id}`).then((r) => r.data),
   leadByConversation: (convId) => api.get(`/crm/by-conversation/${convId}`).then((r) => r.data),
   setConversationLead: (convId, d) => api.post(`/crm/by-conversation/${convId}`, d).then((r) => r.data),
-  sendLeadMessage: (id, text) => api.post(`/crm/leads/${id}/message`, { text }).then((r) => r.data),
+  sendLeadMessage: (id, text, files) => api.post(`/crm/leads/${id}/message`, { text, files }).then((r) => r.data),
   addLeadNote: (id, text) => api.post(`/crm/leads/${id}/notes`, { text }).then((r) => r.data),
+  editLeadNote: (id, noteId, text) => api.patch(`/crm/leads/${id}/notes/${noteId}`, { text }).then((r) => r.data),
+  uploadMessageFile: (file) => { const fd = new FormData(); fd.append("file", file); return api.post(`/crm/message-files`, fd).then((r) => r.data); },
   deleteLeadNote: (id, noteId) => api.delete(`/crm/leads/${id}/notes/${noteId}`).then((r) => r.data),
   deleteLeadFile: (id, fileId) => api.delete(`/crm/leads/${id}/files/${fileId}`).then((r) => r.data)
 };
@@ -432,7 +434,7 @@ export const updateWebhook = (id, b) => api.patch(`/webhooks/${id}`, b).then((r)
 export const deleteWebhook = (id) => api.delete(`/webhooks/${id}`);
 export const testWebhook = (id) => api.post(`/webhooks/${id}/test`).then((r) => r.data);
 
-// ---------- Conexões, Cérebro, Atendentes IA e IA Helora ----------
+// ---------- Conexões, Cérebro, Atendentes IA e Helora IA ----------
 export const integrations = {
   list: () => api.get("/integrations").then((r) => r.data),
   saveAI: (provider, d) => api.put(`/integrations/ai/${provider}`, d).then((r) => r.data),

@@ -1890,7 +1890,7 @@ h3 {
   border-top: 1px solid var(--border);
 }
 
-.composer input {
+.composer input, .composer textarea.composer-text {
   flex: 1;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1899,7 +1899,7 @@ h3 {
   outline: none;
 }
 
-.composer input:focus {
+.composer input:focus, .composer textarea.composer-text:focus {
   border-color: var(--accent);
 }
 

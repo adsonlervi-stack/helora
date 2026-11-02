@@ -15,3 +15,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }
+
+// Corretor ortográfico em todos os campos de texto do sistema (CRM, configurações, etc.)
+document.documentElement.lang = "pt-BR";
+document.addEventListener("focusin", (e) => {
+  const el = e.target;
+  if (!(el instanceof HTMLElement)) return;
+  const isText = el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && ["text", "search", ""].includes((el.getAttribute("type") || "").toLowerCase()));
+  if (!isText || el.hasAttribute("spellcheck")) return;
+  const hint = `${el.getAttribute("name") || ""} ${el.getAttribute("placeholder") || ""}`.toLowerCase();
+  if (/e-?mail|telefone|whats|cpf|cnpj|cep|url|link|senha|https?:|\d{4}/.test(hint)) return;
+  el.setAttribute("spellcheck", "true");
+  el.setAttribute("lang", "pt-BR");
+});

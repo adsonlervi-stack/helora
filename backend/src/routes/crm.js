@@ -6,12 +6,12 @@ import { createGoogleEvent, deleteGoogleEvent } from "../google.js";
 import { emitEvent } from "../webhooks.js";
 import multer from "multer";
 import { randomUUID } from "crypto";
-import { uploadCrmFile, removeCrmFile } from "../storage.js";
+import { uploadCrmFile, removeCrmFile, uploadMedia } from "../storage.js";
 import { TEMPLATES, cleanFields, cleanCustom } from "../crmTemplates.js";
 import { RAMOS } from "../insuranceLists.js";
 import { createZip } from "../zip.js";
 import { getPrimaryWhatsAppChannel, findOrCreateConversation, updateConversation, createTask } from "../config/db.js";
-import { sendTextToConversation } from "../messaging.js";
+import { sendTextToConversation, sendMediaUrlToConversation } from "../messaging.js";
 import { resolveWhatsAppNumber } from "../whatsapp/baileysClient.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -259,7 +259,7 @@ router.patch("/pipelines/:id", async (req, res) => {
     if (req.body?.name !== undefined) patch.name = String(req.body.name).slice(0, 60);
     if (Array.isArray(req.body?.fields)) patch.fields = cleanFields(req.body.fields);
     if (Array.isArray(req.body?.automations)) patch.automations = cleanRules(req.body.automations);
-    if (Array.isArray(req.body?.messages)) patch.messages = req.body.messages.slice(0, 30).map((m) => ({ id: String(m.id || randomUUID()).slice(0, 40), title: String(m.title || "").slice(0, 60), text: String(m.text || "").slice(0, 2000) })).filter((m) => m.title && m.text);
+    if (Array.isArray(req.body?.messages)) patch.messages = req.body.messages.slice(0, 30).map((m) => ({ id: String(m.id || randomUUID()).slice(0, 40), title: String(m.title || "").slice(0, 60), text: String(m.text || "").slice(0, 4000), files: cleanMsgFiles(m.files) })).filter((m) => m.title && (m.text || m.files.length));
     if (Array.isArray(req.body?.stages)) patch.stages = req.body.stages.filter((s) => s?.id && s?.name).map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff", automations: cleanAutomations(s.automations) }));
     const { data, error } = await supabase.from("crm_pipelines").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
@@ -550,15 +550,35 @@ router.post("/by-conversation/:convId", async (req, res) => {
 });
 
 // Enviar mensagem (pronta ou livre) para o cliente do card pelo WhatsApp
+const MEDIA_HOST = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
+function cleanMsgFiles(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 5).filter((f) => f && typeof f.url === "string" && (!MEDIA_HOST || f.url.startsWith(MEDIA_HOST))).map((f) => ({
+    url: f.url.slice(0, 600), name: String(f.name || "arquivo").slice(0, 120), type: String(f.type || "").slice(0, 80)
+  }));
+}
+const mediaKind = (type) => (/^image\//.test(type) ? "image" : /^video\//.test(type) ? "video" : "document");
+// Arquivo para mensagens prontas do funil
+router.post("/message-files", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "Envie um arquivo." });
+    const name = Buffer.from(req.file.originalname || "arquivo", "latin1").toString("utf8").slice(0, 120);
+    const ext = (name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
+    const url = await uploadMedia({ accountId: req.accountId, buffer: req.file.buffer, extension: ext, contentType: req.file.mimetype || "application/octet-stream" });
+    res.status(201).json({ url, name, type: req.file.mimetype || "" });
+  } catch (err) { fail(res, err); }
+});
 router.post("/leads/:id/message", async (req, res) => {
   try {
     const text = String(req.body?.text || "").trim().slice(0, 4000);
-    if (!text) return res.status(400).json({ error: "Escreva a mensagem." });
+    const files = cleanMsgFiles(req.body?.files);
+    if (!text && !files.length) return res.status(400).json({ error: "Escreva a mensagem." });
     const { data: lead } = await supabase.from("crm_leads").select("*").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
     if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
     const conv = await leadConversation(req.accountId, lead, { agentId: req.userId });
-    await sendTextToConversation(req.accountId, conv, text, { senderName: req.userName || null });
-    await pushHistory(lead.id, [{ type: "whats", text, by: req.userName || null }]);
+    if (text) await sendTextToConversation(req.accountId, conv, text, { senderName: req.userName || null });
+    for (const f of files) await sendMediaUrlToConversation(req.accountId, conv, { url: f.url, mediaType: mediaKind(f.type), fileName: f.name, mimetype: f.type || undefined }, { senderName: req.userName || null });
+    await pushHistory(lead.id, [{ type: "whats", text: [text, ...files.map((f) => `📎 ${f.name}`)].filter(Boolean).join("\n"), by: req.userName || null }]);
     await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", lead.id);
     const { data } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("id", lead.id).single();
     res.json({ conversationId: conv.id, lead: mapLead(data) });
@@ -577,6 +597,21 @@ router.post("/leads/:id/notes", async (req, res) => {
     if (error) throw error;
     if (!data.history) return res.status(500).json({ error: "Rode a migration 035 no Supabase." });
     res.status(201).json(mapLead(data));
+  } catch (err) { fail(res, err); }
+});
+router.patch("/leads/:id/notes/:noteId", async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim().slice(0, 4000);
+    if (!text) return res.status(400).json({ error: "Escreva a anotação." });
+    const { data: lead } = await supabase.from("crm_leads").select("id, history").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+    if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
+    const note = (lead.history || []).find((h) => h.id === req.params.noteId && h.type === "note");
+    if (!note) return res.status(404).json({ error: "Anotação não encontrada." });
+    if (note.byId && note.byId !== req.userId && !isManager(req)) return res.status(403).json({ error: "Só quem escreveu ou o gestor pode editar." });
+    const history = (lead.history || []).map((h) => (h.id === note.id ? { ...h, text, editedBy: req.userName || null, editedAt: new Date().toISOString() } : h));
+    const { data, error } = await supabase.from("crm_leads").update({ history }).eq("id", lead.id).select(LEAD_SELECT).single();
+    if (error) throw error;
+    res.json(mapLead(data));
   } catch (err) { fail(res, err); }
 });
 router.delete("/leads/:id/notes/:noteId", async (req, res) => {
