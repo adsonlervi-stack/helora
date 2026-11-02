@@ -299,25 +299,50 @@ function FunnelBox({ conversation, contact, saveField }) {
       )}
       {mode === "crm" && crmAvailable && (
         <>
-          <Row label="Funil">
-            <select value={lead?.pipelineId || ""} disabled={busy} onChange={(e) => { const p = pipes.find((x) => x.id === e.target.value); if (p) move(p.id, p.stages?.[0]?.id); }}>
-              <option value="" disabled>Escolher funil</option>
-              {pipes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </Row>
-          {lead && (
-            <Row label="Etapa">
-              <select value={lead.stage} disabled={busy} onChange={(e) => move(lead.pipelineId, e.target.value)}>
-                {(pipe?.stages || []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </Row>
-          )}
-          {lead ? (
-            <div className="cp-card-link">
-              <span>{lead.name}{lead.value ? ` · ${brl(lead.value)}` : ""}</span>
-              <button onClick={showCard}><ExternalLink size={13} /> Abrir card</button>
+          {lead && pipe ? (
+            <div className="cpd">
+              <div className="cpd-crumb"><span>{pipe.name}</span> › <strong>{lead.name}</strong><button title="Abrir card" onClick={showCard}><ExternalLink size={14} /></button></div>
+              <div className="cpd-bar">
+                {(pipe.stages || []).map((st, i) => {
+                  const idx = (pipe.stages || []).findIndex((x) => x.id === lead.stage);
+                  return <button key={st.id} title={st.name} disabled={busy} className={i <= idx ? "on" : ""} style={i <= idx ? { background: st.color || "#0071e3" } : undefined} onClick={() => move(lead.pipelineId, st.id)} />;
+                })}
+              </div>
+              <div className="cpd-stage">
+                <select value={lead.stage} disabled={busy} onChange={(e) => move(lead.pipelineId, e.target.value)}>
+                  {(pipe.stages || []).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                </select>
+                <span>{(pipe.stages || []).findIndex((x) => x.id === lead.stage) + 1}/{(pipe.stages || []).length}</span>
+              </div>
+              <div className="cpd-grid">
+                <div><small>Valor</small><strong>{brl(lead.value || 0)}</strong></div>
+                <div><small>Dono</small><strong>{lead.ownerName || "Sem dono"}</strong></div>
+              </div>
+              <div className="cpd-out">
+                {[["won", "Ganho"], ["lost", "Perdido"], [null, "Aberto"]].map(([k, l]) => (
+                  <button key={l} className={`${(lead.outcome || null) === k ? "on" : ""} ${k || "open"}`} disabled={busy}
+                    onClick={async () => { setBusy(true); try { const r = await crm.updateLead(lead.id, { outcome: k }); setLead(r.lead || r); } catch (e) { setErr(e?.response?.data?.error || e.message); } setBusy(false); }}>{l}</button>
+                ))}
+              </div>
+              <button className="cpd-move" onClick={() => setLead({ ...lead, __pick: true })}>Trocar de funil</button>
+              {lead.__pick && (
+                <select autoFocus value="" disabled={busy} onChange={(e) => { const p = pipes.find((x) => x.id === e.target.value); if (p) move(p.id, p.stages?.[0]?.id); }}>
+                  <option value="" disabled>Escolher funil</option>
+                  {pipes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
             </div>
-          ) : <div className="cv-muted" style={{ padding: "6px 14px 10px", fontSize: 12.5 }}>Escolha o funil para criar o card deste cliente no CRM.</div>}
+          ) : (
+            <>
+              <Row label="Funil">
+                <select value="" disabled={busy} onChange={(e) => { const p = pipes.find((x) => x.id === e.target.value); if (p) move(p.id, p.stages?.[0]?.id); }}>
+                  <option value="" disabled>Escolher funil</option>
+                  {pipes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </Row>
+              <div className="cv-muted" style={{ padding: "6px 14px 10px", fontSize: 12.5 }}>Escolha o funil para criar o card deste cliente no CRM.</div>
+            </>
+          )}
         </>
       )}
       {err && <div className="admin-feedback error" style={{ margin: 8 }}>{err}</div>}
