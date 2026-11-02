@@ -10,6 +10,7 @@ import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, google
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import CrmLeadPage, { notifyText } from "./CrmLeadPage.jsx";
 import AutomationsSheet from "./CrmAutomations.jsx";
+import { fmtDoc } from "../docs.js";
 import Avatar from "./Avatar.jsx";
 import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
@@ -38,6 +39,7 @@ const fmtField = (f, v) => {
   if (v == null || v === "") return "—";
   if (f.type === "date") return String(v).split("-").reverse().join("/");
   if (f.type === "currency") return brl(Number(v));
+  if (isDocField(f)) return fmtDoc(v);
   return String(v);
 };
 const daysUntil = (d) => { if (!d) return null; const t = new Date(`${d}T12:00:00`); return Math.round((t - new Date()) / 86400000); };
