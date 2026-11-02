@@ -1,6 +1,6 @@
 import { askConfirm } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Smartphone, QrCode, Pencil, Workflow } from "lucide-react";
+import { Plus, Trash2, Smartphone, QrCode, Pencil, Workflow, ChevronDown, ChevronRight, Wifi, WifiOff, RotateCw, Power, Users, Clock, Instagram, Facebook, Mail, MessageCircle } from "lucide-react";
 import {
   getChannels,
   createChannelApi,
@@ -11,6 +11,8 @@ import {
   setChannelPermissionsApi,
   getFlows,
   updateChannelApi,
+  logoutWhatsAppApi,
+  resetWhatsAppApi,
   API_BASE
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
@@ -74,13 +76,13 @@ function PermissionsPanel({ channel, team, onClose }) {
   );
 }
 
-function NewChannelModal({ departments, flows, initial, onClose, onCreate }) {
+function NewChannelModal({ departments, flows, initial, preset, onClose, onCreate }) {
   const editing = !!initial;
-  const [platform, setPlatform] = useState(initial?.platform || "whatsapp");
+  const [platform, setPlatform] = useState(initial?.platform || preset?.platform || "whatsapp");
   const [name, setName] = useState(initial?.name || "");
   const [departmentId, setDepartmentId] = useState(initial?.departmentId || "");
   const [flowId, setFlowId] = useState(initial?.flowId || "");
-  const [provider, setProvider] = useState(initial?.provider || "baileys");
+  const [provider, setProvider] = useState(initial?.provider || preset?.provider || "baileys");
   const [externalPageId, setExternalPageId] = useState(initial?.externalPageId || "");
   const [phoneNumberId, setPhoneNumberId] = useState(initial?.phoneNumberId || "");
   const [wabaId, setWabaId] = useState(initial?.wabaId || "");
@@ -218,90 +220,90 @@ export default function ChannelsPage() {
     load();
   };
 
+  const [menu, setMenu] = useState(false);
+  const [hideOff, setHideOff] = useState(() => { try { return localStorage.getItem("helora_ch_hide") === "1"; } catch { return false; } });
+  const isOn = (c) => c.status === "connected";
+  const shown = channels.filter((c) => !hideOff || isOn(c));
+  const ADD = [
+    { k: "wa", icon: QrCode, color: "#25D366", title: "WhatsApp (QR Code)", sub: "Conecte lendo o QR Code no celular", preset: { platform: "whatsapp", provider: "baileys" } },
+    { k: "cloud", icon: MessageCircle, color: "#128C7E", title: "WhatsApp Cloud API", sub: "API oficial da Meta", preset: { platform: "whatsapp", provider: "cloud" } },
+    { k: "ig", icon: Instagram, color: "#C13584", title: "Instagram Direct", sub: "Mensagens do Instagram", preset: { platform: "instagram" } },
+    { k: "fb", icon: Facebook, color: "#1877F2", title: "Facebook Page", sub: "Messenger da sua página", preset: { platform: "messenger" } },
+    { k: "mail", icon: Mail, color: "#EA4335", title: "E-mail", sub: "Gmail, Outlook ou e-mail próprio", go: "connections" }
+  ];
+  const typeLabel = (c) => (c.platform === "whatsapp" ? (c.provider === "cloud" ? "Cloud API" : "WhatsApp QR") : PLATFORM_LABELS[c.platform]);
+  const when = (iso) => (iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
+  const disconnect = async (c) => {
+    if (!await askConfirm(`Desconectar o WhatsApp do canal "${c.name}"? Para voltar será preciso ler o QR Code de novo.`, { okText: "Desconectar", danger: true })) return;
+    await logoutWhatsAppApi(c.id).catch(() => {}); load();
+  };
+  const restart = async (c) => { await resetWhatsAppApi(c.id).catch(() => {}); load(); };
+
   return (
-    <div className="page">
-      <div className="deals-toolbar">
-        <div className="card-subtitle" style={{ margin: 0 }}>
-          Cada dispositivo de WhatsApp é uma conexão independente. Uma conta pode ter vários.
+    <div className="page ch2">
+      <div className="ch2-head">
+        <h2>Canais de comunicação</h2>
+        <span className="ch2-count">{channels.filter(isOn).length}/{channels.length}</span>
+        <span className="ch2-sp" />
+        <label className="ch2-hide"><input type="checkbox" checked={hideOff} onChange={(e) => { setHideOff(e.target.checked); try { localStorage.setItem("helora_ch_hide", e.target.checked ? "1" : "0"); } catch {} }} /> Ocultar desconectados</label>
+        <div className="ch2-add-wrap">
+          <button className="ch2-add" onClick={() => setMenu((v) => !v)}><Plus size={16} /> Adicionar canal <ChevronDown size={15} /></button>
+          {menu && (
+            <div className="ch2-menu" onMouseLeave={() => setMenu(false)}>
+              <div className="ch2-menu-t">Adicionar novo canal</div>
+              {ADD.map((o) => (
+                <button key={o.k} onClick={() => { setMenu(false); if (o.go) { window.history.replaceState(null, "", `${window.location.pathname}?aba=${o.go}`); window.location.reload(); } else setShowNew(o.preset); }}>
+                  <span className="ch2-mi" style={{ background: o.color }}><o.icon size={18} /></span>
+                  <span><strong>{o.title}</strong><small>{o.sub}</small></span>
+                  <ChevronRight size={16} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <button className="connect-btn deals-new-btn" onClick={() => setShowNew(true)}>
-          <Plus size={15} style={{ marginRight: 6, verticalAlign: -3 }} />
-          Novo canal
-        </button>
       </div>
 
-      <div className="agent-grid">
-        {channels.map((c) => (
-          <div className="agent-card" key={c.id}>
-            <div className="agent-avatar">
-              <Smartphone size={20} />
-            </div>
-            <div className="agent-name">{c.name || PLATFORM_LABELS[c.platform]}</div>
-            <div className="agent-meta">
-              {PLATFORM_LABELS[c.platform]}
-              {c.departmentName ? ` · ${c.departmentName}` : " · sem setor"}
-            </div>
-            <div className="agent-meta channel-flow">
-              <Workflow size={12} /> {flows.find((f) => f.id === c.flowId)?.name || "Fluxo ativo da empresa"}
-            </div>
-
-            {c.platform === "whatsapp" && (
-              <div
-                className="agent-status"
-                style={{ color: c.status === "connected" ? "var(--success)" : "var(--text-muted)" }}
-              >
-                <span
-                  className="status-dot"
-                  style={{
-                    background:
-                      c.status === "connected" ? "var(--success)" : c.status === "connecting" ? "#f2a900" : "#c3c9cc"
-                  }}
-                />
-                {c.status === "connected"
-                  ? `Conectado${c.phone ? ` · +${c.phone}` : ""}`
-                  : c.status === "connecting"
-                    ? "Aguardando leitura do QR"
-                    : "Desconectado"}
+      <div className="ch2-grid">
+        {shown.map((c) => {
+          const on = isOn(c);
+          const wa = c.platform === "whatsapp";
+          const Ico = c.platform === "instagram" ? Instagram : c.platform === "messenger" ? Facebook : wa ? MessageCircle : Smartphone;
+          return (
+            <div className={`ch2-card ${on ? "on" : wa && c.status === "connecting" ? "wait" : "off"}`} key={c.id}>
+              <div className="ch2-top">
+                <span className={`ch2-ico ${c.platform}`}><Ico size={18} /></span>
+                <div className="ch2-id">
+                  <strong title={c.name}>{c.name || PLATFORM_LABELS[c.platform]}</strong>
+                  <small>{typeLabel(c)}{c.phone ? ` · +${c.phone}` : ""}</small>
+                </div>
+                <button className="ch2-edit" title="Editar setor e fluxo" onClick={() => setEditChannel(c)}><Pencil size={15} /></button>
               </div>
-            )}
-
-            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-              {c.platform === "whatsapp" && (
-                <button
-                  className="connect-btn"
-                  style={{ width: "auto", padding: "8px 14px" }}
-                  onClick={() => setQrChannel(c)}
-                >
-                  <QrCode size={14} style={{ marginRight: 5, verticalAlign: -2 }} />
-                  {c.status === "connected" ? "Ver status" : "Conectar"}
-                </button>
-              )}
-              <button className="resolve-btn" onClick={() => setEditChannel(c)} title="Setor e fluxo">
-                <Pencil size={13} style={{ marginRight: 4, verticalAlign: -2 }} />
-                Editar
-              </button>
-              <button
-                className="resolve-btn"
-                onClick={() => setPermChannel(c)}
-              >
-                Permissões
-              </button>
-              <button className="reply-delete" onClick={() => handleDelete(c.id)} title="Remover canal">
-                <Trash2 size={16} />
-              </button>
+              <div className="ch2-status">
+                {wa ? (on ? <><Wifi size={15} className="ok" /> Conexão estabelecida</> : c.status === "connecting" ? <><QrCode size={15} className="wait" /> Aguardando leitura do QR Code</> : <><WifiOff size={15} className="bad" /> Desconectado</>)
+                  : on ? <><Wifi size={15} className="ok" /> Ativo</> : <><WifiOff size={15} className="bad" /> Falta configurar</>}
+                {c.updatedAt && <span className="ch2-when"><Clock size={12} /> {when(c.updatedAt)}</span>}
+              </div>
+              <div className="ch2-info">
+                <span><Users size={13} /> {c.departmentName || "Sem setor"}</span>
+                <span><Workflow size={13} /> {flows.find((f) => f.id === c.flowId)?.name || "Fluxo ativo da empresa"}</span>
+              </div>
+              <div className="ch2-actions">
+                {wa && c.provider !== "cloud" && (on
+                  ? <button className="ch2-btn danger" onClick={() => disconnect(c)}><Power size={14} /> Desconectar</button>
+                  : <button className="ch2-btn ok" onClick={() => setQrChannel(c)}><QrCode size={14} /> Conectar</button>)}
+                {wa && c.provider !== "cloud" && <button className="ch2-icon" title="Reiniciar conexão" onClick={() => restart(c)}><RotateCw size={15} /></button>}
+                <button className="ch2-btn ghost" onClick={() => setPermChannel(c)}>Permissões</button>
+                <span className="ch2-sp" />
+                <button className="ch2-icon del" title="Remover canal" onClick={() => handleDelete(c.id)}><Trash2 size={15} /></button>
+              </div>
             </div>
-          </div>
-        ))}
-
-        {channels.length === 0 && (
-          <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0" }}>
-            Nenhum canal cadastrado ainda.
-          </div>
-        )}
+          );
+        })}
+        {channels.length === 0 && <div className="ch2-empty">Nenhum canal ainda. Clique em <b>Adicionar canal</b>.</div>}
       </div>
 
       {showNew && (
-        <NewChannelModal departments={departments} flows={flows} onClose={() => setShowNew(false)} onCreate={handleCreate} />
+        <NewChannelModal departments={departments} flows={flows} preset={typeof showNew === "object" ? showNew : null} onClose={() => setShowNew(false)} onCreate={handleCreate} />
       )}
       {editChannel && (
         <NewChannelModal departments={departments} flows={flows} initial={editChannel} onClose={() => setEditChannel(null)} onCreate={handleEdit} />
