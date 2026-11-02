@@ -1,8 +1,8 @@
 import { Group, Row, Sheet, Button } from "./ui.jsx";
-import { getConversationAuditApi } from "../api.js";
+import { getConversationAuditApi, setConversationAvatarApi } from "../api.js";
 import React, { useEffect, useState } from "react";
-import { X, User, Briefcase, StickyNote, Plus } from "lucide-react";
-import Avatar from "./Avatar.jsx";
+import { X, User, Briefcase, StickyNote, Plus, Pencil } from "lucide-react";
+import Avatar, { cartoonUrl, isCartoon } from "./Avatar.jsx";
 import LabelPicker from "./LabelPicker.jsx";
 import PrioritySelector from "./PrioritySelector.jsx";
 import NotesSection from "./NotesSection.jsx";
@@ -29,6 +29,9 @@ const fmtPhone = (d) => {
 /** Painel do cliente (clicar na foto/nome): Perfil, Oportunidades e Notas. */
 export default function ClientPanel({ conversation, departments = [], team = [], onSetPriority, onToggleLabel, onSetDepartment, onAssign, onClose, onOpenPipeline }) {
   const [tab, setTab] = useState("perfil");
+  const [avOpen, setAvOpen] = useState(false);
+  const [avChoice, setAvChoice] = useState(undefined);
+  useEffect(() => { setAvChoice(undefined); setAvOpen(false); }, [conversation?.id]);
   const [contact, setContact] = useState(null);
   const [deals, setDeals] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -75,7 +78,26 @@ export default function ClientPanel({ conversation, departments = [], team = [],
       </div>
 
       <div className="client-identity">
-        <Avatar name={conversation.name} url={conversation.avatarUrl} size={56} zoomable />
+        <span className="av-pick-wrap">
+          <Avatar name={conversation.name} url={avChoice ?? conversation.avatarUrl} size={56} zoomable />
+          {isCartoon(avChoice ?? conversation.avatarUrl) && !conversation.isGroup && (
+            <button className="av-pick-btn" title="Trocar boneco" onClick={() => setAvOpen((v) => !v)}><Pencil size={11} /></button>
+          )}
+          {avOpen && (
+            <div className="av-pick">
+              <div className="av-pick-t">Escolha o boneco</div>
+              {["f", "m"].map((g) => (
+                <div key={g} className="av-pick-row">
+                  {[0, 1, 2, 3, 4, 5].map((n) => {
+                    const v = `avatar:${g}:${n}`;
+                    return <button key={v} onClick={async () => { try { await setConversationAvatarApi(conversation.id, v); setAvChoice(v); setAvOpen(false); } catch (e) { alert(e?.response?.data?.error || e.message); } }}><img src={cartoonUrl(conversation.name, v)} alt="" /></button>;
+                  })}
+                </div>
+              ))}
+              <button className="lp-link sm" onClick={async () => { await setConversationAvatarApi(conversation.id, null).catch(() => {}); setAvChoice(null); setAvOpen(false); }}>Automático (pelo nome)</button>
+            </div>
+          )}
+        </span>
         <div>
           <strong>{contact?.name || conversation.name}</strong>
           <span>{conversation.isGroup ? "Grupo de WhatsApp" : fmtPhone(contact?.phone || conversation.phone || "") || "Número não informado"}</span>

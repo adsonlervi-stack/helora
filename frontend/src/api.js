@@ -141,6 +141,7 @@ export const setProfileDepartmentsApi = (profileId, departmentIds) =>
   api.post(`/team/${profileId}/departments`, { departmentIds }).then((r) => r.data);
 
 // ---- Canais (dispositivos WhatsApp / Messenger / Instagram) ----
+export const setConversationAvatarApi = (id, avatar) => api.post(`/conversations/${id}/avatar`, { avatar }).then((r) => r.data);
 export const getChannels = () => api.get("/channels").then((r) => r.data);
 export const createChannelApi = (platform, name, departmentId, flowId, extra = {}) =>
   api.post("/channels", { platform, name, departmentId, flowId, ...extra }).then((r) => r.data);
