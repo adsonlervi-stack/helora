@@ -353,7 +353,9 @@ async function outcomeForStage(pipelineId, stageId) {
 router.get("/leads", async (req, res) => {
   try {
     await wakeSnoozed(req.accountId).catch(() => {});
-    let q = supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", req.accountId).order("created_at", { ascending: false }).limit(3000);
+    const lim = Math.min(Math.max(parseInt(req.query.limit, 10) || 3000, 1), 3000);
+    const sortCol = req.query.sort === "recent" ? "last_interaction_at" : "created_at";
+    let q = supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", req.accountId).order(sortCol, { ascending: false, nullsFirst: false }).limit(lim);
     if (req.query.pipelineId) q = q.eq("pipeline_id", req.query.pipelineId);
     // Dados do CRM nunca são apagados: "excluídos" só somem da tela
     if (await hasArchiveCols()) {
@@ -369,7 +371,20 @@ router.get("/leads", async (req, res) => {
     }
     const { data, error } = await q;
     if (error) throw error;
-    res.json(data.map(mapLead));
+    const out = data.map(mapLead);
+    // Última mensagem e foto da conversa ligada ao card (para o quadro)
+    const convIds = [...new Set(out.map((l) => l.conversationId).filter(Boolean))];
+    const convMap = new Map();
+    for (let i = 0; i < convIds.length; i += 300) {
+      const { data: cs } = await supabase.from("conversations").select("id, last_message_preview, last_message_at, avatar_url").eq("account_id", req.accountId).in("id", convIds.slice(i, i + 300));
+      for (const c of cs || []) convMap.set(c.id, c);
+    }
+    for (const l of out) {
+      const c = convMap.get(l.conversationId);
+      if (c) { l.lastMessage = c.last_message_preview || null; l.lastMessageAt = c.last_message_at || null; l.avatarUrl = c.avatar_url || null; }
+      if (req.query.light === "1") { delete l.history; }
+    }
+    res.json(out);
   } catch (err) { fail(res, err); }
 });
 router.post("/leads", async (req, res) => {

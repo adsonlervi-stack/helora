@@ -370,7 +370,7 @@ export default function App() {
 
         <div className="shell-content">
           {activeSection === "home" && (
-            <HomePage profile={profile} conversations={conversations} onNavigate={setSection} />
+            <HomePage profile={profile} conversations={conversations} onNavigate={setSection} onOpenConversation={openConversation} />
           )}
           {activeSection === "overview" && <OverviewPage refreshKey={statsVersion} />}
           {activeSection === "agents" && <FlowsPage canEdit={profile.role === "owner" || profile.isSuperAdmin} />}

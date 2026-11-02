@@ -1,129 +1,152 @@
 import React, { useEffect, useState } from "react";
-import {
-  LayoutDashboard,
-  KanbanSquare,
-  MessageCircle,
-  Smartphone,
-  Settings2,
-  AlertTriangle,
-  Megaphone
-} from "lucide-react";
-import { priorityMeta } from "./PrioritySelector.jsx";
-import { getAnnouncements } from "../api.js";
-
-const QUICK_ACCESS = [
-  { key: "overview", label: "Painel", icon: LayoutDashboard },
-  { key: "deals", label: "Negócios", icon: KanbanSquare },
-  { key: "conversations", label: "Conversas", icon: MessageCircle },
-  { key: "channels", label: "Canais", icon: Smartphone },
-  { key: "settings", label: "Configurações", icon: Settings2 }
-];
+import { PlusCircle, UserPlus, MessageCirclePlus, Upload, Briefcase, MessageCircle, RefreshCw, Plus, Megaphone, HelpCircle, BookOpen, AlertTriangle } from "lucide-react";
+import Avatar from "./Avatar.jsx";
+import { crm, getAnnouncements } from "../api.js";
 
 function greeting() {
   const h = new Date().getHours();
-  if (h < 12) return "Bom dia";
-  if (h < 18) return "Boa tarde";
-  return "Boa noite";
+  return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
 }
-
-function formatTime(iso) {
-  return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+function ago(iso) {
+  if (!iso) return "";
+  const d = Math.floor((Date.now() - new Date(iso)) / 86400000);
+  if (d <= 0) {
+    const h = Math.floor((Date.now() - new Date(iso)) / 3600000);
+    return h <= 0 ? "agora" : `há ${h} h`;
+  }
+  return d === 1 ? "ontem" : `há ${d} dias`;
 }
+const when = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleDateString("pt-BR");
+};
+const go = (aba, extra = {}) => {
+  const q = new URLSearchParams({ aba, ...extra });
+  window.history.replaceState(null, "", `${window.location.pathname}?${q}`);
+};
 
-export default function HomePage({ profile, conversations, onNavigate }) {
-  const firstName = (profile?.name || "").split(" ")[0] || "Você";
+export default function HomePage({ profile, conversations = [], onNavigate, onOpenConversation, onNewConversation }) {
+  const firstName = (profile?.name || "").split(" ")[0] || "você";
+  const [mode, setMode] = useState("new");
+  const [deals, setDeals] = useState(null);
+  const [pipes, setPipes] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
-
+  const loadDeals = (m = mode) => { setDeals(null); crm.leads({ limit: 6, sort: m === "recent" ? "recent" : undefined }).then(setDeals).catch(() => setDeals([])); };
   useEffect(() => {
-    getAnnouncements().then(setAnnouncements).catch(console.error);
+    loadDeals();
+    crm.pipelines().then(setPipes).catch(() => {});
+    getAnnouncements().then(setAnnouncements).catch(() => {});
   }, []);
+  const pipeOf = (l) => pipes.find((p) => p.id === l.pipelineId);
+  const stageOf = (l) => pipeOf(l)?.stages?.find((s) => s.id === l.stage)?.name || "";
+  const convs = [...conversations].sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0)).slice(0, 6);
+  const urgent = conversations.filter((c) => c.status !== "resolved" && (c.priority === "urgent" || c.priority === "high")).length;
 
-  const pending = conversations
-    .filter((c) => c.status !== "resolved" && (c.priority === "urgent" || c.priority === "high"))
-    .sort((a, b) => new Date(a.lastMessageAt) - new Date(b.lastMessageAt))
-    .slice(0, 6);
-
-  const unreadTotal = conversations.reduce((sum, c) => sum + (c.unread || 0), 0);
+  const actions = [
+    { icon: PlusCircle, title: "Novo negócio", sub: "Adicionar ao funil", run: () => { go("crm", { acao: "novo" }); onNavigate("crm"); } },
+    { icon: UserPlus, title: "Novo contato", sub: "Pessoa ou empresa", run: () => onNavigate("contacts") },
+    { icon: MessageCirclePlus, title: "Nova conversa", sub: "Iniciar atendimento", run: () => (onNewConversation ? onNewConversation() : onNavigate("conversations")) },
+    { icon: Upload, title: "Importar planilha", sub: "Negócios ou contatos", run: () => { go("crm", { acao: "importar" }); onNavigate("crm"); } }
+  ];
 
   return (
-    <div className="page">
-      <div className="welcome-banner">
-        <div className="welcome-greeting">
-          {greeting()}, {firstName}
-        </div>
-        <div className="welcome-sub">
-          {profile?.isSuperAdmin
-            ? "Aqui está um resumo de todas as contas."
-            : `Aqui está um resumo do que está acontecendo na ${profile?.accountName || "sua conta"}.`}
+    <div className="page home2">
+      <div className="home2-hero">
+        <Avatar name={profile?.name} url={profile?.avatarUrl} size={52} />
+        <div>
+          <h2>{greeting()}, {firstName}</h2>
+          <p>Aqui está o seu dia. Bom trabalho.</p>
         </div>
       </div>
 
-      {pending.length > 0 && (
-        <div className="card pending-panel">
-          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <AlertTriangle size={16} style={{ color: "var(--danger)" }} />
-            {pending.length} conversa(s) de prioridade alta aguardando
-          </div>
-          <div className="pending-list">
-            {pending.map((c) => {
-              const pMeta = priorityMeta(c.priority);
-              return (
-                <div
-                  key={c.id}
-                  className="pending-item"
-                  onClick={() => onNavigate("conversations")}
-                >
-                  <span className="priority-dot" style={{ background: pMeta.color }} />
-                  <span className="pending-name">{c.name}</span>
-                  <span className="pending-time">{formatTime(c.lastMessageAt)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {urgent > 0 && (
+        <button className="home2-alert" onClick={() => onNavigate("conversations")}>
+          <AlertTriangle size={15} /> {urgent} conversa(s) de prioridade alta aguardando
+        </button>
       )}
 
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-title">Acessos rápidos</div>
-        <div className="quick-access-grid">
-          {QUICK_ACCESS.map(({ key, label, icon: Icon }) => (
-            <button key={key} className="quick-access-card" onClick={() => onNavigate(key)}>
-              <div className="qa-icon">
-                <Icon size={20} />
-              </div>
-              <div className="qa-name">{label}</div>
-              {key === "conversations" && unreadTotal > 0 && (
-                <span className="qa-badge">{unreadTotal}</span>
-              )}
-            </button>
-          ))}
-        </div>
+      <div className="home2-label">Ações rápidas</div>
+      <div className="home2-actions">
+        {actions.map(({ icon: I, title, sub, run }) => (
+          <button key={title} className="home2-action" onClick={run}>
+            <span className="home2-ico"><I size={18} /></span>
+            <span><strong>{title}</strong><small>{sub}</small></span>
+          </button>
+        ))}
+      </div>
+
+      <div className="home2-cols">
+        <section className="home2-box">
+          <header>
+            <Briefcase size={16} /><h3>Últimos negócios</h3>
+            <div className="home2-seg">
+              {[["new", "Novos"], ["recent", "Recentes"]].map(([k, l]) => (
+                <button key={k} className={mode === k ? "on" : ""} onClick={() => { setMode(k); loadDeals(k); }}>{l}</button>
+              ))}
+            </div>
+            <span className="home2-sp" />
+            <button className="home2-icon" title="Atualizar" onClick={() => loadDeals()}><RefreshCw size={15} /></button>
+            <button className="home2-new" onClick={actions[0].run}><Plus size={14} /> Novo</button>
+          </header>
+          <div className="home2-list">
+            {deals === null && <div className="home2-empty">Carregando…</div>}
+            {deals?.length === 0 && <div className="home2-empty">Nenhum negócio ainda.</div>}
+            {(deals || []).map((l) => (
+              <button key={l.id} className="home2-row" onClick={() => { go("crm", { lead: l.id }); onNavigate("crm"); }}>
+                <Avatar name={l.name} url={l.avatarUrl} size={40} />
+                <span className="home2-main"><strong>{l.name}</strong><small>{[pipeOf(l)?.name, stageOf(l)].filter(Boolean).join(" · ")}</small></span>
+                <span className="home2-when">{ago(mode === "recent" ? l.lastInteractionAt || l.createdAt : l.createdAt)}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="home2-box">
+          <header>
+            <MessageCircle size={16} /><h3>Últimas conversas</h3>
+            <span className="home2-sp" />
+            <button className="home2-new" onClick={actions[2].run}><Plus size={14} /> Nova</button>
+          </header>
+          <div className="home2-list">
+            {convs.length === 0 && <div className="home2-empty">Nenhuma conversa ainda.</div>}
+            {convs.map((c) => (
+              <button key={c.id} className="home2-row" onClick={() => (onOpenConversation ? onOpenConversation(c.id) : onNavigate("conversations"))}>
+                <span className="home2-av">
+                  <Avatar name={c.name} url={c.avatarUrl} size={40} />
+                  {c.platform === "whatsapp" && <i className="home2-wa" />}
+                </span>
+                <span className="home2-main">
+                  <strong>{c.name}</strong>
+                  <small>{(c.lastMessagePreview || "").replace(/\*([^*\n]+)\*/g, "$1") || "—"}</small>
+                </span>
+                <span className="home2-when">{when(c.lastMessageAt)}{c.unread > 0 && <b className="home2-badge">{c.unread}</b>}</span>
+              </button>
+            ))}
+          </div>
+        </section>
       </div>
 
       {announcements.length > 0 && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <div className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Megaphone size={16} style={{ color: "var(--accent)" }} />
-            Comunicados
-          </div>
-          <div className="announcement-list">
+        <section className="home2-box" style={{ marginTop: 16 }}>
+          <header><Megaphone size={16} /><h3>Comunicados</h3></header>
+          <div className="home2-list">
             {announcements.map((a) => (
-              <div className="announcement-item" key={a.id}>
-                <div className="ann-title">{a.title}</div>
-                <div className="ann-msg">{a.message}</div>
-                {a.link && (
-                  <a href={a.link} target="_blank" rel="noreferrer" className="ann-link ann-btn">
-                    {a.buttonText || "Abrir link"}
-                  </a>
-                )}
-                <div className="ann-meta">
-                  {new Date(a.createdAt).toLocaleDateString("pt-BR")}
-                </div>
+              <div key={a.id} className="home2-ann">
+                <strong>{a.title}</strong>
+                <p>{a.message}</p>
+                {a.link && <a href={a.link} target="_blank" rel="noreferrer">{a.buttonText || "Abrir link"}</a>}
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
+
+      <footer className="home2-foot">
+        <button onClick={() => onNavigate("settings")}><HelpCircle size={14} /> Ajuda</button>
+        <span />
+        <button onClick={() => onNavigate("ia")}><BookOpen size={14} /> Helora IA</button>
+      </footer>
     </div>
   );
 }

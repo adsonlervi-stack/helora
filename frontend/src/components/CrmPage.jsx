@@ -4,12 +4,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
-  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown, MoreHorizontal
+  Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown, MoreHorizontal, Mail
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import CrmLeadPage, { notifyText } from "./CrmLeadPage.jsx";
 import AutomationsSheet from "./CrmAutomations.jsx";
+import Avatar from "./Avatar.jsx";
 import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
@@ -61,6 +62,14 @@ const TABS = [
 ];
 
 /** CRM: prospecção, qualificação e triagem de leads (independente do Pipeline de atendimento). */
+function shortAgo(iso) {
+  if (!iso) return "—";
+  const m = Math.max(0, Math.floor((Date.now() - new Date(iso)) / 60000));
+  if (m < 60) return `${m}min`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24); if (d < 30) return `${d}d`;
+  return `${Math.floor(d / 30)}M`;
+}
 export default function CrmPage({ profile, onOpenConversation }) {
   const isManager = profile?.role === "owner" || profile?.isSuperAdmin;
   const [tab, setTab] = useState("funnel");
@@ -184,6 +193,17 @@ function FunnelView({ ctx }) {
     });
     return out.sort((a, b) => a.pos - b.pos || a.seq - b.seq);
   }, [all, pipeline, pipelines]);
+  // Ações vindas da tela inicial (?acao=novo | importar)
+  const urlAction = useRef(new URLSearchParams(window.location.search).get("acao"));
+  useEffect(() => {
+    const a = urlAction.current;
+    if (!a || !stages?.length) return;
+    urlAction.current = null;
+    if (a === "novo") setOpen({ isNew: true, stage: stages[0]?.id });
+    if (a === "importar") setImporting(true);
+    const q = new URLSearchParams(window.location.search); q.delete("acao");
+    window.history.replaceState(null, "", `${window.location.pathname}${q.toString() ? "?" + q : ""}`);
+  }, [stages]);
   const colOf = (l) => (all ? colKey(pipeById.get(l.pipelineId)?.stages?.find((st) => st.id === l.stage)?.name || l.stage) : l.stage);
   const fieldsOf = (l) => (all ? pipeById.get(l.pipelineId)?.fields || [] : modelFields);
   const fltCount = (flt.owner ? 1 : 0) + (flt.tag ? 1 : 0) + (flt.outcome ? 1 : 0) + Object.values(flt.fields).filter(Boolean).length;
@@ -377,6 +397,7 @@ function FunnelView({ ctx }) {
                 <strong title={st.name}>{st.name}</strong>
                 {(st.automations || []).some((a) => a.active !== false) && <span className="crm-auto-ind" title="Esta coluna tem automações"><Zap size={12} /></span>}
                 <span className="crm-count">{items.length}</span>
+                <span className="crm-col-sum">{brl(items.reduce((t, x) => t + (Number(x.value) || 0), 0))}</span>
                 {isManager && !all && (
                   <span className="crm-col-tools">
                     <button onClick={() => moveCol(st.id, -1)} title="Mover para a esquerda"><ChevronLeft size={13} /></button>
@@ -400,50 +421,52 @@ function FunnelView({ ctx }) {
                       const done = (l.checklist || []).filter((c) => c.done).length;
                       return (
                         <>
-                          <div className="cc-head">
-                            <button type="button" className="cc-menu" title="Abrir" onClick={(e) => { e.stopPropagation(); setOpen(l); }}><MoreVertical size={15} /></button>
-                            <span className="cc-avatar">{initials(l.name)}</span>
-                            <div className="cc-id">
-                              <strong title={l.name}>{l.name}</strong>
-                              <span>{fmtPhone(l.phone) || l.company || l.email || "Sem contato"}</span>
+                          <div className="cc2-top">
+                            <div className="cc2-tl">
+                              {(l.company || kind || tagsL[0] || all) && (
+                                <div className="cc2-line">
+                                  {l.company && <span className="cc2-company" title={l.company}>{l.company}</span>}
+                                  {all && <span className="cc2-chip">{pipeById.get(l.pipelineId)?.name}</span>}
+                                  {kind && <span className="cc2-chip kind">{kind}</span>}
+                                  {tagsL.slice(0, 2).map((t) => <span key={t.id} className="cc2-chip" style={{ "--c": t.color }}>{t.name}</span>)}
+                                </div>
+                              )}
+                              <strong className="cc2-name" title={l.name}>{l.name}</strong>
                             </div>
-                            <span className={`cc-value ${l.value ? "" : "empty"}`}>{l.value ? brl(l.value) : "+ Valor"}</span>
+                            <Avatar name={l.name} url={l.avatarUrl} size={30} />
                           </div>
-                          {(all || kind || chipsF.length > 0) && (
+                          {chipsF.length > 0 && (
                             <div className="cc-chips">
-                              {all && <span className="cc-chip pipe">{pipeById.get(l.pipelineId)?.name}</span>}
-                              {kind && <span className="cc-chip kind">{/renova/i.test(kind) ? <RefreshCw size={10} /> : <Tag size={10} />} {kind}</span>}
                               {chipsF.map((f) => (
                                 f.alert ? <DueBadge key={f.id} date={l.custom[f.id]} /> : <span key={f.id} className="cc-chip" title={f.label}>{fmtField(f, l.custom[f.id])}</span>
                               ))}
                             </div>
                           )}
-                          <div className="cc-sep" />
-                          <div className="cc-tags">
-                            {tagsL.map((t) => <span key={t.id} className="cc-tag" style={{ "--c": t.color }}>{t.name}</span>)}
-                            <button type="button" className="cc-tag-add" title="Tags" onClick={(e) => { e.stopPropagation(); setOpen(l); }}><Plus size={12} /></button>
-                          </div>
-                          <div className="cc-meta">
-                            <span><Timer size={13} /> {ago(l.stageChangedAt)} na coluna</span>
-                            {l.products.length > 0 && <span><Briefcase size={13} /> {l.products.length} produto{l.products.length > 1 ? "s" : ""}</span>}
-                            <span><Clock size={13} /> Última interação há {ago(l.lastInteractionAt || l.createdAt)}</span>
-                          </div>
-                          <div className="cc-sep" />
-                          <div className="cc-foot" onClick={(e) => e.stopPropagation()}>
+                          {l.lastMessage && (
+                            <button type="button" className="cc2-msg" title={l.lastMessage} onClick={(e) => { e.stopPropagation(); openConv(l); }}>
+                              <MessageCircle size={13} className="cc2-wa" />
+                              <span>{String(l.lastMessage).replace(/\*([^*\n]+)\*/g, "$1")}</span>
+                              <em>{l.lastMessageAt ? new Date(l.lastMessageAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : ""}</em>
+                            </button>
+                          )}
+                          <div className="cc2-foot" onClick={(e) => e.stopPropagation()}>
                             <span className="cc-owner" title={l.ownerName || "Sem responsável"}>{l.ownerAvatar ? <img src={l.ownerAvatar} alt="" /> : initials(l.ownerName)}</span>
-                            <button type="button" className="cc-ico" title="Abrir conversa" disabled={!l.phone} onClick={() => openConv(l)}><MessageCircle size={15} /></button>
-                            {l.phone ? <a className="cc-ico" href={`tel:+${l.phone}`} title="Ligar"><Phone size={15} /></a> : <span className="cc-ico off"><Phone size={15} /></span>}
-                            {l.attachments?.length > 0 && <span className="cc-ico" title="Anexos"><Paperclip size={14} /><small>{l.attachments.length}</small></span>}
-                            <span className="cc-created">Criado há {ago(l.createdAt)}</span>
-                            {l.checklist?.length > 0 && <span className={`cc-check ${done === l.checklist.length ? "ok" : ""}`} title="Checklist"><CheckCircle2 size={14} /> {done}/{l.checklist.length}</span>}
-                            {overdue && <span className="cc-warn" title="Vigência vencida"><AlertTriangle size={13} /></span>}
+                            {l.phone ? <a className="cc2-ico" href={`tel:+${l.phone}`} title="Ligar"><Phone size={13} /></a> : <span className="cc2-ico off"><Phone size={13} /></span>}
+                            <button type="button" className="cc2-ico" title="Abrir conversa" disabled={!l.phone} onClick={() => openConv(l)}><MessageCircle size={13} /></button>
+                            {l.email ? <a className="cc2-ico" href={`mailto:${l.email}`} title="E-mail"><Mail size={13} /></a> : <span className="cc2-ico off"><Mail size={13} /></span>}
+                            <span className={`cc2-val ${l.value ? "" : "zero"}`}>{brl(l.value || 0)}</span>
+                            <span className="cc-sp" />
+                            {overdue && <span className="cc-warn" title="Vigência vencida"><AlertTriangle size={12} /></span>}
+                            {l.attachments?.length > 0 && <span className="cc2-meta" title="Anexos"><Paperclip size={12} />{l.attachments.length}</span>}
+                            {l.checklist?.length > 0 && <span className={`cc2-meta ${done === l.checklist.length ? "ok" : ""}`} title="Tarefas do checklist"><CheckCircle2 size={12} />{done}/{l.checklist.length}</span>}
+                            <span className="cc2-meta" title={`Há ${ago(l.stageChangedAt)} nesta etapa · última interação há ${ago(l.lastInteractionAt || l.createdAt)}`}><Timer size={12} />{shortAgo(l.stageChangedAt)}</span>
                           </div>
                         </>
                       );
                     })()}
                   </div>
                 ))}
-                {!all && <button className="crm-add" onClick={() => setOpen({ isNew: true, stage: st.id })}><Plus size={14} /> Adicionar</button>}
+                {!all && <button className="crm-add" onClick={() => setOpen({ isNew: true, stage: st.id })}><Plus size={14} /> Adicionar negócio</button>}
               </div>
             </div>
           );
