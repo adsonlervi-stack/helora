@@ -10,8 +10,6 @@
     "start": "serve -s dist -l tcp://0.0.0.0:${PORT:-3000}"
   },
   "dependencies": {
-    "@dicebear/avataaars": "^9.4.2",
-    "@dicebear/core": "^9.4.3",
     "@supabase/supabase-js": "^2.45.4",
     "@vitejs/plugin-react": "^4.3.1",
     "axios": "^1.7.7",

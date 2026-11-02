@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
-import { createAvatar } from "@dicebear/core";
-import * as avataaars from "@dicebear/avataaars";
 
 function initials(name = "") {
   return name.trim().slice(0, 2).toUpperCase() || "?";
@@ -21,37 +19,15 @@ export function guessGender(name = "") {
   return /a$/.test(first) ? "f" : "m";
 }
 const hash = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
-const FEM_TOP = ["bigHair", "bob", "bun", "curly", "curvy", "longButNotTooLong", "miaWallace", "straight01", "straight02", "straightAndStrand"];
-const MASC_TOP = ["shortCurly", "shortFlat", "shortRound", "shortWaved", "sides", "theCaesar", "theCaesarAndSidePart", "frizzle"];
-const BG = ["b6e3f4", "c0aede", "d1d4f9", "ffd5dc", "ffdfbf", "c7f0d8"];
-const cache = new Map();
-/** "avatar:f:3" → bonequinho (SVG gerado no navegador). Sem escolha salva, usa o nome (gênero) e um número fixo. */
-export function cartoonUrl(name, choice) {
-  let g, n;
+export const CARTOON_BG = ["#d8ecfb", "#e6dcf7", "#dfe3fb", "#fde2e7", "#feead6", "#d9f3e3"];
+/** "avatar:f:3" → bonequinho 3D. Sem escolha salva, usa o nome (gênero) e um número fixo. */
+export function cartoonPick(name, choice) {
   const m = /^avatar:([mf]):(\d+)$/.exec(choice || "");
-  if (m) { g = m[1]; n = Number(m[2]); } else { g = guessGender(name); n = hash(name || "?") % 12; }
-  const key = `${g}${n}`;
-  if (cache.has(key)) return cache.get(key);
-  const svg = createAvatar(avataaars, {
-    seed: `helora-${key}`,
-    top: g === "f" ? FEM_TOP : MASC_TOP,
-    facialHairProbability: g === "f" ? 0 : 30,
-    accessoriesProbability: 15,
-    accessories: ["prescription01", "prescription02", "round"],
-    skinColor: ["614335", "d08b5b", "ae5d29", "edb98a", "ffdbb4"],
-    hairColor: ["2c1b18", "4a312c", "724133", "a55728", "b58143", "d6b370"],
-    facialHair: ["beardLight", "beardMedium", "moustacheFancy"],
-    clothing: ["blazerAndShirt", "blazerAndSweater", "collarAndSweater", "hoodie", "shirtCrewNeck", "shirtScoopNeck", "shirtVNeck"],
-    clothesColor: ["262e33", "5199e4", "25557c", "3c4f5c", "929598", "65c9ff", "ff5c5c", "e6e6e6"],
-    mouth: ["smile", "default", "twinkle"],
-    eyes: ["default", "happy", "wink"],
-    eyebrows: ["default", "defaultNatural", "raisedExcited"],
-    backgroundColor: [BG[n % BG.length]],
-    backgroundType: ["solid"]
-  }).toDataUri();
-  cache.set(key, svg);
-  return svg;
+  const g = m ? m[1] : guessGender(name);
+  const n = (m ? Number(m[2]) : hash(name || "?")) % 12;
+  return { g, n, src: `/avatars3d/${g}${n}.webp`, bg: CARTOON_BG[(n + (g === "f" ? 0 : 3)) % CARTOON_BG.length] };
 }
+export const cartoonUrl = (name, choice) => cartoonPick(name, choice).src;
 export const isCartoon = (url) => !url || /^avatar:/.test(url);
 
 // Avatar genérico: mostra a foto (avatarUrl) quando existe, senão as iniciais.
@@ -59,7 +35,8 @@ export const isCartoon = (url) => !url || /^avatar:/.test(url);
 export default function Avatar({ name, url, size = 32, className = "", zoomable = false, initials: useInitials = false }) {
   const [bad, setBad] = useState(false);
   const cartoon = !useInitials && isCartoon(url) && !bad;
-  const src = cartoon ? cartoonUrl(name, url) : (isCartoon(url) ? null : url);
+  const pick = cartoon ? cartoonPick(name, url) : null;
+  const src = cartoon ? pick.src : (isCartoon(url) ? null : url);
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -72,11 +49,11 @@ export default function Avatar({ name, url, size = 32, className = "", zoomable 
     <>
       <div
         className={`avatar-circle ${canZoom ? "avatar-zoom" : ""} ${className}`}
-        style={{ width: size, height: size, minWidth: size, fontSize: Math.max(10, Math.round(size * 0.36)) }}
+        style={{ width: size, height: size, minWidth: size, fontSize: Math.max(10, Math.round(size * 0.36)), ...(pick ? { background: pick.bg } : {}) }}
         onClick={canZoom ? (e) => { e.stopPropagation(); e.preventDefault(); setOpen(true); } : undefined}
         title={canZoom ? "Ver foto" : undefined}
       >
-        {src ? <img src={src} alt={name || "Avatar"} onError={() => setBad(true)} /> : initials(name)}
+        {src ? <img src={src} alt={name || "Avatar"} className={pick ? "av3d" : undefined} onError={() => setBad(true)} /> : initials(name)}
       </div>
       {open && createPortal(
         <div className="avatar-lightbox" onClick={() => setOpen(false)}>

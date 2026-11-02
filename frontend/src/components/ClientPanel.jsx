@@ -2,7 +2,7 @@ import { Group, Row, Sheet, Button } from "./ui.jsx";
 import { getConversationAuditApi, setConversationAvatarApi } from "../api.js";
 import React, { useEffect, useState } from "react";
 import { X, User, Briefcase, StickyNote, Plus, Pencil } from "lucide-react";
-import Avatar, { cartoonUrl, isCartoon } from "./Avatar.jsx";
+import Avatar, { cartoonPick, isCartoon } from "./Avatar.jsx";
 import LabelPicker from "./LabelPicker.jsx";
 import PrioritySelector from "./PrioritySelector.jsx";
 import NotesSection from "./NotesSection.jsx";
@@ -88,9 +88,9 @@ export default function ClientPanel({ conversation, departments = [], team = [],
               <div className="av-pick-t">Escolha o boneco</div>
               {["f", "m"].map((g) => (
                 <div key={g} className="av-pick-row">
-                  {[0, 1, 2, 3, 4, 5].map((n) => {
+                  {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((n) => {
                     const v = `avatar:${g}:${n}`;
-                    return <button key={v} onClick={async () => { try { await setConversationAvatarApi(conversation.id, v); setAvChoice(v); setAvOpen(false); } catch (e) { alert(e?.response?.data?.error || e.message); } }}><img src={cartoonUrl(conversation.name, v)} alt="" /></button>;
+                    return <button key={v} onClick={async () => { try { await setConversationAvatarApi(conversation.id, v); setAvChoice(v); setAvOpen(false); } catch (e) { alert(e?.response?.data?.error || e.message); } }}><img src={cartoonPick(conversation.name, v).src} alt="" style={{ background: cartoonPick(conversation.name, v).bg }} /></button>;
                   })}
                 </div>
               ))}

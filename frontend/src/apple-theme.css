@@ -2722,3 +2722,7 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .av-pick-row button { border: 2px solid transparent; border-radius: 50%; padding: 0; background: transparent; cursor: pointer; aspect-ratio: 1; overflow: hidden; }
 .av-pick-row button:hover { border-color: #0071e3; }
 .av-pick-row img { width: 100%; height: 100%; border-radius: 50%; display: block; }
+.avatar-circle img.av3d { width: 82%; height: 82%; object-fit: contain; margin: auto; display: block; transform: translateY(4%); }
+.avatar-circle:has(img.av3d) { display: grid; place-items: center; }
+.av-pick { width: 320px; }
+.av-pick-row img { padding: 4px; box-sizing: border-box; object-fit: contain; }
