@@ -398,7 +398,6 @@ function FunnelView({ ctx }) {
                 <span className="crm-dot" style={{ background: st.color }} />
                 <span className="crm-col-title">
                   <strong title={st.name}>{st.name}</strong>
-                  <span className="crm-col-sum">{brl(items.reduce((t, x) => t + (Number(x.value) || 0), 0))}</span>
                 </span>
                 {(st.automations || []).some((a) => a.active !== false) && <span className="crm-auto-ind" title="Esta coluna tem automações"><Zap size={12} /></span>}
                 <span className="crm-count">{items.length}</span>
