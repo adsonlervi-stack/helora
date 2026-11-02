@@ -2726,3 +2726,55 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .avatar-circle:has(img.av3d) { display: grid; place-items: center; }
 .av-pick { width: 320px; }
 .av-pick-row img { padding: 4px; box-sizing: border-box; object-fit: contain; }
+/* ===================== V14 · Cadência de atividades ===================== */
+.cad-board { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.cad-col { flex: 0 0 230px; background: rgba(118,118,128,.06); border: 1px solid rgba(0,0,0,.06); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; min-height: 320px; }
+.cad-head { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.cad-head i { width: 8px; height: 8px; border-radius: 50%; }
+.cad-count { font-size: 12px; color: #8e8e93; margin: 4px 0 8px; }
+.cad-list { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.cad-item { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 8px; border: 1px solid rgba(0,0,0,.06); background: #fff; cursor: pointer; text-align: left; font-family: inherit; font-size: 13px; color: #1d1d1f; }
+.cad-item:hover { border-color: #0071e3; }
+.cad-item svg { color: #0071e3; flex-shrink: 0; }
+.cad-when { font-size: 11px; font-weight: 600; color: #0071e3; background: rgba(0,113,227,.08); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.cad-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cad-add { margin-top: 8px; border: 1px dashed rgba(0,113,227,.45); background: transparent; color: #0071e3; border-radius: 8px; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; font-family: inherit; }
+.cad-modal-bg { position: fixed; inset: 0; z-index: 10040; background: rgba(0,0,0,.25); display: grid; place-items: center; padding: 16px; }
+.cad-modal { width: 560px; max-width: 100%; max-height: 92vh; overflow: auto; background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 12px; }
+.cad-modal-h { display: flex; justify-content: space-between; align-items: center; font-size: 16px; }
+.cad-modal-h button { border: 0; background: transparent; cursor: pointer; color: #8e8e93; }
+.cad-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.cad-kinds button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 9px; border: 1px solid rgba(0,0,0,.12); background: #fff; cursor: pointer; font-family: inherit; font-size: 13px; color: #1d1d1f; }
+.cad-kinds button.on { border-color: #0071e3; color: #0071e3; background: rgba(0,113,227,.06); font-weight: 600; }
+.cad-l { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: #3a3a3c; }
+.cad-l input, .cad-l textarea, .cad-l select { font-weight: 400; font-family: inherit; font-size: 14px; padding: 9px 11px; border-radius: 9px; border: 1px solid rgba(0,0,0,.14); }
+.cad-l textarea { resize: vertical; }
+.cad-when-in { display: flex; gap: 8px; }
+.cad-when-in input { width: 90px; }
+.cad-tip { color: #8e8e93; font-size: 12px; }
+.cad-modal-f { display: flex; align-items: center; gap: 8px; }
+.cad-del { border: 0; background: transparent; color: #d70015; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; font-family: inherit; font-size: 13px; }
+/* Painel no card */
+.cadp { display: grid; grid-template-columns: minmax(220px, 1fr) 1.4fr; border: 1px solid rgba(0,0,0,.08); border-radius: 14px; background: #fff; overflow: hidden; margin-bottom: 18px; min-height: 260px; }
+.cadp-list { border-right: 1px solid rgba(0,0,0,.06); overflow-y: auto; max-height: 420px; }
+.cadp-title { padding: 12px 14px; font-weight: 700; font-size: 14px; border-bottom: 1px solid rgba(0,0,0,.06); }
+.cadp-day { padding: 8px 14px 4px; font-size: 12px; font-weight: 700; color: #3a3a3c; text-transform: capitalize; }
+.cadp-day span { font-weight: 500; color: #8e8e93; background: rgba(118,118,128,.12); border-radius: 6px; padding: 0 6px; margin-left: 4px; }
+.cadp-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; cursor: pointer; border-left: 3px solid transparent; }
+.cadp-item:hover { background: rgba(0,113,227,.04); }
+.cadp-item.on { background: rgba(0,113,227,.07); border-left-color: #0071e3; }
+.cadp-item.done strong { text-decoration: line-through; color: #8e8e93; }
+.cadp-ico { color: #0071e3; flex-shrink: 0; }
+.cadp-it { flex: 1; min-width: 0; }
+.cadp-it strong { display: block; font-size: 13px; font-weight: 600; }
+.cadp-it small { font-size: 11px; color: #8e8e93; }
+.cadp-it small.late { color: #d70015; font-weight: 600; }
+.cadp-item input { width: 16px; height: 16px; cursor: pointer; }
+.cadp-detail { display: flex; flex-direction: column; padding: 14px 16px; gap: 12px; min-width: 0; }
+.cadp-dh { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; color: #1d1d1f; }
+.cadp-dh svg { color: #0071e3; }
+.cadp-script { flex: 1; white-space: pre-wrap; font-size: 14px; line-height: 1.5; color: #1d1d1f; overflow-y: auto; max-height: 300px; }
+.cadp-script.bubble { align-self: flex-start; background: #e7f0fd; border-radius: 12px 12px 12px 4px; padding: 12px 14px; max-width: 92%; flex: 0 1 auto; }
+.cadp-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.cadp-actions a.lp-primary { text-decoration: none; }
+@media (max-width: 760px) { .cadp { grid-template-columns: 1fr; } .cadp-list { border-right: 0; border-bottom: 1px solid rgba(0,0,0,.06); } }

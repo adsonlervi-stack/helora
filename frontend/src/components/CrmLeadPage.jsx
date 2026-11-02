@@ -41,7 +41,7 @@ const toLocalInput = (d) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 const daysUntil = (d) => { if (!d) return null; return Math.round((new Date(`${String(d).slice(0, 10)}T12:00:00`) - new Date()) / 86400000); };
-const EV_KIND = { reuniao: "Reunião", call: "Ligação", followup: "Follow-up", tarefa: "Tarefa" };
+const EV_KIND = { reuniao: "Reunião", call: "Ligação", followup: "Follow-up", tarefa: "Tarefa", cad_call: "Ligação", cad_whats: "WhatsApp", cad_email: "E-mail", cad_task: "Tarefa", cad_meeting: "Reunião" };
 const WON_RE = /fechad|ganh|vendid|conclu|indeniz/i;
 const LOST_RE = /perdid|cancel|desist|negad|n[aã]o fechou/i;
 
@@ -196,7 +196,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
   };
 
   // ---- Foco e histórico ----
-  const pendingEvents = events.filter((e) => !e.done).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+  const pendingEvents = events.filter((e) => !e.done && !String(e.kind).startsWith("cad_")).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
   const stageName = (pid, sid) => pipelines.find((p) => p.id === pid)?.stages?.find((s) => s.id === sid)?.name || pipelines.flatMap((p) => p.stages || []).find((s) => s.id === sid)?.name || sid || "—";
   const memberName = (id) => team.find((m) => m.id === id)?.name || "ninguém";
   const history = useMemo(() => {
@@ -473,6 +473,12 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
             </div>
 
             {/* Foco */}
+            {events.some((e) => String(e.kind).startsWith("cad_")) && (
+              <CadencePanel lead={lead} f={f} custom={custom} pipe={pipe} profile={ctx.profile}
+                events={events.filter((e) => String(e.kind).startsWith("cad_"))}
+                onDone={async (ev, done = true) => { await crm.updateEvent(ev.id, { done }); loadEvents(); }}
+                onSend={async (text) => { try { await flush(); const r = await crm.sendLeadMessage(lead.id, text); changed(r.lead); notify("Mensagem enviada pelo WhatsApp.", "success"); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />
+            )}
             <h3 className="lp-h3">Foco</h3>
             {pendingEvents.length || checklist.some((c) => !c.done) ? (
               <div className="lp-focus">
@@ -751,5 +757,63 @@ function MessagesEditor({ ctx, pipe, initial, vars, onClose }) {
       </div>
     </div>,
     document.body
+  );
+}
+
+
+/** Atividades da etapa (cadência): lista por dia à esquerda, roteiro e ação à direita. */
+function CadencePanel({ lead, f, custom, pipe, profile, events, onDone, onSend }) {
+  const sorted = [...events].sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+  const [selId, setSelId] = useState(() => (sorted.find((e) => !e.done) || sorted[0])?.id);
+  const [busy, setBusy] = useState(false);
+  const sel = sorted.find((e) => e.id === selId) || sorted[0];
+  const fmtField = (fd, v) => (fd?.type === "date" && v ? String(v).slice(0, 10).split("-").reverse().join("/") : v);
+  const fill = (t) => String(t || "")
+    .replace(/\{nome\}/g, String(f.name || "").split(" ")[0]).replace(/\{nome_completo\}/g, f.name || "")
+    .replace(/\{empresa\}/g, f.company || "").replace(/\{meu_nome\}/g, String(profile?.name || "").split(" ")[0])
+    .replace(/\{([a-z0-9_]+)\}/g, (m, k) => { const fd = (pipe?.fields || []).find((x) => x.id === k); return fd && custom[k] ? fmtField(fd, custom[k]) : m; });
+  const groups = [];
+  for (const e of sorted) {
+    const d = new Date(e.startsAt).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" });
+    const g = groups.find((x) => x.d === d);
+    if (g) g.items.push(e); else groups.push({ d, items: [e] });
+  }
+  const KI = { cad_call: Phone, cad_whats: MessageCircle, cad_email: Mail, cad_task: ListTodo, cad_meeting: CalendarDays };
+  const text = sel ? fill(sel.notes) : "";
+  const phone = String(f.phone || "").replace(/\D/g, "");
+  return (
+    <div className="cadp">
+      <div className="cadp-list">
+        <div className="cadp-title">Atividades da etapa</div>
+        {groups.map((g) => (
+          <div key={g.d}>
+            <div className="cadp-day">{g.d} <span>{g.items.length}</span></div>
+            {g.items.map((e) => {
+              const I = KI[e.kind] || ListTodo;
+              const late = !e.done && new Date(e.startsAt) < new Date();
+              return (
+                <div key={e.id} className={`cadp-item ${e.id === sel?.id ? "on" : ""} ${e.done ? "done" : ""}`} onClick={() => setSelId(e.id)}>
+                  <I size={15} className="cadp-ico" />
+                  <span className="cadp-it"><strong>{e.title}</strong><small className={late ? "late" : ""}>{new Date(e.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}{late ? " · atrasada" : e.done ? " · feita" : ""}</small></span>
+                  <input type="checkbox" checked={!!e.done} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => onDone(e, ev.target.checked)} />
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      {sel && (
+        <div className="cadp-detail">
+          <div className="cadp-dh">{(() => { const I = KI[sel.kind] || ListTodo; return <I size={15} />; })()} {sel.title}</div>
+          <div className={`cadp-script ${sel.kind === "cad_whats" ? "bubble" : ""}`}>{text || <span className="lp-muted">Sem roteiro.</span>}</div>
+          <div className="cadp-actions">
+            {sel.kind === "cad_whats" && <button className="lp-primary" disabled={!f.phone || !text || busy || sel.done} onClick={async () => { setBusy(true); if (await onSend(text)) await onDone(sel, true); setBusy(false); }}><Send size={14} /> {busy ? "Enviando…" : "Enviar mensagem"}</button>}
+            {sel.kind === "cad_call" && (phone ? <a className="lp-primary" href={`tel:+${phone}`}><Phone size={14} /> Ligar para {String(f.name || "").split(" ")[0]}</a> : <span className="lp-muted">Sem telefone no card.</span>)}
+            {sel.kind === "cad_email" && (f.email ? <a className="lp-primary" href={`mailto:${f.email}?subject=${encodeURIComponent(sel.title)}&body=${encodeURIComponent(text)}`}><Mail size={14} /> Abrir e-mail</a> : <span className="lp-muted">Sem e-mail no card.</span>)}
+            {!sel.done && <button className="lp-ghost" onClick={() => onDone(sel, true)}><Check size={14} /> Marcar como feita</button>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

@@ -12,6 +12,7 @@ import CrmLeadPage, { notifyText } from "./CrmLeadPage.jsx";
 import AutomationsSheet from "./CrmAutomations.jsx";
 import { fmtDoc } from "../docs.js";
 import Avatar from "./Avatar.jsx";
+import CadenceSheet from "./CrmCadence.jsx";
 import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
@@ -152,6 +153,7 @@ function FunnelView({ ctx }) {
   const [newPipe, setNewPipe] = useState(false);
   const [importing, setImporting] = useState(false);
   const [editFields, setEditFields] = useState(false);
+  const [cadOpen, setCadOpen] = useState(false);
   const modelFields = pipeline?.fields || [];
   const cardFields = modelFields.filter((f) => f.card).slice(0, 4);
   const kindField = modelFields.find((f) => f.kind);
@@ -333,6 +335,7 @@ function FunnelView({ ctx }) {
           const items = [
             isManager && !all && [Plus, "Nova coluna", () => setEditCol({ name: "", color: COLORS[0] })],
             isManager && !all && pipeline && [Zap, `Automações${autoN ? ` (${autoN})` : ""}`, () => setAutoOpen(true)],
+            isManager && !all && pipeline && [ListChecks, "Modelo de atividades", () => setCadOpen(true)],
             isManager && !all && pipeline && [SlidersHorizontal, `Campos${pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}`, () => setEditFields(true)],
             !all && [Upload, "Importar planilha", () => setImporting(true)],
             isManager && [Download, "Baixar CRM (com anexos)", () => setExporting(true)],
@@ -488,6 +491,7 @@ function FunnelView({ ctx }) {
         </Sheet>
       )}
       {importing && <ImportSheet ctx={ctx} onClose={() => setImporting(false)} onDone={() => { setImporting(false); load(); ctx.loadTags(); }} />}
+      {cadOpen && pipeline && <CadenceSheet pipeline={pipeline} onClose={() => setCadOpen(false)} onSave={async (st) => { await saveStages(st); setCadOpen(false); }} />}
       {autoOpen && pipeline && <AutomationsSheet pipeline={pipeline} pipelines={pipelines} tags={tags} team={ctx.team || []} departments={ctx.departments || []} onClose={() => setAutoOpen(false)} onSaved={() => { setAutoOpen(false); loadPipelines(); }} />}
       {exporting && <ExportSheet pipelines={pipelines} pipelineId={all ? "" : pipelineId} onClose={() => setExporting(false)} />}
       {editFields && <FieldsSheet pipeline={pipeline} onClose={() => setEditFields(false)} onSaved={() => { setEditFields(false); loadPipelines(); }} />}

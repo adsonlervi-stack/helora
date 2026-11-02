@@ -55,6 +55,17 @@ function cleanAutomations(list) {
     departmentId: a.departmentId || undefined, ownerId: a.ownerId || undefined
   }));
 }
+const CAD_KINDS = ["call", "whats", "email", "task", "meeting"];
+function cleanCadence(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 30).map((c) => ({
+    id: String(c.id || randomUUID()).slice(0, 40),
+    kind: CAD_KINDS.includes(c.kind) ? c.kind : "task",
+    after: Math.min(60 * 24 * 365, Math.max(0, parseInt(c.after, 10) || 0)),
+    title: String(c.title || "").slice(0, 120),
+    text: String(c.text || "").slice(0, 4000)
+  })).filter((c) => c.title).sort((a, b) => a.after - b.after);
+}
 const fmtVal = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v).split("-").reverse().join("/") : String(v ?? ""));
 const fill = (t, lead) => String(t || "")
   .replace(/\{nome\}/g, String(lead.name || "").split(" ")[0]).replace(/\{nome_completo\}/g, lead.name || "").replace(/\{empresa\}/g, lead.company || "")
@@ -79,6 +90,17 @@ export async function runStageAutomations(accountId, lead, byName, opts = {}) {
   try {
     const { data: pipe } = await supabase.from("crm_pipelines").select("stages").eq("id", lead.pipeline_id).maybeSingle();
     const stage = (pipe?.stages || []).find((s) => s.id === lead.stage);
+    // Cadência da etapa: cria as atividades com prazo (5º minuto, 1º dia…)
+    if (stage?.cadence?.length) {
+      const now = Date.now();
+      const { data: open } = await supabase.from("crm_events").select("title").eq("lead_id", lead.id).eq("done", false).like("kind", "cad_%");
+      const have = new Set((open || []).map((e) => e.title));
+      const rows = stage.cadence.filter((c) => !have.has(fill(c.title, lead))).map((c) => ({
+        account_id: accountId, lead_id: lead.id, title: fill(c.title, lead), kind: `cad_${c.kind}`,
+        starts_at: new Date(now + c.after * 60000).toISOString(), notes: c.text || null, owner_id: lead.owner_id || null
+      }));
+      if (rows.length) await supabase.from("crm_events").insert(rows);
+    }
     for (const a of (stage?.automations || []).filter((x) => x.active !== false)) {
       try {
         if (a.type === "owner" && a.ownerId) {
@@ -260,7 +282,7 @@ router.patch("/pipelines/:id", async (req, res) => {
     if (Array.isArray(req.body?.fields)) patch.fields = cleanFields(req.body.fields);
     if (Array.isArray(req.body?.automations)) patch.automations = cleanRules(req.body.automations);
     if (Array.isArray(req.body?.messages)) patch.messages = req.body.messages.slice(0, 30).map((m) => ({ id: String(m.id || randomUUID()).slice(0, 40), title: String(m.title || "").slice(0, 60), text: String(m.text || "").slice(0, 4000), files: cleanMsgFiles(m.files) })).filter((m) => m.title && (m.text || m.files.length));
-    if (Array.isArray(req.body?.stages)) patch.stages = req.body.stages.filter((s) => s?.id && s?.name).map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff", automations: cleanAutomations(s.automations) }));
+    if (Array.isArray(req.body?.stages)) patch.stages = req.body.stages.filter((s) => s?.id && s?.name).map((s) => ({ id: String(s.id).slice(0, 40), name: String(s.name).slice(0, 40), color: s.color || "#0a84ff", automations: cleanAutomations(s.automations), cadence: cleanCadence(s.cadence) }));
     const { data, error } = await supabase.from("crm_pipelines").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
     res.json(data);
