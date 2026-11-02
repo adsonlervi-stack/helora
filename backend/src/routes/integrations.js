@@ -10,6 +10,7 @@ import { addDoc, readUrl, readFile, askBrain } from "../integrations/brain.js";
 import { testMail, syncMail, mailPreset } from "../integrations/mail.js";
 import { canvaAuthUrl, canvaConfigured, listDesigns, createDesign, exportDesign, CANVA_SIZES } from "../integrations/canva.js";
 import { studioChat, studioImage, studioFlow } from "../integrations/studio.js";
+import { learnFromConversations } from "../integrations/learn.js";
 import { testAttendant } from "../bot/flowRunner.js";
 import { clearAttendantCache } from "../bot/engine.js";
 
@@ -220,6 +221,19 @@ router.delete("/brain/docs/:id", requireOwner, async (req, res) => {
     await supabase.from("brain_docs").delete().eq("account_id", req.accountId).eq("id", req.params.id);
     res.sendStatus(204);
   } catch (err) { fail(res, err); }
+});
+router.get("/brain/learn", async (req, res) => {
+  try { res.json((await getIntegration(req.accountId, "brain_learn"))?.config || {}); } catch (err) { fail(res, err); }
+});
+router.put("/brain/learn", requireOwner, async (req, res) => {
+  try {
+    const cur = (await getIntegration(req.accountId, "brain_learn"))?.config || {};
+    await saveIntegration(req.accountId, "brain_learn", { ...cur, off: req.body?.off === true });
+    res.json({ ok: true });
+  } catch (err) { fail(res, err); }
+});
+router.post("/brain/learn/now", requireOwner, needAI, async (req, res) => {
+  try { res.json(await learnFromConversations(req.accountId, { max: 40 })); } catch (err) { fail(res, err); }
 });
 router.post("/brain/ask", async (req, res) => {
   try { res.json(await askBrain(req.accountId, String(req.body?.question || "").trim())); } catch (err) { fail(res, err); }

@@ -9,6 +9,7 @@ import aiRoutes from "./routes/ai.js";
 import integrationsRoutes, { publicFormHandler } from "./routes/integrations.js";
 import { canvaCallback } from "./integrations/canva.js";
 import { startMailSync } from "./integrations/jobs.js";
+import { startBrainLearning } from "./integrations/learn.js";
 import { startMeetingReminders } from "./meetingNotify.js";
 import { googleRouter, googleCallbackRouter } from "./google.js";
 import { pushRouter } from "./push.js";
@@ -155,4 +156,5 @@ startCampaignDispatcher();
 // Lembretes por data do CRM (ex.: "faltam 3 dias para a viagem")
 startCrmReminders();
 startMailSync();
+startBrainLearning();
 startMeetingReminders();

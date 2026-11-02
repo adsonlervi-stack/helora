@@ -395,6 +395,29 @@ function Knowledge({ agentId = null, isManager }) {
   );
 }
 
+function LearnCard({ isManager }) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => integrations.brainLearn().then(setSt).catch(() => setSt({}));
+  useEffect(() => { load(); }, []);
+  if (!st) return null;
+  const on = !st.off;
+  return (
+    <div className="ih-card ih-learn">
+      <div className="ih-learn-t">
+        <Brain size={18} />
+        <div><strong>Aprender com as conversas</strong><span>{on ? `Ligado. Lê as conversas encerradas a cada 6 horas e guarda perguntas, respostas, preços e regras, sem dados pessoais.${st.lastRun ? ` Última leitura: ${new Date(st.lastRun).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.` : ""}` : "Desligado."}</span></div>
+      </div>
+      {isManager && (
+        <div className="ih-learn-a">
+          <Switch checked={on} onChange={async (v) => { await integrations.setBrainLearn(!v); load(); }} />
+          {on && <button className="pill-btn" disabled={busy} onClick={async () => { setBusy(true); try { const r = await integrations.brainLearnNow(); notify(r.skipped ? "A Helora IA não está ativa." : r.conversations ? `${r.conversations} conversa(s) lida(s).` : "Nenhuma conversa nova encerrada.", "success"); load(); } catch (e) { notify(errText(e), "error"); } setBusy(false); }}>{busy ? "Lendo…" : "Aprender agora"}</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BrainTab({ isManager }) {
   const [q, setQ] = useState("");
   const [ans, setAns] = useState(null);
@@ -407,6 +430,7 @@ function BrainTab({ isManager }) {
   };
   return (
     <div className="ih-brain">
+      <LearnCard isManager={isManager} />
       <div className="ih-card ih-ask">
         <h3><Brain size={18} /> Pergunte ao cérebro</h3>
         <p>A IA responde só com o que a empresa ensinou, e mostra de onde tirou.</p>

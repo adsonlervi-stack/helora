@@ -2859,3 +2859,11 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 .sp-form input, .sp-form select { padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,.14); font-family: inherit; font-size: 14px; }
 .sp-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 @media (max-width: 640px) { .sp-days { overflow-x: auto; } .sp-day { min-width: 58px; } }
+.ih-learn { display: flex; align-items: center; gap: 14px; justify-content: space-between; flex-wrap: wrap; margin-bottom: 14px; }
+.ih-learn-t { display: flex; gap: 12px; align-items: flex-start; flex: 1; min-width: 240px; }
+.ih-learn-t svg { color: #0071e3; margin-top: 2px; flex-shrink: 0; }
+.ih-learn-t strong { display: block; font-size: 15px; }
+.ih-learn-t span { font-size: 13px; color: #6e6e73; }
+.ih-learn-a { display: flex; align-items: center; gap: 10px; }
+/* Configurações: o título do quadro repetia o da página */
+.set-crumb ~ .card > .card-title:first-child, .set-crumb ~ div > .card:first-child > .card-title:first-child { display: none; }
