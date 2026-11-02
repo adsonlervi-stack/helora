@@ -8,7 +8,7 @@ const TYPE_LABELS = {
   end: "Encerrar roteiro"
 };
 
-// Rótulo curto de um nó, pra usar nos seletores "próximo nó" / "opção leva pra".
+// Rótulo curto de um nó, para usar nos seletores "próximo nó" / "opção leva para".
 export function nodeLabel(node, index) {
   if (!node) return "";
   const preview = (node.text || "").trim().replace(/\s+/g, " ").slice(0, 34);
@@ -131,7 +131,7 @@ export default function BotFlowNodeCard({
                     onChange={(e) => updateOption(i, { match: e.target.value })}
                   />
                   <input
-                    placeholder="Rótulo (opcional, só pra você)"
+                    placeholder="Rótulo (opcional, só para você)"
                     value={opt.label || ""}
                     onChange={(e) => updateOption(i, { label: e.target.value })}
                   />

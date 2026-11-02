@@ -43,8 +43,7 @@ function PermissionsPanel({ channel, team, onClose }) {
       <div className="modal-card deal-modal" onClick={(e) => e.stopPropagation()}>
         <h3>Quem vê "{channel.name}"</h3>
         <p>
-          Sem ninguém marcado, o dispositivo fica visível pra conta inteira. Marque atendentes
-          específicos pra restringir.
+          Sem ninguém marcado, toda a equipe vê este canal.
         </p>
         <div className="permissions-list">
           {team
@@ -115,7 +114,7 @@ function NewChannelModal({ departments, flows, initial, preset, onClose, onCreat
   return (
     <Sheet
       title={editing ? "Editar canal" : "Novo canal"}
-      subtitle="Número de WhatsApp, página do Facebook ou Instagram que a empresa atende."
+      subtitle="WhatsApp, Facebook ou Instagram da empresa."
       onClose={onClose}
       width={560}
       footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={handleSubmit}>{editing ? "Salvar" : "Criar canal"}</Button></>}
@@ -154,7 +153,7 @@ function NewChannelModal({ departments, flows, initial, preset, onClose, onCreat
           <Row label="Token de acesso"><input type="password" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder={editing && initial?.hasToken ? "Vazio = manter o atual" : "Token permanente"} autoComplete="off" /></Row>
         </Group>
       )}
-      <Group title="Atendimento" hint="Toda conversa nova deste número entra no setor escolhido e segue o fluxo do robô.">
+      <Group title="Atendimento" hint="Conversas novas entram neste setor e seguem este fluxo.">
         <Row label="Setor">
           <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
             <option value="">Sem setor (Pendentes)</option>

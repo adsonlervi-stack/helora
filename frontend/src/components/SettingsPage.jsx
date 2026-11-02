@@ -98,7 +98,7 @@ const CARDS = [
   {
     key: "scheduled",
     label: "Mensagens agendadas",
-    desc: "Programe um envio pra data/hora futura",
+    desc: "Programe um envio para data/hora futura",
     icon: CalendarClock
   },
   {
@@ -196,8 +196,7 @@ function AutoRepliesTab() {
     <div className="card">
       <div className="card-title">Respostas automáticas por palavra-chave</div>
       <div className="card-subtitle">
-        Quando a mensagem do cliente contiver a palavra-chave, o <strong>bot</strong> responde
-        sozinho (fora do fluxo de menu 1/2/3).
+        O bot responde sozinho quando a mensagem tiver a palavra-chave.
       </div>
 
       <form className="reply-form" onSubmit={handleAdd}>
@@ -247,7 +246,7 @@ function NotifyTab() {
   return (
     <div className="card">
       <div className="card-title">Notificações e sons</div>
-      <div className="card-subtitle">Escolha o que deve te avisar e o som de cada aviso. Vale para este navegador/celular.</div>
+      <div className="card-subtitle">Escolha os avisos e o som de cada um neste aparelho.</div>
       {!desk && (
         <button className="pill-btn primary" style={{ marginBottom: 12 }} onClick={async () => setDesk(await enableNotify())}>
           <Bell size={14} /> Ativar avisos na tela (mesmo com o painel minimizado)
@@ -293,7 +292,7 @@ function AttendanceTab() {
     <>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">Pesquisa de satisfação</div>
-        <div className="card-subtitle">Ao encerrar um atendimento, o cliente recebe "de 1 a 5, como você avalia esse atendimento?".</div>
+        <div className="card-subtitle">Ao encerrar, o cliente avalia o atendimento de 1 a 5.</div>
         <label className="bh-switch">
           <input type="checkbox" checked={st.csatEnabled} onChange={(e) => save({ csatEnabled: e.target.checked })} />
           <span>{st.csatEnabled ? "Ativada" : "Desativada"}</span>
@@ -302,8 +301,7 @@ function AttendanceTab() {
       <div className="card">
         <div className="card-title">Horário de atendimento da empresa</div>
         <div className="card-subtitle">
-          Fora do horário, quem mandar mensagem recebe o aviso automático (uma vez a cada 6h) e o bot não segue o fluxo.
-          Um fluxo pode ter horário próprio (aba Fluxos), que vale no lugar deste.
+          Fora do horário, o cliente recebe o aviso automático.
         </div>
         <BusinessHoursEditor value={st.businessHours} onChange={(bh) => setSt({ ...st, businessHours: bh })} />
         <button className="connect-btn" style={{ marginTop: 12 }} onClick={() => save({ businessHours: st.businessHours })}>Salvar horário</button>
@@ -352,8 +350,7 @@ function CannedResponsesTab({ canManage }) {
     <div className="card">
       <div className="card-title">Respostas prontas do atendente</div>
       <div className="card-subtitle">
-        Atalhos que o <strong>atendente</strong> escolhe manualmente ao digitar no chat, é só
-        digitar <code>/</code> seguido do atalho e escolher na lista.
+        No chat, digite <code>/</code> e escolha a resposta.
       </div>
 
       <form className="reply-form" onSubmit={handleAdd}>
@@ -434,8 +431,7 @@ function LabelsTab() {
     <div className="card">
       <div className="card-title">Etiquetas</div>
       <div className="card-subtitle">
-        Organize as conversas por assunto, urgência ou qualquer critério, aparecem na lista de
-        conversas e podem ser usadas como filtro.
+        Organize e filtre as conversas por assunto.
       </div>
 
       <form className="reply-form" onSubmit={handleAdd}>
@@ -514,8 +510,7 @@ function DepartmentsTab() {
     <div className="card">
       <div className="card-title">Setores</div>
       <div className="card-subtitle">
-        Divisões internas (Comercial, Suporte, Financeiro...). Atendentes só veem os tickets do
-        próprio setor, ou os atribuídos diretamente a eles.
+        Atendentes veem só as conversas do próprio setor.
       </div>
 
       <form className="reply-form" onSubmit={handleAdd}>
@@ -1002,7 +997,7 @@ document.getElementById("lead-crm").onsubmit = async (e) => {
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div className="card-title">Enviar leads para o CRM</div>
-      <div className="card-subtitle">Escolha o funil e a etapa onde o lead deve cair. O código abaixo já sai com eles. O telefone ganha o +55 sozinho.</div>
+      <div className="card-subtitle">Escolha o funil e a etapa onde o lead vai cair.</div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "10px 0 14px" }}>
         <label className="api-pick"><span>Funil</span>
           <select value={pipe.id} onChange={(e) => { const p = pipes.find((x) => x.id === e.target.value); setPid(e.target.value); setStage(p?.stages?.[0]?.id || ""); }}>

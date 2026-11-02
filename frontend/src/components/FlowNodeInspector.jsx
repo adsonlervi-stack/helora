@@ -33,7 +33,7 @@ export default function NodeInspector({ node, ctx, onChange, disabled, stats }) 
     <div className="fe-insp-body">
       {node.type === "trigger" && (
         <p className="fi-note">
-          O fluxo começa quando chega a primeira mensagem de um cliente (ou quando uma conversa resolvida recebe mensagem nova). Ligue a saída deste bloco ao primeiro passo.
+          O fluxo começa na primeira mensagem do cliente.
         </p>
       )}
 
@@ -188,7 +188,7 @@ export default function NodeInspector({ node, ctx, onChange, disabled, stats }) 
       {node.type === "lookup" && (
         <>
           <p className="fi-note">
-            Procura no CRM o card do cliente pelo número do WhatsApp dele e responde com os dados do card. Os campos ficam disponíveis como variáveis para os próximos blocos também.
+            Busca o card do cliente no CRM pelo número e usa os dados dele.
           </p>
           <Section title="Onde procurar">
             <Field label="Funil do CRM" hint="Deixe em “Todos” para procurar em qualquer funil.">

@@ -153,7 +153,7 @@ function AccountsTab() {
       {showNew && (
         <Sheet
           title="Nova empresa"
-          subtitle="Depois de criar, clique em Entrar para configurar WhatsApp, setores e equipe."
+          subtitle="Depois de criar, clique em Entrar para configurar."
           onClose={() => setShowNew(false)}
           footer={<>
             <Button variant="secondary" onClick={() => setShowNew(false)}>Cancelar</Button>
@@ -170,7 +170,7 @@ function AccountsTab() {
             <Row label="Números de WhatsApp"><input type="number" min="0" inputMode="numeric" value={maxChannels} onChange={(e) => setMaxChannels(e.target.value)} placeholder="Ex: 2" /></Row>
             <Row label="API oficial do WhatsApp"><Switch checked={allowCloud} onChange={setAllowCloud} /></Row>
           </Group>
-          <Group title="Gestor (opcional)" hint="Com senha, o gestor já entra direto. Sem senha, ele recebe um convite por e-mail.">
+          <Group title="Gestor (opcional)" hint="Sem senha, o gestor recebe um convite por e-mail.">
             <Row label="Nome"><input value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Nome do gestor" /></Row>
             <Row label="E-mail"><input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="gestor@empresa.com" /></Row>
             <Row label="Senha"><input type="password" value={ownerPassword} onChange={(e) => setOwnerPassword(e.target.value)} placeholder="Mínimo 6 caracteres" autoComplete="new-password" /></Row>
@@ -243,15 +243,13 @@ function UsersTab() {
           <div className="role-legend-card">
             <span className="team-role-badge owner">Gestor</span>
             <p>
-              Acesso total à própria conta: setores, equipe, canais e todas as conversas, sem
-              restrição.
+              Acesso total à conta.
             </p>
           </div>
           <div className="role-legend-card">
             <span className="team-role-badge agent">Atendente</span>
             <p>
-              Só vê conversas do(s) próprio(s) setor(es) ou atribuídas diretamente a ele, não
-              acessa Setores, Equipe nem Canais.
+              Vê só as conversas do seu setor ou atribuídas a ele.
             </p>
           </div>
         </div>
@@ -329,7 +327,7 @@ function AnnouncementsTab() {
         <div className="card">
           <div className="card-title">Enviar comunicado</div>
           <div className="card-subtitle">
-            Aparece no Início de quem se encaixa no destino escolhido, dá pra avisar sobre
+            Aparece no Início das empresas escolhidas. Use para avisar sobre
             manutenções, novidades ou instabilidades.
           </div>
 

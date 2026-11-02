@@ -42,7 +42,7 @@ export default function PromptsPage({ canEdit }) {
         </div>
         {canEdit && <Button onClick={() => setEdit({ ...BLANK })}><Plus size={16} /> Novo prompt</Button>}
       </div>
-      {status && !status.configured && <div className="admin-feedback error" style={{ marginBottom: 12 }}>A IA ainda não está ativada no servidor (falta a chave da Anthropic). Os prompts ficam salvos e passam a funcionar quando ativar.</div>}
+      {status && !status.configured && <div className="admin-feedback error" style={{ marginBottom: 12 }}>A Helora IA ainda não está ativa. Os prompts ficam salvos.</div>}
       {status && status.configured && !status.allowed && <div className="admin-feedback error" style={{ marginBottom: 12 }}>O módulo de IA não está liberado para a sua empresa.</div>}
       {err && <div className="admin-feedback error" style={{ marginBottom: 12 }}>{err}</div>}
       <div className="ap-list">
@@ -89,7 +89,7 @@ export default function PromptsPage({ canEdit }) {
             <Row label="Enviar mensagem ao transferir"><Switch checked={!!edit.transferMessageEnabled} onChange={(v) => setEdit((c) => ({ ...c, transferMessageEnabled: v }))} /></Row>
             {edit.transferMessageEnabled && <Row label="" stack><textarea rows={2} value={edit.transferMessage} onChange={set("transferMessage")} placeholder="Vazio = a IA escreve a mensagem" /></Row>}
           </Group>
-          <Group title="Mensagem para mídias não suportadas" hint="Enviada quando o cliente manda imagem, vídeo ou documento. Áudios a IA entende (são transcritos); ela sempre responde em texto.">
+          <Group title="Mensagem para mídias não suportadas" hint="Enviada quando o cliente manda imagem, vídeo ou documento.">
             <Row label="" stack><textarea rows={2} maxLength={500} value={edit.unsupportedMediaMessage} onChange={set("unsupportedMediaMessage")} /></Row>
           </Group>
         </Sheet>

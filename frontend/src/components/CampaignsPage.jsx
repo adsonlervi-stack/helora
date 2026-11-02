@@ -197,7 +197,7 @@ function NewCampaign({ balance, onClose, onCreated }) {
           <Coins size={16} /> Custo: <strong>{count ?? "1 por contato"}</strong>{count != null ? " crédito(s)" : ""} · Saldo: <strong>{balance}</strong>
           {count > balance && <span>, a campanha pausa quando o saldo acabar</span>}
         </div>
-        <div className="camp-risk"><AlertTriangle size={14} /> Disparo em massa por WhatsApp pode levar ao bloqueio do número. Envie só para clientes ou contatos que autorizaram receber mensagens, use as 3 versões e mantenha intervalos longos.</div>
+        <div className="camp-risk"><AlertTriangle size={14} /> Disparo em massa pode bloquear o número. Envie só para quem autorizou e use intervalos longos.</div>
 
         {error && <div className="admin-feedback error">{error}</div>}
         <div className="gestao-row" style={{ justifyContent: "flex-end" }}>

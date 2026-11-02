@@ -45,7 +45,7 @@ export default function ExportConversationModal({ conversation, onClose }) {
         </div>
         <div className="exp-conv-hint">Deixe em branco para exportar a conversa inteira.</div>
         <label className="exp-conv-check"><input type="checkbox" checked={media} onChange={(e) => setMedia(e.target.checked)} /> Incluir fotos, áudios e documentos</label>
-        <p className="exp-conv-hint">Para processos, guarde o .zip original sem alterar. Se precisar de mais força como prova, leve a um cartório para ata notarial ou a um perito.</p>
+        <p className="exp-conv-hint">Guarde o .zip original sem alterar. Para reforçar a prova, faça ata notarial em cartório.</p>
         <div className="exp-conv-foot">
           <button type="button" className="pill-btn" onClick={onClose}>Cancelar</button>
           <button type="button" className="pill-btn primary" disabled={busy} onClick={go}><FileDown size={15} /> {busy ? "Gerando…" : "Exportar"}</button>

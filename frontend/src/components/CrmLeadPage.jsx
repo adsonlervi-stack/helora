@@ -730,7 +730,7 @@ function MessagesEditor({ ctx, pipe, initial, vars, onClose }) {
     <div className="lp-overlay top" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="lp-dialog">
         <div className="lp-dialog-head"><strong>Mensagens prontas · {pipe.name}</strong><button className="lp-icon" onClick={onClose}><X size={16} /></button></div>
-        <p className="lp-muted" style={{ margin: "0 0 10px" }}>Clique numa variável para inseri-la na mensagem selecionada. Ela é trocada pelos dados do card na hora de enviar.</p>
+        <p className="lp-muted" style={{ margin: "0 0 10px" }}>Clique numa variável para inserir no texto.</p>
         <div className="lp-vars">{vars.map(([k, l]) => <button key={k} onClick={() => insert(k)} title={`{${k}}`}>{l}</button>)}</div>
         <div className="lp-msg-edit-list">
           {list.map((m, i) => (

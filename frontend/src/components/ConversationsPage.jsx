@@ -85,7 +85,7 @@ export default function ConversationsPage({
     });
   }, []);
 
-  // Quando outra tela pede pra abrir uma conversa específica (ex: painel
+  // Quando outra tela pede para abrir uma conversa específica (ex: painel
   // lateral de um negócio no Kanban), seleciona ela automaticamente.
   useEffect(() => {
     if (!openConversationId) return;

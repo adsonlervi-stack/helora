@@ -572,7 +572,7 @@ function NewPipelineSheet({ onClose, onCreated }) {
   };
   const groups = [...new Set(templates.map((t) => t.group))];
   return (
-    <Sheet title="Novo funil" subtitle="Comece de um modelo pronto ou em branco. Tudo pode ser ajustado depois (colunas, campos e automações)." onClose={onClose} width={640}
+    <Sheet title="Novo funil" subtitle="Escolha um modelo. Dá para ajustar tudo depois." onClose={onClose} width={640}
       footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button onClick={save}>Criar funil</Button></>}>
       {groups.map((g) => (
         <div key={g} className="crm-tpl-group">
@@ -619,7 +619,7 @@ function FieldsSheet({ pipeline, onClose, onSaved }) {
     setBusy(false);
   };
   return (
-    <Sheet title={`Campos · ${pipeline.name}`} subtitle="Campos dos cards deste funil. “No card” mostra o campo na frente do card (até 4). “Etiqueta no topo” vira o tipo do card (ex.: Renovação, Venda nova)." onClose={onClose} width={640}
+    <Sheet title={`Campos · ${pipeline.name}`} subtitle="“No card” mostra o campo na frente do card (até 4)." onClose={onClose} width={640}
       footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar campos"}</Button></>}>
       <Group>
         {list.map((f, i) => (
@@ -1185,7 +1185,7 @@ function ImportSheet({ ctx, onClose, onDone }) {
   };
 
   return (
-    <Sheet title="Importar leads" subtitle="Planilha Excel (.xlsx, .xls) ou CSV. A primeira linha deve ter os títulos das colunas." onClose={onClose} width={600}
+    <Sheet title="Importar leads" subtitle="Excel ou CSV, com os títulos na primeira linha." onClose={onClose} width={600}
       footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={!rows || !map.name && !map.phone || busy} onClick={run}>{busy ? "Importando…" : rows ? `Importar ${rows.length} linha(s)` : "Importar"}</Button></>}>
       <Group>
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12 }}>
@@ -1197,7 +1197,7 @@ function ImportSheet({ ctx, onClose, onDone }) {
       </Group>
       {rows && (
         <>
-          <Group title="Colunas da planilha" hint="Confira qual coluna vai para cada campo. Tags separadas por vírgula viram tags do CRM.">
+          <Group title="Colunas da planilha" hint="Confira qual coluna vai para cada campo.">
             {allFields.map(([field, label]) => (
               <Row key={field} label={label}>
                 <select value={map[field] || ""} onChange={(e) => setMap((m) => ({ ...m, [field]: e.target.value }))}>
@@ -1207,7 +1207,7 @@ function ImportSheet({ ctx, onClose, onDone }) {
               </Row>
             ))}
           </Group>
-          <Group title="Responsável e tipo" hint="Vale para a lista toda. Se a planilha tiver a coluna Responsável, ela tem prioridade (busca pelo nome ou e-mail do usuário).">
+          <Group title="Responsável e tipo" hint="Vale para a lista toda, exceto se a planilha tiver a coluna Responsável.">
             <Row label="Responsável">
               <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
                 <option value="">Eu mesmo</option>
@@ -1366,7 +1366,7 @@ function ExportSheet({ pipelines, pipelineId, onClose }) {
   };
   const preview = ["CRM", ...levels.map((k) => EXPORT_LEVELS.find((x) => x[0] === k)?.[1]), "Cliente"].join(" › ");
   return (
-    <Sheet title="Baixar CRM" subtitle="Um arquivo .zip com uma pasta por cliente (dados do card + anexos) e uma planilha geral. Nada é apagado do Helora." onClose={onClose} width={560}
+    <Sheet title="Baixar CRM" subtitle="Um .zip com uma pasta por cliente e uma planilha geral." onClose={onClose} width={560}
       footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={go}><Download size={15} /> {busy ? "Gerando o arquivo…" : "Baixar .zip"}</Button></>}>
       <Group>
         <Row label="Funil">
@@ -1435,7 +1435,7 @@ function ProductsView({ ctx }) {
   return (
     <>
       <div className="crm-toolbar">
-        <span className="cv-muted">Produtos e subprodutos da empresa (ex.: Automóvel › Auto passeio). Vincule aos leads para calcular o valor do negócio.</span>
+        <span className="cv-muted">Produtos da empresa. Vincule aos leads para calcular o valor.</span>
         <div style={{ flex: 1 }} />
         {isManager && <Button variant="secondary" disabled={importing} onClick={importRamos}>{importing ? "Cadastrando…" : "Importar ramos de seguro"}</Button>}
         {isManager && <Button onClick={() => newProduct()}><Plus size={15} /> Novo produto</Button>}

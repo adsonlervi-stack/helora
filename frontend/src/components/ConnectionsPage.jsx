@@ -165,7 +165,7 @@ function MailSheet({ current, preset: presetBrand, onClose, onSaved, onRemove, o
     setBusy(false);
   };
   return (
-    <Sheet title="Conectar e-mail" subtitle="O Helora lê a caixa de entrada para o cérebro e envia convites pelo e-mail da empresa." onClose={onClose} width={540}
+    <Sheet title="Conectar e-mail" subtitle="Lê a caixa de entrada e envia convites pelo e-mail da empresa." onClose={onClose} width={540}
       footer={<>{onRemove && <Button variant="secondary" onClick={onRemove}>Desconectar</Button>}{onSync && <Button variant="secondary" onClick={onSync}>Ler agora</Button>}<Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy || !f.email || (!f.password && !current)} onClick={save}>{busy ? "Testando…" : "Testar e salvar"}</Button></>}>
       <div className="cx-pick">
         {MAIL_BRANDS.filter((b) => (presetBrand === "gmail" || presetBrand === "outlook" ? b.id === presetBrand : presetBrand === "outro" ? !["gmail", "outlook"].includes(b.id) : true)).map((b) => (
@@ -184,7 +184,7 @@ function MailSheet({ current, preset: presetBrand, onClose, onSaved, onRemove, o
       {preset?.note && !brand?.tip && <div className="cx-tip">💡 {preset.note}</div>}
       <button type="button" className="lp-link" onClick={() => setAdv((v) => !v)}>{adv ? "Esconder" : "Mostrar"} servidores (avançado)</button>
       {adv && (
-        <Group title="Servidores" hint="O seu provedor de e-mail informa esses dados (IMAP para ler, SMTP para enviar).">
+        <Group title="Servidores" hint="Seu provedor de e-mail informa esses dados.">
           <Row label="IMAP"><input value={f.imapHost} onChange={set("imapHost")} placeholder={preset?.imapHost || "imap.seudominio.com.br"} /></Row>
           <Row label="Porta IMAP"><input value={f.imapPort} onChange={set("imapPort")} placeholder="993" /></Row>
           <Row label="SMTP"><input value={f.smtpHost} onChange={set("smtpHost")} placeholder={preset?.smtpHost || "smtp.seudominio.com.br"} /></Row>
@@ -226,7 +226,7 @@ function onSubmit(e) {
   });
 }`;
   return (
-    <Sheet title="Formulários" subtitle="Quem preencher vira lead no CRM. Campos com o mesmo nome dos campos do funil são preenchidos sozinhos." onClose={onClose} width={680}
+    <Sheet title="Formulários" subtitle="Quem preencher vira lead no CRM." onClose={onClose} width={680}
       footer={<Button onClick={() => setNf({ name: "", pipelineId: pipes[0]?.id || "", stage: pipes[0]?.stages?.[0]?.id || "", toBrain: false })}><Plus size={15} /> Novo formulário</Button>}>
       {nf && (
         <Group title="Novo formulário">

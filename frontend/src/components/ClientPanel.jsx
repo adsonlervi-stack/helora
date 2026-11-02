@@ -209,7 +209,7 @@ function AuditButton({ conversationId }) {
     <>
       <div style={{ marginTop: 12 }}><Button variant="secondary" onClick={show}>Auditoria da conversa</Button></div>
       {open && (
-        <Sheet title="Auditoria da conversa" subtitle="Registro inalterável de tudo que foi enviado, editado ou apagado (guardado por 120 dias)." onClose={() => setOpen(false)} width={640}>
+        <Sheet title="Auditoria da conversa" subtitle="Tudo que foi enviado, editado ou apagado nos últimos 120 dias." onClose={() => setOpen(false)} width={640}>
           {err && <div className="admin-feedback error">{err}</div>}
           <div className="ap-group-box" style={{ marginTop: 12 }}>
             {rows === null && <div className="ap-empty">Carregando…</div>}

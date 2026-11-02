@@ -624,7 +624,7 @@ export function PlansTab() {
   return (
     <div>
       <div className="gestao-row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-        <p className="gestao-muted" style={{ margin: 0 }}>Os planos ativos aparecem no site da Helora e ficam disponíveis para vincular às empresas (aplica os limites automaticamente).</p>
+        <p className="gestao-muted" style={{ margin: 0 }}>Planos ativos aparecem no site e podem ser vinculados às empresas.</p>
         <Button onClick={() => setEdit(blank)}><Plus size={15} /> Novo plano</Button>
       </div>
       {error && <div className="admin-feedback error">{error}</div>}
@@ -652,7 +652,7 @@ export function PlansTab() {
         ))}
       </div>
       {edit && (
-        <Sheet title={edit.id ? "Editar plano" : "Novo plano"} subtitle="Planos ativos aparecem no site e aplicam os limites às empresas vinculadas." onClose={() => setEdit(null)} width={560}
+        <Sheet title={edit.id ? "Editar plano" : "Novo plano"} subtitle="Planos ativos aparecem no site." onClose={() => setEdit(null)} width={560}
           footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button disabled={!String(edit.name || "").trim()} onClick={save}>Salvar plano</Button></>}>
           <Group title="Plano">
             <Row label="Nome"><input autoFocus value={edit.name} onChange={set("name")} placeholder="Ex: Profissional" /></Row>

@@ -85,7 +85,7 @@ export default function AutomationsSheet({ pipeline, pipelines, tags, team, depa
   };
 
   return (
-    <Sheet title={`Automações · ${pipeline.name}`} subtitle="Regras de processo: QUANDO algo acontece, SE as condições batem, ENTÃO o Helora faz as ações sozinho." onClose={onClose} width={720}
+    <Sheet title={`Automações · ${pipeline.name}`} subtitle="Quando algo acontece, o Helora faz as ações sozinho." onClose={onClose} width={720}
       footer={<><Button variant="secondary" onClick={onClose}>Fechar</Button><Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar automações"}</Button></>}>
       <div className="au-list">
         {rules.map((r) => (

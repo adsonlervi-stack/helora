@@ -121,7 +121,7 @@ function Studio({ canva, isManager }) {
             <div className="ih-empty">
               <span className="ih-orb big"><Sparkles size={28} /></span>
               <h3>O que vamos criar hoje?</h3>
-              <p>Textos, posts, campanhas, e-mails, imagens, artes no Canva e fluxos de atendimento, usando o que a sua empresa ensinou no Cérebro.</p>
+              <p>Textos, posts, imagens, artes e fluxos para a sua empresa.</p>
               <div className="ih-ideas">{IDEAS.map((i) => <button key={i} onClick={() => send(i)}>{i}</button>)}</div>
             </div>
           )}
@@ -190,7 +190,7 @@ export function Attendants({ isManager }) {
   return (
     <div className="ih-att">
       <div className="ih-card">
-        <div className="ih-card-head"><div><h3>Canais</h3><p>Escolha qual atendente IA responde em cada número. Com um atendente ligado, ele responde tudo sozinho, e passa para um humano quando o cliente pedir ou quando não souber.</p></div></div>
+        <div className="ih-card-head"><div><h3>Canais</h3><p>Escolha qual atendente IA responde em cada número.</p></div></div>
         {!channels.length && <div className="ap-empty">Nenhum canal cadastrado.</div>}
         {channels.map((c) => (
           <div key={c.id} className="ih-ch">
@@ -206,7 +206,7 @@ export function Attendants({ isManager }) {
       </div>
       <div className="ih-card">
         <div className="ih-card-head">
-          <div><h3>Atendentes IA</h3><p>Cada atendente tem suas instruções e o próprio conhecimento. Ele também usa o conhecimento geral da empresa (Cérebro).</p></div>
+          <div><h3>Atendentes IA</h3><p>Cada atendente tem instruções e conhecimento próprios.</p></div>
           {isManager && <Button onClick={() => setEdit({ ...BLANK })}><Plus size={15} /> Novo atendente</Button>}
         </div>
         {list === null && <div className="ap-empty">Carregando…</div>}
@@ -264,7 +264,7 @@ function AttendantSheet({ a, isManager, onClose, onSaved }) {
             </Row>
             <div className={`ih-req ${String(f.prompt || "").trim().length >= 30 ? "ok" : ""}`}>{String(f.prompt || "").trim().length >= 30 ? "✓ Prompt preenchido" : `Obrigatório: descreva quem é o atendente, o que ele faz e o que não pode fazer (${String(f.prompt || "").trim().length}/30 caracteres no mínimo).`}</div>
           </Group>
-          <Group title="Quando passar para uma pessoa" hint="O atendente transfere quando o cliente pede, está irritado ou a IA não sabe responder com segurança.">
+          <Group title="Quando passar para uma pessoa" hint="Transfere quando o cliente pede ou quando a IA não sabe responder.">
             <Row label="Setor que recebe">
               <select value={f.transferDepartmentId || ""} onChange={set("transferDepartmentId")}><option value="">Fila geral</option>{deps.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
             </Row>
@@ -363,7 +363,7 @@ function Knowledge({ agentId = null, isManager }) {
       {mode === "link" && (
         <div className="ih-form">
           <input placeholder="https://… (página do site, Google Docs, Planilhas, Drive ou PDF)" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
-          <small className="cv-muted">Google: deixe o arquivo em Compartilhar → "Qualquer pessoa com o link". Depois, use ↻ para atualizar quando o arquivo mudar.</small>
+          <small className="cv-muted">No Google, compartilhe como "Qualquer pessoa com o link".</small>
           <div className="ih-form-foot"><button className="pill-btn" onClick={() => setMode(null)}>Cancelar</button><button className="pill-btn primary" disabled={busy || !/^https?:\/\//.test(f.url.trim())} onClick={add}>{busy ? "Lendo…" : "Ler e ensinar"}</button></div>
         </div>
       )}
@@ -419,7 +419,7 @@ function BrainTab({ isManager }) {
         )}
       </div>
       <div className="ih-card">
-        <div className="ih-card-head"><div><h3>Conhecimento da empresa</h3><p>Vale para a Helora IA e para todos os atendentes IA. E-mails e Google Docs também podem entrar pela aba Conexões.</p></div></div>
+        <div className="ih-card-head"><div><h3>Conhecimento da empresa</h3><p>Vale para a Helora IA e todos os atendentes.</p></div></div>
         <Knowledge isManager={isManager} />
       </div>
     </div>

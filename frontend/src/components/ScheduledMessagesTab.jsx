@@ -79,8 +79,7 @@ export default function ScheduledMessagesTab() {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title">Agendar mensagem</div>
         <div className="card-subtitle">
-          Escolha uma conversa, escreva o texto e a data/hora, o sistema envia sozinho quando
-          chegar a hora (verifica a cada minuto).
+          O sistema envia sozinho na data e hora escolhidas.
         </div>
 
         <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 480 }}>

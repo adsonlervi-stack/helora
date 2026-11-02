@@ -415,7 +415,7 @@ export default function FlowEditor({ flowId, onBack, canEdit }) {
               </div>
             ))}
             <div className="fe-pal-hint">
-              Dica: selecione um bloco e clique num item acima para já criar ligado a ele. Arraste da bolinha à direita de um bloco até outro para ligar. Delete apaga o selecionado.
+              Arraste da bolinha de um bloco até outro para ligar. Delete apaga o selecionado.
             </div>
           </div>
         )}

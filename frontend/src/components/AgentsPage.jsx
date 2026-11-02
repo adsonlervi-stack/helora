@@ -25,7 +25,7 @@ function blankMenuFlow() {
 }
 
 // Fluxo padrão — equivalente ao menu fixo que a Helora já usava antes dessa
-// etapa existir. Serve de ponto de partida pra quem não quer começar do
+// etapa existir. Serve de ponto de partida para quem não quer começar do
 // zero: já é um roteiro funcional, só ajustar os textos.
 function defaultMenuFlow() {
   const n1 = newId();
@@ -186,14 +186,12 @@ export default function AgentsPage() {
   return (
     <div className="page">
       <div className="card-subtitle" style={{ marginBottom: 18 }}>
-        Monte o roteiro que o bot segue no WhatsApp, Messenger e Instagram. Cada nó é um passo:
-        uma mensagem, um menu que espera resposta, uma transferência pra atendente, ou o fim do
-        roteiro.
+        Monte o roteiro que o bot segue. Cada passo é uma mensagem, um menu, uma transferência ou o fim.
       </div>
 
       {errors.length > 0 && (
         <div className="flow-errors">
-          <strong>Não deu pra salvar, corrija antes:</strong>
+          <strong>Não deu para salvar, corrija antes:</strong>
           <ul>
             {errors.map((e, i) => (
               <li key={i}>{e}</li>

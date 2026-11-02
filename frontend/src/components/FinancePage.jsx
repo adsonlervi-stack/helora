@@ -23,7 +23,7 @@ export default function FinancePage() {
     <div className="page finance-page">
       {d.account.blocked && (
         <div className="admin-feedback error" style={{ marginBottom: 16 }}>
-          Seu acesso está pausado por falta de pagamento. Pague a fatura em aberto pelo PIX abaixo, a liberação é automática em poucos segundos.
+          Acesso pausado por falta de pagamento. Pague pelo PIX abaixo e a liberação é automática.
         </div>
       )}
       {pixFor && <PixModal invoice={pixFor} onClose={() => setPixFor(null)} onPaid={() => { setPixFor(null); load(); setTimeout(() => window.location.reload(), 800); }} />}
