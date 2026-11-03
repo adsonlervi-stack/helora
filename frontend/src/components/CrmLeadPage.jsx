@@ -561,7 +561,7 @@ function NoteBox({ onSave }) {
   const go = async () => { if (!t.trim()) return; setBusy(true); if (await onSave(t.trim())) setT(""); setBusy(false); };
   return (
     <div className="lp-notebox">
-      <textarea rows={3} value={t} onChange={(e) => setT(e.target.value)} placeholder="Escreva uma anotação: o que o cliente disse, próximos passos…" onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) go(); }} />
+      <textarea rows={3} value={t} onChange={(e) => setT(e.target.value)} placeholder="Escreva uma anotação: o que o cliente disse, próximos passos…" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); } }} />
       <div className="lp-row-end"><button className="lp-primary" disabled={!t.trim() || busy} onClick={go}><Send size={14} /> Salvar anotação</button></div>
     </div>
   );
@@ -692,6 +692,7 @@ function MessageBox({ ctx, pipe, lead, f, custom, value, stageName, ownerName, o
         {ctx.isManager && <button className="lp-msg-pill ghost" onClick={() => setManage(true)}>{saved.length ? "Editar respostas" : "+ Criar respostas do funil"}</button>}
       </div>
       <textarea rows={4} spellCheck lang="pt-BR" value={text} onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (f.phone && (text.trim() || files.length) && !busy && !missing.length) send(); } }}
         onPaste={(e) => { const it = [...(e.clipboardData?.items || [])].find((x) => x.kind === "file"); if (it) { e.preventDefault(); const fl = it.getAsFile(); fl && addBoxFile(fl); } }}
         placeholder={f.phone ? "Escolha uma resposta pronta acima ou escreva aqui…" : "Cadastre o telefone do cliente para enviar mensagens."} />
       {files.length > 0 && <div className="lp-msg-files">{files.map((fl, i) => <span key={i} className="lp-msg-file">📎 {fl.name}<button onClick={() => setFiles((l) => l.filter((_, j) => j !== i))}><X size={11} /></button></span>)}</div>}

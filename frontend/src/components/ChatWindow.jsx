@@ -1042,9 +1042,9 @@ export default function ChatWindow({
                       : <div className="media-preview-doc"><FileText size={40} /><strong>{pendingFile.file.name}</strong><span className="cv-muted">{(pendingFile.file.size / 1024 / 1024).toFixed(2)} MB</span></div>}
                   </div>
                   {!pendingFile.file.type.startsWith("audio/") && (
-                    <input className="response" autoFocus placeholder="Legenda (opcional)" value={pendingFile.caption}
+                    <textarea className="response" rows={2} autoFocus placeholder="Legenda (opcional). Shift+Enter pula linha" value={pendingFile.caption}
                       onChange={(e) => setPendingFile((p) => ({ ...p, caption: e.target.value }))}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), confirmPendingFile())} />
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); confirmPendingFile(); } }} />
                   )}
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
                     <button type="button" className="pill-btn" onClick={() => setPendingFile(null)}>Cancelar</button>

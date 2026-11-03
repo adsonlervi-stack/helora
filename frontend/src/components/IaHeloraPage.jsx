@@ -307,7 +307,7 @@ function TestChat({ id, name }) {
         {msgs.map((m, i) => <div key={i} className={`ih-wa ${m.role} ${m.note ? "note" : ""}`}>{m.content}</div>)}
         {busy && <div className="ih-wa assistant">digitando…</div>}
       </div>
-      <div className="cx-inline"><input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Mensagem do cliente" /><button className="pill-btn primary" disabled={busy || !text.trim()} onClick={send}><Send size={14} /></button></div>
+      <div className="cx-inline"><textarea rows={1} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Mensagem do cliente" /><button className="pill-btn primary" disabled={busy || !text.trim()} onClick={send}><Send size={14} /></button></div>
     </div>
   );
 }
