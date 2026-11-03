@@ -229,6 +229,8 @@ export const attachScheduledFileApi = (id, file) => {
   fd.append("file", file);
   return api.post(`/scheduled-messages/${id}/attachment`, fd).then((r) => r.data);
 };
+export const getTaskColumnsApi = () => api.get("/task-columns").then((r) => r.data).catch(() => []);
+export const saveTaskColumnsApi = (columns) => api.put("/task-columns", { columns }).then((r) => r.data);
 export const getTasksApi = (scope) => api.get("/tasks", { params: scope ? { scope } : {} }).then((r) => r.data);
 export const createTaskApi = (data) => api.post("/tasks", data).then((r) => r.data);
 export const updateTaskApi = (id, data) => api.patch(`/tasks/${id}`, data).then((r) => r.data);

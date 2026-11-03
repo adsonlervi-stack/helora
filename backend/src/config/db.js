@@ -2900,7 +2900,7 @@ export async function updateTask(accountId, id, b) {
     patch.done_at = b.status === "done" ? new Date().toISOString() : null;
     if (b.stage === undefined) patch.stage = b.status === "done" ? "done" : "todo";
   }
-  if (b.stage !== undefined && TASK_STAGES.includes(b.stage)) {
+  if (b.stage !== undefined && (TASK_STAGES.includes(b.stage) || /^c_[a-z0-9]{3,16}$/.test(b.stage))) {
     patch.stage = b.stage;
     patch.status = b.stage === "done" ? "done" : "open";
     patch.done_at = b.stage === "done" ? new Date().toISOString() : null;

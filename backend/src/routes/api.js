@@ -1614,6 +1614,22 @@ router.post("/scheduled-messages/:id/attachment", upload.single("file"), async (
 });
 
 // ---------- Tarefas ----------
+// Colunas extras do quadro de tarefas (por empresa)
+router.get("/task-columns", async (req, res) => {
+  try { const { getIntegration } = await import("../integrations/store.js"); res.json((await getIntegration(req.accountId, "task_columns"))?.config?.columns || []); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.put("/task-columns", requireOwner, async (req, res) => {
+  try {
+    const { saveIntegration } = await import("../integrations/store.js");
+    const cols = (Array.isArray(req.body?.columns) ? req.body.columns : []).slice(0, 12).map((c) => ({
+      id: /^c_[a-z0-9]{3,16}$/.test(c.id) ? c.id : `c_${Math.random().toString(36).slice(2, 10)}`,
+      name: String(c.name || "").trim().slice(0, 40), color: /^#[0-9a-f]{6}$/i.test(c.color) ? c.color : "#5856d6"
+    })).filter((c) => c.name);
+    await saveIntegration(req.accountId, "task_columns", { columns: cols });
+    res.json(cols);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 router.get("/tasks", async (req, res) => {
   try {
     const all = (req.role === "owner" || req.isSuperAdmin) && req.query.scope !== "mine";

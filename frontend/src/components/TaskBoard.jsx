@@ -1,20 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckSquare, Paperclip, MessageSquare, CalendarClock, Trash2, MessageCircle, Plus, X, Search, Flag, Tag, Send, FileText, Check, KanbanSquare
+  CheckSquare, Paperclip, MessageSquare, CalendarClock, Trash2, MessageCircle, Plus, X, Search, Flag, Tag, Send, FileText, Check, KanbanSquare, Pencil
 } from "lucide-react";
-import { askConfirm, notify } from "../dialogs.js";
+import { askConfirm, askPrompt, notify } from "../dialogs.js";
 import { Sheet, Group, Row } from "./ui.jsx";
 import Avatar from "./Avatar.jsx";
 import {
-  createTaskApi, updateTaskApi, deleteTaskApi, addTaskCommentApi, deleteTaskCommentApi, uploadTaskFileApi, deleteTaskFileApi
+  createTaskApi, updateTaskApi, getTaskColumnsApi, saveTaskColumnsApi, deleteTaskApi, addTaskCommentApi, deleteTaskCommentApi, uploadTaskFileApi, deleteTaskFileApi
 } from "../api.js";
 
-export const TASK_STAGES = [
+const BASE_STAGES = [
   { id: "todo", name: "A fazer", color: "#8e8e93" },
   { id: "doing", name: "Fazendo", color: "#0071e3" },
   { id: "review", name: "Em revisão", color: "#ff9500" },
   { id: "done", name: "Concluído", color: "#34c759" }
 ];
+/** Colunas do quadro: as fixas + as criadas pela empresa (antes de "Concluído"). */
+export const TASK_STAGES = [...BASE_STAGES];
+let extraCols = [];
+const applyCols = (cols) => { extraCols = cols || []; TASK_STAGES.splice(0, TASK_STAGES.length, ...BASE_STAGES.slice(0, 3), ...extraCols.map((c) => ({ ...c, custom: true })), BASE_STAGES[3]); };
 const PRIORITIES = {
   low: { label: "Baixa", color: "#8e8e93" },
   normal: { label: "Normal", color: "#0071e3" },
@@ -85,6 +89,16 @@ export default function TaskBoard({
   const [overCol, setOverCol] = useState(null);
   const [adding, setAdding] = useState(null);
   const [newTitle, setNewTitle] = useState("");
+  const [colsV, setColsV] = useState(0);
+  useEffect(() => { getTaskColumnsApi().then((c) => { applyCols(c); setColsV((v) => v + 1); }); }, []);
+  const saveCols = async (cols) => { try { applyCols(await saveTaskColumnsApi(cols)); setColsV((v) => v + 1); } catch (e) { alert(e?.response?.data?.error || e.message); } };
+  const addCol = async () => { const n = await askPrompt("Nome da nova coluna", "", { okText: "Criar" }); if (n && n.trim()) saveCols([...extraCols, { name: n.trim(), color: ["#5856d6", "#af52de", "#ff2d55", "#5ac8fa", "#a2845e"][extraCols.length % 5] }]); };
+  const renameCol = async (c) => { const n = await askPrompt("Novo nome da coluna", c.name, { okText: "Salvar" }); if (n && n.trim()) saveCols(extraCols.map((x) => (x.id === c.id ? { ...x, name: n.trim() } : x))); };
+  const delCol = async (c) => {
+    if (!(await askConfirm(`Excluir a coluna "${c.name}"? As tarefas dela voltam para "A fazer".`))) return;
+    for (const t of (tasks || []).filter((t) => t.stage === c.id)) await updateTaskApi(t.id, { stage: "todo" }).catch(() => {});
+    await saveCols(extraCols.filter((x) => x.id !== c.id)); reload?.();
+  };
 
   const list = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -108,7 +122,8 @@ export default function TaskBoard({
     }
     m.done = m.done.sort((a, b) => new Date(b.doneAt || 0) - new Date(a.doneAt || 0));
     return m;
-  }, [list]);
+    // eslint-disable-next-line
+  }, [list, colsV]);
 
   const patchLocal = (id, patch) => setTasks((cur) => (cur || []).map((t) => (t.id === id ? { ...t, ...patch } : t)));
   const move = async (id, stage) => {
@@ -181,6 +196,7 @@ export default function TaskBoard({
                 <span className="tb-dot" style={{ background: col.color }} />
                 <strong>{col.name}</strong>
                 <span className="tb-count">{byCol[col.id].length}</span>
+                {col.custom && isManager && <span className="tb-col-tools"><button title="Renomear" onClick={() => renameCol(col)}><Pencil size={12} /></button><button title="Excluir coluna" onClick={() => delCol(col)}><Trash2 size={12} /></button></span>}
               </div>
               <div className="tb-col-body">
                 {byCol[col.id].map((t) => (
@@ -215,6 +231,7 @@ export default function TaskBoard({
               ))}
             </div>
           ))}
+          {isManager && <button className="tb-newcol" onClick={addCol}><Plus size={16} /> Nova coluna</button>}
         </div>
       )}
 
