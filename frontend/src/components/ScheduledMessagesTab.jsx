@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { loadQuickReplies } from "./QuickReplies.jsx";
 import { Clock3, X } from "lucide-react";
 import {
   getScheduledMessages,
@@ -53,10 +54,7 @@ export default function ScheduledMessagesTab() {
   useEffect(() => {
     load();
     getConversations().then(setConversations).catch(console.error);
-    Promise.all([getCannedResponses().catch(() => []), crm.pipelines().catch(() => [])]).then(([c, p]) => {
-      const fromCrm = (p || []).flatMap((x) => (x.messages || []).map((m) => ({ id: `crm-${m.id}`, title: m.title, text: m.text })));
-      setCanned([...(c || []).map((r) => ({ id: r.id, title: `/${r.shortCode || r.short_code || r.title || ""}`, text: r.content })), ...fromCrm]);
-    });
+    loadQuickReplies().then(setCanned);
   }, []);
   const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "";
   const fillName = (t, n) => String(t).replace(/\{nome\}/g, firstName(n)).replace(/\{nome_completo\}/g, n || "");
@@ -153,9 +151,9 @@ export default function ScheduledMessagesTab() {
 
           {canned.length > 0 && (
             <label className="login-field">
-              <span>Mensagem pronta</span>
+              <span>Resposta pronta</span>
               <select value="" onChange={(e) => { const m = canned.find((x) => x.id === e.target.value); if (m) setText(m.text); }}>
-                <option value="">Escolher uma mensagem pronta…</option>
+                <option value="">Escolher uma resposta pronta…</option>
                 {canned.map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
               </select>
             </label>

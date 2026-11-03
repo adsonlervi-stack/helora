@@ -7,6 +7,7 @@ import {
   LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles, Bot, Headset, Plus, FileDown
 } from "lucide-react";
 import ExportConversationModal from "./ExportConversationModal.jsx";
+import QuickReplies from "./QuickReplies.jsx";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
 import TransferModal from "./TransferModal.jsx";
@@ -372,6 +373,7 @@ function ScheduleModal({ conversation, initialText, onClose, defaultSign }) {
   const [recurEvery, setRecurEvery] = useState(15);
   const [needsAttachment, setNeedsAttachment] = useState(false);
   const [file, setFile] = useState(null);
+  const [qrOpen, setQrOpen] = useState(false);
   const load = () =>
     getScheduledMessages()
       .then((all) => setList(all.filter((m) => m.conversationId === conversation.id && ["pending", "waiting_attachment"].includes(m.status))))
@@ -399,7 +401,8 @@ function ScheduleModal({ conversation, initialText, onClose, defaultSign }) {
       <form className="modal lg-modal" onClick={(e) => e.stopPropagation()} onSubmit={save}>
         <div className="modal-header"><h3>Agendar mensagem</h3><button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button></div>
         <p className="cv-muted" style={{ margin: 0 }}>Para {conversation.name}. Enviada automaticamente no dia e hora escolhidos.</p>
-        <label className="login-field"><span>Mensagem</span><textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} autoFocus /></label>
+        <label className="login-field"><span>Mensagem <button type="button" className="lp-link sm" onClick={() => setQrOpen((v) => !v)}>Usar resposta pronta</button></span><textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} autoFocus placeholder="Escreva ou digite / para escolher uma resposta pronta" /></label>
+        <QuickReplies text={text} name={conversation.name} open={qrOpen} onClose={() => setQrOpen(false)} onPick={(t) => { setText(t); setQrOpen(false); }} />
         <label className="login-field"><span>{recurrence === "none" ? "Enviar em" : "Primeiro envio em"}</span><input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} /></label>
         <label className="login-field"><span>Repetir</span>
           <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>

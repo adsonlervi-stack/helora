@@ -2909,3 +2909,13 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .ih-src-b small { font-size: 11px; color: #8e8e93; }
 .ih-src-b em { font-style: normal; font-size: 11.5px; color: #6e6e73; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ih-acts button.on, .pill-btn.on { border-color: #0071e3 !important; color: #0071e3 !important; background: rgba(0,113,227,.08) !important; }
+/* Respostas prontas (lista do "/") */
+.qr-pop { border: 1px solid rgba(0,0,0,.1); border-radius: 12px; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.12); max-height: 260px; overflow-y: auto; margin: -4px 0 8px; }
+.qr-h { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: 12px; font-weight: 700; color: #6e6e73; border-bottom: 1px solid rgba(0,0,0,.06); position: sticky; top: 0; background: #fff; }
+.qr-h button { border: 0; background: transparent; color: #0071e3; cursor: pointer; font-size: 12px; font-family: inherit; }
+.qr-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 8px 12px; border: 0; border-bottom: 1px solid rgba(0,0,0,.04); background: transparent; cursor: pointer; font-family: inherit; color: inherit; }
+.qr-item:hover { background: rgba(0,113,227,.06); }
+.qr-item strong { font-size: 13px; color: #0071e3; }
+.qr-item span { font-size: 12.5px; color: #3a3a3c; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+.qr-empty { padding: 12px; font-size: 13px; color: #8e8e93; }
+.login-field > span .lp-link { margin-left: 8px; font-weight: 600; }

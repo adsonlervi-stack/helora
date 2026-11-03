@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
 import { createPortal } from "react-dom";
 import SlotPicker from "./SlotPicker.jsx";
+import { loadQuickReplies } from "./QuickReplies.jsx";
 import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
   Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin, Pencil
@@ -662,7 +663,9 @@ const BASE_VARS = [["nome", "Primeiro nome"], ["nome_completo", "Nome completo"]
 
 function MessageBox({ ctx, pipe, lead, f, custom, value, stageName, ownerName, onOpen, onSend }) {
   const saved = pipe?.messages || [];
-  const list = saved.length ? saved : DEFAULT_MESSAGES;
+  const [chatReplies, setChatReplies] = useState([]);
+  useEffect(() => { loadQuickReplies().then((l) => setChatReplies(l.filter((r) => r.id.startsWith("c-")).map((r) => ({ id: r.id, title: r.title, text: r.text })))); }, []);
+  const list = [...(saved.length ? saved : DEFAULT_MESSAGES), ...chatReplies];
   const [text, setText] = useState("");
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -686,11 +689,11 @@ function MessageBox({ ctx, pipe, lead, f, custom, value, stageName, ownerName, o
     <div className="lp-msgs">
       <div className="lp-msg-list">
         {list.map((m) => <button key={m.id} className="lp-msg-pill" onClick={() => { setText(fill(m.text)); setFiles(m.files || []); }} title={m.text}>{m.files?.length ? "📎 " : ""}{m.title}</button>)}
-        {ctx.isManager && <button className="lp-msg-pill ghost" onClick={() => setManage(true)}>{saved.length ? "Editar mensagens" : "+ Criar mensagens do funil"}</button>}
+        {ctx.isManager && <button className="lp-msg-pill ghost" onClick={() => setManage(true)}>{saved.length ? "Editar respostas" : "+ Criar respostas do funil"}</button>}
       </div>
       <textarea rows={4} spellCheck lang="pt-BR" value={text} onChange={(e) => setText(e.target.value)}
         onPaste={(e) => { const it = [...(e.clipboardData?.items || [])].find((x) => x.kind === "file"); if (it) { e.preventDefault(); const fl = it.getAsFile(); fl && addBoxFile(fl); } }}
-        placeholder={f.phone ? "Escolha uma mensagem pronta acima ou escreva aqui…" : "Cadastre o telefone do cliente para enviar mensagens."} />
+        placeholder={f.phone ? "Escolha uma resposta pronta acima ou escreva aqui…" : "Cadastre o telefone do cliente para enviar mensagens."} />
       {files.length > 0 && <div className="lp-msg-files">{files.map((fl, i) => <span key={i} className="lp-msg-file">📎 {fl.name}<button onClick={() => setFiles((l) => l.filter((_, j) => j !== i))}><X size={11} /></button></span>)}</div>}
       <input ref={boxFile} type="file" hidden onChange={(e) => { const fl = e.target.files?.[0]; e.target.value = ""; fl && addBoxFile(fl); }} />
       {missing.length > 0 && <div className="lp-warn">Faltam dados no card: {missing.join(", ")}. Preencha o campo ou edite o texto antes de enviar.</div>}
@@ -733,14 +736,14 @@ function MessagesEditor({ ctx, pipe, initial, vars, onClose }) {
   };
   const save = async () => {
     setBusy(true);
-    try { await crm.updatePipeline(pipe.id, { messages: list.filter((m) => m.title.trim() && (m.text.trim() || m.files?.length)) }); await ctx.loadPipelines(); notify("Mensagens salvas.", "success"); onClose(); }
+    try { await crm.updatePipeline(pipe.id, { messages: list.filter((m) => m.title.trim() && (m.text.trim() || m.files?.length)) }); await ctx.loadPipelines(); notify("Respostas salvas.", "success"); onClose(); }
     catch (e) { notify(errText(e), "error"); }
     setBusy(false);
   };
   return createPortal(
     <div className="lp-overlay top" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="lp-dialog">
-        <div className="lp-dialog-head"><strong>Mensagens prontas · {pipe.name}</strong><button className="lp-icon" onClick={onClose}><X size={16} /></button></div>
+        <div className="lp-dialog-head"><strong>Respostas prontas · {pipe.name}</strong><button className="lp-icon" onClick={onClose}><X size={16} /></button></div>
         <p className="lp-muted" style={{ margin: "0 0 10px" }}>Clique numa variável para inserir no texto.</p>
         <div className="lp-vars">{vars.map(([k, l]) => <button key={k} onClick={() => insert(k)} title={`{${k}}`}>{l}</button>)}</div>
         <div className="lp-msg-edit-list">
@@ -756,8 +759,8 @@ function MessagesEditor({ ctx, pipe, initial, vars, onClose }) {
           ))}
         </div>
         <div className="lp-row-end" style={{ justifyContent: "space-between", marginTop: 12 }}>
-          <button className="lp-ghost" onClick={() => { setList((l) => [...l, { id: "", title: "", text: "" }]); setFocus(list.length); }}><Plus size={14} /> Nova mensagem</button>
-          <button className="lp-primary" disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar mensagens"}</button>
+          <button className="lp-ghost" onClick={() => { setList((l) => [...l, { id: "", title: "", text: "" }]); setFocus(list.length); }}><Plus size={14} /> Nova resposta</button>
+          <button className="lp-primary" disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar respostas"}</button>
         </div>
       </div>
     </div>,
