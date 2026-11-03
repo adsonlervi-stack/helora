@@ -241,7 +241,7 @@ export default function App() {
             const conv = conversationsRef.current.find((c) => c.id === m.conversation_id);
             const type = conv?.isGroup ? "group" : !conv || !conv.assignedAgentId ? "pending" : conv.assignedAgentId === session.user.id ? "message" : null;
             if (type)
-              notifyEvent(type, conv?.isGroup ? `Grupo ${conv.name}` : type === "pending" ? "Conversa na fila" : "Nova mensagem", m.text || "📎 Arquivo recebido", () => {
+              notifyEvent(type, conv?.isGroup ? `Grupo ${conv.name}` : `${conv?.name || "Novo cliente"}${type === "pending" ? " · na fila" : ""}`, String(m.text || "📎 Arquivo recebido").replace(/^\*([^*\n]{1,60}):\*\s*/, "$1: ").replace(/\*([^*\n]+)\*/g, "$1"), () => {
                 setSection("conversations");
                 setPendingConversationId(m.conversation_id);
               });

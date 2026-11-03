@@ -130,11 +130,16 @@ export function notifyEvent(type, title, body, onClick) {
   const p = getNotifyPrefs()[type];
   if (!p?.on) return;
   playSound(p.sound);
-  // Com o Helora aberto na tela: aviso no canto inferior direito, dentro do sistema
-  if (!document.hidden) { try { window.dispatchEvent(new CustomEvent("helora:toast-notify", { detail: { type, title, body, onClick } })); } catch {} }
-  if (!notifyEnabled() || (!document.hidden && document.hasFocus()) || (pushActive() && /message|new/.test(type))) return;
+  // Notificação do próprio sistema (Windows: canto inferior direito; Mac: canto superior direito), mesmo com o Helora aberto.
+  // Sem permissão do navegador, mostra o aviso dentro do Helora.
+  if (!notifyEnabled()) {
+    if (!document.hidden) { try { window.dispatchEvent(new CustomEvent("helora:toast-notify", { detail: { type, title, body, onClick } })); } catch {} }
+    return;
+  }
+  // Com push ativo e o Helora em segundo plano, o push já avisa (evita aviso duplicado)
+  if (document.hidden && pushActive() && /message|new/.test(type)) return;
   try {
-    const n = new Notification(title, { body, icon: "/favicon.png", tag: `${type}-${title}` });
+    const n = new Notification(title, { body, icon: "/icon-192.png", badge: "/icon-192.png", tag: `${type}-${title}` });
     n.onclick = () => {
       window.focus();
       onClick?.();
