@@ -94,12 +94,12 @@ export async function runBillingCycle() {
     try {
       if (!inv.available_sent_at && inv.due_date >= today) {
         if (asaasConfigured() && !inv.asaas_payment_id) await ensureAsaasCharge(inv.id).catch((e) => log.push(`${acc.name}: ${e.message}`));
-        for (const c of contacts) await mailInvoiceAvailable({ to: c.email, name: c.name, company: acc.name, amount: inv.amount, dueDate: inv.due_date, reference: inv.reference });
+        for (const c of contacts) await mailInvoiceAvailable({ to: c.email, name: c.name, company: acc.name, amount: inv.amount, dueDate: inv.due_date, reference: inv.reference, plan: acc.plan_name || acc.plan, link: inv.invoice_url || inv.boleto_url });
         await supabase.from("invoices").update({ available_sent_at: new Date().toISOString() }).eq("id", inv.id);
         log.push(`aviso de fatura enviado: ${acc.name}`);
       }
       if (!inv.reminder_sent_at && inv.due_date === addDays(today, 1)) {
-        for (const c of contacts) await mailInvoiceReminder({ to: c.email, name: c.name, company: acc.name, amount: inv.amount, dueDate: inv.due_date });
+        for (const c of contacts) await mailInvoiceReminder({ to: c.email, name: c.name, company: acc.name, amount: inv.amount, dueDate: inv.due_date, link: inv.invoice_url || inv.boleto_url });
         await supabase.from("invoices").update({ reminder_sent_at: new Date().toISOString() }).eq("id", inv.id);
         log.push(`lembrete enviado: ${acc.name}`);
       }

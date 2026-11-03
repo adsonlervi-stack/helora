@@ -1,5 +1,5 @@
 import { supabase } from "./config/db.js";
-import { sendMail, appUrl, emailConfigured } from "./email.js";
+import { sendMail, sendTemplate, appUrl, emailConfigured } from "./email.js";
 
 /**
  * Governança (V6 fase 4): permissões por aba no servidor, log de acessos,
@@ -119,26 +119,44 @@ async function superAdminEmails() {
   return out;
 }
 
-/** Cliente abriu/escreveu no suporte → e-mail para a Gestora (no máx. 1 a cada 20 min por empresa). */
-export async function notifySupport({ accountId, userName, text }) {
-  if (!emailConfigured()) return;
-  const k = accountId;
-  if (Date.now() - (lastAlert.get(k) || 0) < 20 * 60 * 1000) return;
-  lastAlert.set(k, Date.now());
-  try {
-    const { data: acc } = await supabase.from("accounts").select("name").eq("id", accountId).maybeSingle();
-    const to = await superAdminEmails();
-    for (const email of to) {
-      await sendMail({
-        to: email, name: "Equipe Helora", label: "Suporte", subject: `Novo chamado de suporte · ${acc?.name || "Empresa"}`,
-        title: `${acc?.name || "Uma empresa"} pediu suporte`,
-        message: `${userName || "Um usuário"} escreveu:\n\n"${String(text || "").slice(0, 600)}"`,
-        buttonText: "Abrir o suporte", buttonLink: `${appUrl()}/`, note: "Responda pelo Painel Helora → Suporte."
-      });
+/** Mantido por compatibilidade: o aviso agora sai pelo vigia abaixo, só quando alguém espera demais. */
+export async function notifySupport() {}
+
+const SUPPORT_WAIT_MIN = Number(process.env.SUPPORT_ALERT_MINUTES || 10);
+const alerted = new Set();
+const waitText = (ms) => {
+  const m = Math.round(ms / 60000);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+};
+/** A cada minuto: chamado esperando há mais de X min sem ninguém aceitar → e-mail ao super admin (1 vez por chamado). */
+export function startSupportWatcher() {
+  const tick = async () => {
+    if (!emailConfigured()) return;
+    try {
+      const limit = new Date(Date.now() - SUPPORT_WAIT_MIN * 60000).toISOString();
+      const { data: threads } = await supabase.from("support_threads")
+        .select("id, account_id, subject, created_at").eq("status", "waiting").lt("created_at", limit).limit(20);
+      for (const t of threads || []) {
+        if (alerted.has(t.id)) continue;
+        alerted.add(t.id);
+        const [{ data: acc }, { data: msgs }] = await Promise.all([
+          supabase.from("accounts").select("name").eq("id", t.account_id).maybeSingle(),
+          supabase.from("support_messages").select("author_name, text, from_admin").eq("thread_id", t.id).eq("from_admin", false).order("created_at", { ascending: false }).limit(1)
+        ]);
+        const last = msgs?.[0];
+        for (const to of await superAdminEmails()) {
+          await sendTemplate("support", to, {
+            empresa: acc?.name || "Empresa", cliente: last?.author_name || "Cliente", setor: t.subject || "Geral",
+            tempo: waitText(Date.now() - new Date(t.created_at).getTime()),
+            mensagem: String(last?.text || "").slice(0, 400), link: `${appUrl()}/`
+          }).catch((e) => console.warn("[Suporte] e-mail falhou:", e.response?.data || e.message));
+        }
+      }
+    } catch (err) {
+      console.warn("[Suporte] vigia falhou:", err.message);
     }
-  } catch (err) {
-    console.warn("[Suporte] alerta por e-mail falhou:", err.message);
-  }
+  };
+  setInterval(tick, 60 * 1000);
 }
 
 // ---------------------------------------------------------------- Contrato

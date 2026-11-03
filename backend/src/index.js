@@ -26,6 +26,7 @@ import { startBillingScheduler, markInvoicePaid } from "./billing.js";
 import { supabase as db } from "./config/db.js";
 import { supabase } from "./config/db.js";
 import { sendEmail, emailConfigured } from "./email.js";
+import { startSupportWatcher } from "./governance.js";
 
 const PORT = process.env.PORT || 4000;
 // Aceita uma ou várias URLs separadas por vírgula (ex: domínio do Railway + domínio próprio).
@@ -105,7 +106,7 @@ app.post("/auth/forgot", async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.json(ok);
   const redirectTo = `${FRONTEND_ORIGINS[0]}/?reset=1`;
   try {
-    if (emailConfigured() && process.env.EMAILJS_TEMPLATE_RESET) {
+    if (emailConfigured()) {
       const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo } });
       if (!error && data?.properties?.action_link) {
         await sendEmail("EMAILJS_TEMPLATE_RESET", { to_email: email, to_name: "", reset_link: data.properties.action_link });
@@ -126,6 +127,7 @@ for (const key of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) {
   if (!process.env[key]) console.error(`[Config] Variável ${key} não definida — o backend não vai funcionar.`);
 }
 
+startSupportWatcher();
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`[Backend] Rodando em http://localhost:${PORT}`);
 });

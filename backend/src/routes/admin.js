@@ -39,7 +39,7 @@ import {
 import { sendEmail, emailConfigured } from "../email.js";
 import { requireAuth, requireSuperAdmin } from "../middleware/auth.js";
 import { runMigration, migrationState } from "../migrateSupabase.js";
-import { mailWelcomeCompany } from "../emails.js";
+import { mailWelcomeCompany, mailInvoiceAvailable } from "../emails.js";
 import { ensureAsaasCharge, runBillingCycle, markInvoicePaid } from "../billing.js";
 import { sendMail } from "../email.js";
 import { asaasConfigured } from "../asaas.js";
@@ -494,12 +494,10 @@ router.post("/invoices/:id/link", async (req, res) => {
     let emailed = false;
     if (url && req.body?.send !== false && inv.accounts?.contact_email && emailConfigured()) {
       const due = inv.due_date ? inv.due_date.split("-").reverse().join("/") : "";
-      emailed = await sendMail({
-        to: inv.accounts.contact_email, name: inv.accounts.contact_name || inv.accounts.name, label: "Fatura disponível",
-        subject: `Sua fatura Helora ${inv.reference || ""} está disponível`, title: "Sua fatura chegou",
-        message: `A fatura de ${inv.reference || "este mês"} de ${Number(inv.amount || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}${due ? `, com vencimento em ${due},` : ""} está disponível. Pague por PIX ou boleto no link.`,
-        buttonText: "Pagar fatura", buttonLink: url, note: "O link também fica em Financeiro, dentro do sistema."
-      }).then(() => true).catch(() => false);
+      emailed = await mailInvoiceAvailable({
+        to: inv.accounts.contact_email, name: inv.accounts.contact_name || inv.accounts.name, company: inv.accounts.name,
+        amount: inv.amount, dueDate: inv.due_date, reference: inv.reference, link: url
+      }).then((r) => r === true).catch(() => false);
     }
     res.json({ ok: true, emailed });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -518,12 +516,10 @@ router.post("/invoices/:id/boleto", upload.single("file"), async (req, res) => {
     let emailed = false;
     if (req.body?.send !== "false" && inv.accounts?.contact_email && emailConfigured()) {
       const due = inv.due_date ? inv.due_date.split("-").reverse().join("/") : "";
-      emailed = await sendMail({
-        to: inv.accounts.contact_email, name: inv.accounts.contact_name || inv.accounts.name, label: "Fatura disponível",
-        subject: `Sua fatura Helora ${inv.reference || ""} está disponível`, title: "Seu boleto chegou",
-        message: `A fatura de ${inv.reference || "este mês"} de ${Number(inv.amount || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}${due ? `, com vencimento em ${due},` : ""} está disponível.`,
-        buttonText: "Baixar boleto", buttonLink: url, note: "O boleto também fica em Financeiro, dentro do sistema."
-      }).then(() => true).catch(() => false);
+      emailed = await mailInvoiceAvailable({
+        to: inv.accounts.contact_email, name: inv.accounts.contact_name || inv.accounts.name, company: inv.accounts.name,
+        amount: inv.amount, dueDate: inv.due_date, reference: inv.reference, link: url
+      }).then((r) => r === true).catch(() => false);
     }
     res.json({ url, emailed });
   } catch (err) {
