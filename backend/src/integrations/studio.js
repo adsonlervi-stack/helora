@@ -2,6 +2,7 @@
 // usando a IA que a empresa conectou e o cérebro da empresa.
 import { supabase, listDepartments, createFlow } from "../config/db.js";
 import { aiChat, resolveAI, trackAIUsage } from "../aiClient.js";
+import { webSearch } from "./websearch.js";
 import { integrationsOf } from "./store.js";
 import { brainContext } from "./brain.js";
 import { uploadMedia } from "../storage.js";
@@ -16,22 +17,24 @@ async function companyFacts(accountId) {
 }
 
 /** Conversa com a IA Helora. messages = [{ role: "user"|"assistant", content }] */
-export async function studioChat(accountId, messages) {
+export async function studioChat(accountId, messages, { web = false, deep = false } = {}) {
   const msgs = (messages || []).filter((m) => m && m.content).slice(-20).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content).slice(0, 8000) }));
   while (msgs.length && msgs[0].role !== "user") msgs.shift();
   if (!msgs.length) throw new Error("Escreva o que você precisa.");
   const last = [...msgs].reverse().find((m) => m.role === "user")?.content || "";
-  const [facts, ctx, cfg] = await Promise.all([companyFacts(accountId), brainContext(accountId, last, 6), resolveAI(accountId)]);
+  const [facts, ctx, cfg, webHits] = await Promise.all([companyFacts(accountId), brainContext(accountId, last, deep ? 12 : 6), resolveAI(accountId), web ? webSearch(last, { deep }) : Promise.resolve([])]);
   const system = [
     `Você é a IA Helora, assistente de criação da empresa "${facts.name}". Responda em português do Brasil, com tom profissional e próximo.`,
     "Você cria: posts e legendas para redes sociais, textos de campanha de WhatsApp, e-mails, roteiros de vídeo, propostas comerciais, respostas para clientes, scripts de atendimento, ideias de conteúdo e análises.",
     "Entregue o conteúdo pronto para usar (sem enrolação). Para redes sociais, inclua sugestão de legenda e hashtags. Mensagens de WhatsApp: curtas, com *negrito* do WhatsApp quando ajudar, sem markdown de títulos.",
     "Se o pedido for uma imagem/arte, descreva a ideia e diga que a pessoa pode clicar em \"Gerar imagem\" ou \"Criar no Canva\". Se for um fluxo de atendimento, diga que ela pode clicar em \"Criar fluxo\".",
     ctx ? `CONHECIMENTO DA EMPRESA (use quando for relevante; não invente o que não estiver aqui, preços, prazos, coberturas):\n${ctx}` : "A empresa ainda não alimentou o cérebro. Se precisar de dados específicos (preços, produtos), peça para a pessoa informar ou adicionar no Cérebro (aba Conexões).",
+    webHits.length ? `PESQUISA NA INTERNET (resultados de agora; use para responder e cite no texto como [1], [2] conforme o número da fonte; não invente o que não estiver aqui):\n${webHits.map((h) => `[${h.n}] ${h.title} (${h.url})\n${h.content}`).join("\n\n")}` : "",
     facts.leads != null ? `Dados do Helora: ${facts.leads} leads no CRM, ${facts.openConv ?? 0} conversas em aberto.` : ""
   ].filter(Boolean).join("\n\n");
-  const reply = await aiChat({ accountId, system, messages: msgs, maxTokens: 1500 });
-  return { reply, provider: cfg?.provider || null };
+  const reply = await aiChat({ accountId, system, messages: msgs, maxTokens: deep ? 2500 : 1500 });
+  if (web) trackAIUsage(accountId, "pesquisas_web", 1).catch(() => {});
+  return { reply, provider: cfg?.provider || null, sources: webHits.map(({ n, title, url }) => ({ n, title, url })) };
 }
 
 /** Gera imagem com a IA conectada (ChatGPT/OpenAI ou Gemini). Devolve { url }. */

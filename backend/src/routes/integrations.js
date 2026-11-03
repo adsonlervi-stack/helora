@@ -11,6 +11,7 @@ import { testMail, syncMail, mailPreset } from "../integrations/mail.js";
 import { canvaAuthUrl, canvaConfigured, listDesigns, createDesign, exportDesign, CANVA_SIZES } from "../integrations/canva.js";
 import { studioChat, studioImage, studioFlow } from "../integrations/studio.js";
 import { learnFromConversations } from "../integrations/learn.js";
+import { webSearchConfigured } from "../integrations/websearch.js";
 import { testAttendant } from "../bot/flowRunner.js";
 import { clearAttendantCache } from "../bot/engine.js";
 
@@ -51,7 +52,7 @@ router.get("/", async (req, res) => {
     const ai = await resolveAI(req.accountId).catch(() => null);
     const aiOn = !!ai && (await aiEnabledFor(req.accountId).catch(() => false));
     const usage = map.ai_usage?.config?.[new Date().toISOString().slice(0, 7)] || {};
-    res.json({ integrations: out, heloraAI: { active: aiOn, ready: !!ai, usage }, activeAI: aiOn ? { provider: "helora", own: false } : null, canvaAvailable: canvaConfigured() });
+    res.json({ webSearch: webSearchConfigured(), integrations: out, heloraAI: { active: aiOn, ready: !!ai, usage }, activeAI: aiOn ? { provider: "helora", own: false } : null, canvaAvailable: canvaConfigured() });
   } catch (err) { fail(res, err); }
 });
 
@@ -236,7 +237,7 @@ router.post("/brain/learn/now", requireOwner, needAI, async (req, res) => {
   try { res.json(await learnFromConversations(req.accountId, { max: 40 })); } catch (err) { fail(res, err); }
 });
 router.post("/brain/ask", async (req, res) => {
-  try { res.json(await askBrain(req.accountId, String(req.body?.question || "").trim())); } catch (err) { fail(res, err); }
+  try { res.json(await askBrain(req.accountId, String(req.body?.question || "").trim(), { deep: !!req.body?.deep })); } catch (err) { fail(res, err); }
 });
 
 // ------------------------------------------------------------ Atendentes IA nos canais
@@ -299,10 +300,10 @@ async function saveChat(req, chatId, messages) {
 router.post("/studio/chat", async (req, res) => {
   try {
     const messages = (req.body?.messages || []).slice(-40);
-    const { reply, provider } = await studioChat(req.accountId, messages);
-    const all = [...messages, { role: "assistant", content: reply, at: new Date().toISOString() }];
+    const { reply, provider, sources } = await studioChat(req.accountId, messages, { web: !!req.body?.web, deep: !!req.body?.deep });
+    const all = [...messages, { role: "assistant", content: reply, sources: sources?.length ? sources : undefined, at: new Date().toISOString() }];
     const chatId = await saveChat(req, req.body?.chatId, all).catch(() => req.body?.chatId || null);
-    res.json({ reply, provider, chatId });
+    res.json({ reply, provider, chatId, sources });
   } catch (err) { fail(res, err); }
 });
 router.post("/studio/image", async (req, res) => {

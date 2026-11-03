@@ -82,18 +82,18 @@ export async function brainContext(accountId, query, limit = 5, promptId = null)
 }
 
 /** Pergunta ao cérebro: busca os trechos e a IA responde só com base neles. */
-export async function askBrain(accountId, question) {
-  const hits = await searchBrain(accountId, question, 8);
+export async function askBrain(accountId, question, { deep = false } = {}) {
+  const hits = await searchBrain(accountId, question, deep ? 16 : 8);
   if (!hits.length) return { answer: "Não encontrei nada sobre isso no cérebro da empresa. Adicione documentos, planilhas ou sites na aba Conexões.", sources: [] };
   const ctx = hits.map((h, i) => `[${i + 1}] Fonte: ${h.title} (${h.source})\n${h.content}`).join("\n\n---\n\n");
   const answer = await aiChat({
     accountId,
-    maxTokens: 700,
+    maxTokens: deep ? 1400 : 700,
     system: "Você é o assistente interno da empresa. Responda em português do Brasil, de forma direta, usando SOMENTE as informações dos trechos abaixo. Cite as fontes no texto como [1], [2]. Se os trechos não responderem à pergunta, diga claramente que não encontrou essa informação.\n\nTRECHOS:\n" + ctx,
     messages: [{ role: "user", content: String(question).slice(0, 2000) }]
   });
   const seen = new Set();
-  const sources = hits.map((h, i) => ({ n: i + 1, docId: h.doc_id, title: h.title, source: h.source, url: h.url })).filter((s) => !seen.has(s.docId) && seen.add(s.docId));
+  const sources = hits.map((h, i) => ({ n: i + 1, docId: h.doc_id, title: h.title, source: h.source, url: h.url, excerpt: String(h.content || "").slice(0, 220) })).filter((s) => !seen.has(s.docId) && seen.add(s.docId));
   return { answer, sources };
 }
 

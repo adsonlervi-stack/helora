@@ -29,7 +29,7 @@ export default function IaHeloraPage({ isManager, onGo }) {
       {noAI && (
         <div className="ih-warn">A Helora IA não está ativa no plano da sua empresa. Fale com o suporte para contratar.</div>
       )}
-      {tab === "criar" && <Studio canva={!!status?.integrations?.canva?.connected} isManager={isManager} />}
+      {tab === "criar" && <Studio canva={!!status?.integrations?.canva?.connected} isManager={isManager} status={status} />}
       {tab === "cerebro" && <BrainTab isManager={isManager} />}
     </div>
   );
@@ -45,7 +45,7 @@ const IDEAS = [
   "Liste 10 ideias de conteúdo para o mês"
 ];
 
-function Studio({ canva, isManager }) {
+function Studio({ canva, isManager, status }) {
   const [chats, setChats] = useState([]);
   const [chatId, setChatId] = useState(null);
   const [msgs, setMsgs] = useState([]);
@@ -59,14 +59,16 @@ function Studio({ canva, isManager }) {
   const open = async (id) => { try { const c = await integrations.studioChat(id); setChatId(c.id); setMsgs(c.messages || []); } catch (e) { notify(errText(e), "error"); } };
   const fresh = () => { setChatId(null); setMsgs([]); setText(""); };
 
+  const [web, setWeb] = useState(false);
+  const [deep, setDeep] = useState(false);
   const send = async (t = text) => {
     const q = String(t).trim();
     if (!q || busy) return;
     const next = [...msgs, { role: "user", content: q }];
     setMsgs(next); setText(""); setBusy("chat");
     try {
-      const r = await integrations.studioSend({ chatId, messages: next.filter((m) => !m.kind).map(({ role, content }) => ({ role, content })) });
-      setMsgs([...next, { role: "assistant", content: r.reply }]);
+      const r = await integrations.studioSend({ chatId, web, deep, messages: next.filter((m) => !m.kind).map(({ role, content }) => ({ role, content })) });
+      setMsgs([...next, { role: "assistant", content: r.reply, sources: r.sources }]);
       if (r.chatId && r.chatId !== chatId) { setChatId(r.chatId); loadChats(); }
     } catch (e) { setMsgs([...next, { role: "assistant", content: `⚠️ ${errText(e)}`, kind: "error" }]); }
     setBusy(null);
@@ -130,6 +132,7 @@ function Studio({ canva, isManager }) {
               {m.role === "assistant" && <span className="ih-av"><Sparkles size={14} /></span>}
               <div className="ih-bubble">
                 <div className="ih-text">{renderText(m.content)}</div>
+                {!!m.sources?.length && <SourceCards list={m.sources} />}
                 {m.image && <img className="ih-img" src={m.image} alt="" />}
                 {m.role === "assistant" && m.kind !== "error" && (
                   <div className="ih-tools">
@@ -153,6 +156,8 @@ function Studio({ canva, isManager }) {
               <button disabled={!!busy} onClick={image} title="Gera a imagem com o ChatGPT ou o Gemini conectado"><ImageIcon size={15} /> Gerar imagem</button>
               {canva && <button disabled={!!busy} onClick={() => toCanva(null)}><Palette size={15} /> Criar no Canva</button>}
               {isManager && <button disabled={!!busy} onClick={flow}><Workflow size={15} /> Criar fluxo</button>}
+              <button className={web ? "on" : ""} disabled={!!busy || !status?.webSearch} title={status?.webSearch ? "A IA pesquisa na internet e mostra as fontes" : "Pesquisa na web ainda não ativada no servidor"} onClick={() => setWeb((v) => !v)}><Globe size={15} /> Pesquisar na web</button>
+              <button className={deep ? "on" : ""} disabled={!!busy} title="Lê mais fontes antes de responder (mais lento)" onClick={() => setDeep((v) => !v)}><Search size={15} /> Aprofundado</button>
               <select value={size} onChange={(e) => setSize(e.target.value)} title="Formato da arte">
                 <option value="post">Post 1:1</option><option value="story">Story 9:16</option><option value="carrossel">Carrossel 4:5</option><option value="banner">Banner 16:9</option><option value="a4">A4</option>
               </select>
@@ -418,14 +423,32 @@ function LearnCard({ isManager }) {
   );
 }
 
+function SourceCards({ list }) {
+  return (
+    <div className="ih-srcs">
+      {list.map((s) => {
+        const host = (() => { try { return new URL(s.url).hostname.replace(/^www\./, ""); } catch { return s.source === "conversas" ? "Conversas" : s.source || ""; } })();
+        const Tag = s.url ? "a" : "div";
+        return (
+          <Tag key={`${s.n}-${s.docId || s.url}`} className="ih-src" {...(s.url ? { href: s.url, target: "_blank", rel: "noreferrer" } : {})}>
+            <span className="ih-src-n">{s.n}</span>
+            <span className="ih-src-b"><strong>{s.title}</strong><small>{host}</small>{s.excerpt && <em>{s.excerpt}…</em>}</span>
+          </Tag>
+        );
+      })}
+    </div>
+  );
+}
+
 function BrainTab({ isManager }) {
+  const [deep, setDeep] = useState(false);
   const [q, setQ] = useState("");
   const [ans, setAns] = useState(null);
   const [busy, setBusy] = useState(false);
   const ask = async () => {
     if (!q.trim()) return;
     setBusy(true); setAns(null);
-    try { setAns(await integrations.brainAsk(q.trim())); } catch (e) { notify(errText(e), "error"); }
+    try { setAns(await integrations.brainAsk(q.trim(), deep)); } catch (e) { notify(errText(e), "error"); }
     setBusy(false);
   };
   return (
@@ -434,11 +457,11 @@ function BrainTab({ isManager }) {
       <div className="ih-card ih-ask">
         <h3><Brain size={18} /> Pergunte ao cérebro</h3>
         <p>A IA responde só com o que a empresa ensinou, e mostra de onde tirou.</p>
-        <div className="cx-inline"><input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask()} placeholder='Ex.: "Qual a carência do plano de saúde?" ou "Quais seguradoras trabalhamos?"' /><button className="pill-btn primary" disabled={busy || !q.trim()} onClick={ask}>{busy ? "Buscando…" : "Perguntar"}</button></div>
+        <div className="cx-inline"><input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask()} placeholder='Ex.: "Qual a carência do plano de saúde?" ou "Quais seguradoras trabalhamos?"' /><button className={`pill-btn ${deep ? "on" : ""}`} title="Lê mais trechos antes de responder" onClick={() => setDeep((v) => !v)}><Search size={14} /> {deep ? "Aprofundado" : "Rápido"}</button><button className="pill-btn primary" disabled={busy || !q.trim()} onClick={ask}>{busy ? "Buscando…" : "Perguntar"}</button></div>
         {ans && (
           <div className="ih-answer">
             <div className="ih-text">{renderText(ans.answer)}</div>
-            {!!ans.sources?.length && <div className="ih-sources">{ans.sources.map((s) => <span key={s.docId}>[{s.n}] {s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a> : s.title}</span>)}</div>}
+            {!!ans.sources?.length && <SourceCards list={ans.sources} />}
           </div>
         )}
       </div>

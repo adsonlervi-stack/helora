@@ -138,7 +138,7 @@ function GoogleSheet({ kind, onClose }) {
     setBusy(false);
   };
   return (
-    <Sheet title={kind} subtitle="No Google, deixe o arquivo em Compartilhar → Qualquer pessoa com o link." onClose={onClose} width={520}
+    <Sheet title={kind} subtitle="O arquivo vai para o Cérebro. Depois, a Helora IA e os atendentes IA usam o conteúdo para responder. Para conferir, pergunte em Helora IA → Cérebro. No Google, deixe o arquivo em Compartilhar → Qualquer pessoa com o link." onClose={onClose} width={520}
       footer={<><Button variant="secondary" onClick={onClose}>Fechar</Button><Button disabled={busy || !link.trim()} onClick={add}>{busy ? "Lendo…" : "Adicionar"}</Button></>}>
       <Group><Row label="Link" stack><input autoFocus value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && link.trim() && add()} placeholder="https://docs.google.com/…" /></Row></Group>
     </Sheet>

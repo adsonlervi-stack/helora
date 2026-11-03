@@ -470,7 +470,7 @@ export const integrations = {
   brainLearn: () => api.get("/integrations/brain/learn").then((r) => r.data),
   setBrainLearn: (off) => api.put("/integrations/brain/learn", { off }).then((r) => r.data),
   brainLearnNow: () => api.post("/integrations/brain/learn/now", {}, { timeout: 180000 }).then((r) => r.data),
-  brainAsk: (question) => api.post("/integrations/brain/ask", { question }, { timeout: 120000 }).then((r) => r.data),
+  brainAsk: (question, deep) => api.post("/integrations/brain/ask", { question, deep: !!deep }, { timeout: 180000 }).then((r) => r.data),
   attendantChannels: () => api.get("/integrations/attendants/channels").then((r) => r.data),
   setChannelAttendant: (channelId, attendantId) => api.put(`/integrations/attendants/channels/${channelId}`, { attendantId }).then((r) => r.data),
   testAttendant: (id, messages) => api.post(`/integrations/attendants/${id}/test`, { messages }, { timeout: 120000 }).then((r) => r.data),
