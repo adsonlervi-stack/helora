@@ -97,8 +97,8 @@ export const forwardMessageApi = (messageId, conversationIds) =>
   api.post(`/messages/${messageId}/forward`, { conversationIds }).then((r) => r.data);
 export const setConversationMode = (id, mode) =>
   api.post(`/conversations/${id}/mode`, { mode }).then((r) => r.data);
-export const setConversationStatus = (id, status) =>
-  api.post(`/conversations/${id}/status`, { status }).then((r) => r.data);
+export const setConversationStatus = (id, status, csat) =>
+  api.post(`/conversations/${id}/status`, { status, ...(csat === false ? { csat: false } : {}) }).then((r) => r.data);
 export const setConversationPriority = (id, priority) =>
   api.post(`/conversations/${id}/priority`, { priority }).then((r) => r.data);
 export const setConversationLabels = (id, labelIds) =>

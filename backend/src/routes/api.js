@@ -1108,7 +1108,7 @@ router.post("/conversations/:id/status", async (req, res) => {
   // Dispara a pesquisa de satisfação só quando a conversa vira "resolvida"
   // agora (evita reenviar toda vez que reabre/resolve de novo).
   const csatOn = (await getAccountSettings(req.accountId).catch(() => ({ csatEnabled: true }))).csatEnabled;
-  if (status === "resolved" && before.status !== "resolved" && csatOn && !conversation.isGroup) {
+  if (status === "resolved" && before.status !== "resolved" && csatOn && req.body?.csat !== false && !conversation.isGroup) {
     try {
       if (conversation.platform === "whatsapp") {
         const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));

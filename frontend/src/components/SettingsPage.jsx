@@ -15,7 +15,7 @@ import {
   Smartphone,
   Pencil,
   KeyRound,
-  Copy, Bell, ShieldCheck, History, CalendarClock, Plug } from "lucide-react";
+  Copy, Bell, ShieldCheck, History, CalendarClock, Plug, Eye, EyeOff } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook } from "../api.js";
 import { AccessLogList } from "./AdminPage.jsx";
@@ -63,7 +63,7 @@ const CARDS = [
   {
     key: "attendance",
     label: "Atendimento",
-    desc: "Horário de atendimento e pesquisa de satisfação",
+    desc: "Horário de atendimento e pesquisa de satisfação (nota de 1 a 5 ao fechar)",
     icon: Clock3,
     ownerOnly: true
   },

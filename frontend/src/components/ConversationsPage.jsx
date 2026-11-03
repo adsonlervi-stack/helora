@@ -1,3 +1,4 @@
+import { askConfirm } from "../dialogs.js";
 import React, { useRef, useCallback, useEffect, useState } from "react";
 import Sidebar from "./Sidebar.jsx";
 import ChatWindow from "./ChatWindow.jsx";
@@ -7,6 +8,7 @@ import {
   sendMessage,
   setConversationMode,
   setConversationStatus,
+  getAccountSettingsApi,
   setConversationPriority,
   setConversationLabels,
   setConversationDepartment,
@@ -231,7 +233,16 @@ export default function ConversationsPage({
 
   const handleSetMode = (mode) => optimistic({ mode }, (id) => setConversationMode(id, mode));
 
-  const handleSetStatus = (status) => optimistic({ status }, (id) => setConversationStatus(id, status));
+  const csatOnRef = useRef(null);
+  useEffect(() => { getAccountSettingsApi().then((s) => { csatOnRef.current = s?.csatEnabled !== false; }).catch(() => {}); }, []);
+  const handleSetStatus = async (status) => {
+    let csat;
+    const conv = conversations.find((c) => c.id === selectedId);
+    if (status === "resolved" && csatOnRef.current && conv && !conv.isGroup) {
+      csat = await askConfirm("Enviar a pesquisa de satisfação (nota de 1 a 5) para o cliente?\n\nPara desligar de vez: Configurações → Atendimento → Pesquisa de satisfação.", { title: "Fechar conversa", okText: "Fechar e enviar", cancelText: "Fechar sem pesquisa" });
+    }
+    return optimistic({ status }, (id) => setConversationStatus(id, status, csat === false ? false : undefined));
+  };
 
   const handleSetPriority = async (priority) => {
     if (!selectedId) return;

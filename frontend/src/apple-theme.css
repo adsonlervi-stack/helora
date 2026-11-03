@@ -2893,3 +2893,9 @@ a.lp-icon { display: inline-grid; place-items: center; color: inherit; text-deco
 }
 .sp-g { margin-left: 4px; font-size: 10px; font-weight: 800; color: #fff; background: #4285F4; border-radius: 4px; padding: 0 4px; }
 .sp-hint { margin-top: 8px; font-size: 12px; color: #b25000; background: rgba(255,159,10,.1); border-radius: 8px; padding: 8px 10px; }
+.sch-pick { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; }
+.sch-pick label { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,.1); background: #fff; font-size: 13px; cursor: pointer; }
+.sch-pick label.on { border-color: #0071e3; background: rgba(0,113,227,.06); }
+.sch-n { color: #6e6e73; font-size: 12px; }
+.sch-bd-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.sch-bd-bar select { padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,.14); font-family: inherit; }
