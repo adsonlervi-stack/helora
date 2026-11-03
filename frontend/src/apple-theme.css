@@ -2922,3 +2922,4 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .qr-pop { flex-shrink: 0 !important; min-height: 120px; max-height: 360px !important; margin: 4px 0 10px !important; }
 .qr-item { padding: 10px 14px !important; gap: 4px !important; }
 .qr-item span { -webkit-line-clamp: 4 !important; font-size: 13px !important; line-height: 1.4; }
+.avatar-circle.av-group { background: linear-gradient(135deg, #5ac8fa, #0071e3) !important; color: #fff; display: grid; place-items: center; }

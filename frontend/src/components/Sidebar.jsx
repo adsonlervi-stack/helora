@@ -207,7 +207,7 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
               {...newTabHandlers({ c: c.id }, () => onSelect(c.id))}
             >
               <div className="cv-avatar">
-                <Avatar name={c.name} url={c.avatarUrl} size={46} />
+                <Avatar name={c.name} url={c.avatarUrl} size={46} group={c.isGroup} />
                 {c.online && <span className="cv-online" title="Online agora" />}
               </div>
               <div className="cv-body">

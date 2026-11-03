@@ -46,7 +46,7 @@ export default function FloatingChat({ conversations = [], onOpenFull, openId })
               <div className="fchat-list">
                 {list.map((c) => (
                   <button key={c.id} className="fchat-row" onClick={() => setSel(c.id)}>
-                    <Avatar name={c.name} url={c.avatarUrl} size={36} />
+                    <Avatar name={c.name} url={c.avatarUrl} size={36} group={c.isGroup} />
                     <span className="fchat-n"><strong>{c.name}</strong><small>{clean(c.lastMessagePreview) || "…"}</small></span>
                     <span className="fchat-meta">{time(c.lastMessageAt)}{c.unread > 0 && <b>{c.unread}</b>}</span>
                   </button>

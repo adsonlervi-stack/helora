@@ -884,7 +884,7 @@ export default function ChatWindow({
             <ArrowLeft size={20} />
           </button>
           <button className="chat-who" onClick={() => setPanelOpen((v) => !v)} title="Abrir / fechar dados do cliente">
-          <Avatar name={conversation.name} url={conversation.avatarUrl} size={40} zoomable />
+          <Avatar name={conversation.name} url={conversation.avatarUrl} size={40} zoomable group={conversation.isGroup} />
           <div>
             <div className="chat-header-name">{conversation.name}</div>
             <div className="chat-header-platform">

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { X, Users } from "lucide-react";
 
 function initials(name = "") {
   return name.trim().slice(0, 2).toUpperCase() || "?";
@@ -32,11 +32,13 @@ export const isCartoon = (url) => !url || /^avatar:/.test(url);
 
 // Avatar genérico: mostra a foto (avatarUrl) quando existe, senão as iniciais.
 // zoomable: clicar na foto abre ela em tamanho grande.
-export default function Avatar({ name, url, size = 32, className = "", zoomable = false, initials: useInitials = false }) {
+export default function Avatar({ name, url, size = 32, className = "", zoomable = false, initials: useInitials = false, group = false }) {
   const [bad, setBad] = useState(false);
-  const cartoon = !useInitials && isCartoon(url) && !bad;
+  useEffect(() => setBad(false), [url]);
+  // Foto real que não carregou (link vencido): mostra o bonequinho
+  const cartoon = !useInitials && (isCartoon(url) || bad);
   const pick = cartoon ? cartoonPick(name, url) : null;
-  const src = cartoon ? pick.src : (isCartoon(url) ? null : url);
+  const src = cartoon ? pick.src : url;
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -44,7 +46,10 @@ export default function Avatar({ name, url, size = 32, className = "", zoomable 
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [open]);
-  const canZoom = zoomable && !!url && !isCartoon(url);
+  const canZoom = zoomable && !!url && !isCartoon(url) && !bad;
+  if (group && (isCartoon(url) || bad)) {
+    return <div className={`avatar-circle av-group ${className}`} style={{ width: size, height: size, minWidth: size }}><Users size={Math.round(size * 0.48)} /></div>;
+  }
   return (
     <>
       <div
@@ -53,7 +58,7 @@ export default function Avatar({ name, url, size = 32, className = "", zoomable 
         onClick={canZoom ? (e) => { e.stopPropagation(); e.preventDefault(); setOpen(true); } : undefined}
         title={canZoom ? "Ver foto" : undefined}
       >
-        {src ? <img src={src} alt={name || "Avatar"} className={pick ? "av3d" : undefined} onError={() => setBad(true)} /> : initials(name)}
+        {src ? <img src={src} alt={name || "Avatar"} className={pick ? "av3d" : undefined} onError={() => { if (!cartoon) setBad(true); }} /> : initials(name)}
       </div>
       {open && createPortal(
         <div className="avatar-lightbox" onClick={() => setOpen(false)}>

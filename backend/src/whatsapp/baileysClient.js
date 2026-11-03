@@ -713,6 +713,26 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         ...(quoted && !quoted.quotedAuthor ? { quotedAuthor: name } : {})
       });
 
+      // Foto do contato ou do grupo: busca a real quando não tem (ou só tem o bonequinho), no máximo a cada 12 h.
+      // Guarda uma cópia no Helora, porque o link do WhatsApp expira em poucos dias.
+      {
+        const av = conversation.avatarUrl || "";
+        const stale = /pps\.whatsapp\.net|mmg\.whatsapp\.net/.test(av);
+        if ((!av || /^avatar:/.test(av) || stale) && Date.now() - (photoTried.get(conversation.id) || 0) > 12 * 3600000) {
+          photoTried.set(conversation.id, Date.now());
+          sock.profilePictureUrl(jid, "image").then(async (url) => {
+            if (!url) return;
+            try {
+              const r = await fetch(url);
+              if (!r.ok) throw new Error(String(r.status));
+              const buffer = Buffer.from(await r.arrayBuffer());
+              const saved = await uploadMedia({ accountId, buffer, extension: "jpg", contentType: "image/jpeg" });
+              await setConversationAvatar(conversation.id, saved);
+            } catch { await setConversationAvatar(conversation.id, url); }
+          }).catch(() => {});
+        }
+      }
+
       // Grupo: marca a conversa como grupo e nunca aciona o bot.
       if (isGroup) {
         if (!conversation.isGroup || conversation.isNew) {
@@ -737,15 +757,6 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
           console.error(`[Bot] Erro ao processar mensagem (${conversation.id}):`, err.message);
         }
 
-        // Sem foto (ou só com o bonequinho): tenta buscar a foto real, no máximo a cada 12 h por conversa
-        const noPhoto = !conversation.avatarUrl || /^avatar:/.test(conversation.avatarUrl);
-        if (noPhoto && Date.now() - (photoTried.get(conversation.id) || 0) > 12 * 3600000) {
-          photoTried.set(conversation.id, Date.now());
-          sock
-            .profilePictureUrl(jid, "image")
-            .then((url) => url && setConversationAvatar(conversation.id, url))
-            .catch(() => {});
-        }
 
         if (conversation.isNew) {
           await updateConversation(accountId, conversation.id, { isNew: false });

@@ -113,7 +113,7 @@ export default function HomePage({ profile, conversations = [], onNavigate, onOp
             {convs.map((c) => (
               <button key={c.id} className="home2-row" onClick={() => (onOpenConversation ? onOpenConversation(c.id) : onNavigate("conversations"))}>
                 <span className="home2-av">
-                  <Avatar name={c.name} url={c.avatarUrl} size={40} />
+                  <Avatar name={c.name} url={c.avatarUrl} size={40} group={c.isGroup} />
                   {c.platform === "whatsapp" && <i className="home2-wa" />}
                 </span>
                 <span className="home2-main">
