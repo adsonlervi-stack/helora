@@ -252,7 +252,7 @@ export async function deleteWhatsAppMessage(channelId, jid, { id, fromMe = true 
   await liveSock(channelId).sendMessage(jid, { delete: { remoteJid: jid, id, fromMe } });
 }
 
-export async function sendWhatsAppMedia(channelId, jid, { buffer, mediaType, mimetype, caption, fileName, quoted = null }) {
+export async function sendWhatsAppMedia(channelId, jid, { buffer, mediaType, mimetype, caption, fileName, quoted = null, seconds }) {
   const cloud = await getCloudChannel(channelId);
   if (cloud) {
     const ext = (fileName || "").split(".").pop() || (mediaType === "audio" ? "ogg" : "bin");
@@ -267,7 +267,7 @@ export async function sendWhatsAppMedia(channelId, jid, { buffer, mediaType, mim
       : mediaType === "video"
         ? { video: buffer, caption }
         : mediaType === "audio"
-          ? { audio: buffer, mimetype: "audio/ogg; codecs=opus", ptt: true }
+          ? { audio: buffer, mimetype: "audio/ogg; codecs=opus", ptt: true, ...(seconds ? { seconds } : {}) }
           : { document: buffer, mimetype, fileName: fileName || "arquivo", caption };
 
   const sent = await conn.sock.sendMessage(jid, payload, quoted ? { quoted } : undefined);

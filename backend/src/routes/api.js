@@ -169,7 +169,7 @@ import { sendTextToConversation, sendSpecialToConversation, baileysQuoted } from
 import { requireAuth, requireOwner } from "../middleware/auth.js";
 import { enforceTabs, logAccess, listConversationAudit, notifySupport, emailContract, invalidateTabs, listAccessLogs } from "../governance.js";
 import { uploadMedia, uploadAvatar } from "../storage.js";
-import { convertToOggOpus } from "../audio.js";
+import { convertToOggOpus, convertToOggOpusDetailed } from "../audio.js";
 import { exportConversation } from "../conversationExport.js";
 import { syncTaskToLead } from "./crm.js";
 
@@ -1458,14 +1458,15 @@ router.post("/conversations/:id/send-audio", upload.single("file"), async (req, 
   }
 
   try {
-    const oggBuffer = await convertToOggOpus(req.file.buffer);
+    const { buffer: oggBuffer, seconds } = await convertToOggOpusDetailed(req.file.buffer);
 
     const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
     if (!channelId) return res.status(400).json({ error: "Nenhum dispositivo de WhatsApp conectado." });
 
     const whatsappMessageId = await sendWhatsAppMedia(channelId, conversation.externalId, {
       buffer: oggBuffer,
-      mediaType: "audio"
+      mediaType: "audio",
+      seconds
     });
 
     const mediaUrl = await uploadMedia({
