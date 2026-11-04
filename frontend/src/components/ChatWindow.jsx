@@ -541,6 +541,7 @@ export default function ChatWindow({
   conversation,
   messages,
   hasMore = false,
+  onReloadMessages,
   onLoadOlder,
   onSend,
   onSendMedia,
@@ -978,6 +979,7 @@ export default function ChatWindow({
         <div className="chat-column">
           <div className="message-list" ref={listRef} onScroll={onListScroll}>
             {hasMore && <div className="msg-older">Role para cima para ver mensagens anteriores</div>}
+            {!hasMore && conversation.platform === "whatsapp" && <OlderFromWhatsApp conversationId={conversation.id} onLoaded={onReloadMessages} />}
             {messages.map((m) => (
               <MessageBubble
                 key={m.id}
@@ -1223,6 +1225,27 @@ export default function ChatWindow({
           onDone={onTransferred}
         />
       )}
+    </div>
+  );
+}
+
+/** Busca no WhatsApp mensagens mais antigas desta conversa (até 90 dias). */
+function OlderFromWhatsApp({ conversationId, onLoaded }) {
+  const [st, setSt] = useState("idle");
+  useEffect(() => setSt("idle"), [conversationId]);
+  const go = async () => {
+    setSt("busy");
+    try {
+      const { loadOlderFromWhatsApp } = await import("../api.js");
+      const r = await loadOlderFromWhatsApp(conversationId);
+      if (r.reason === "limit") { setSt("limit"); return; }
+      setTimeout(() => { onLoaded?.(); setSt("idle"); }, 6000);
+    } catch (e) { setSt("err"); alert(e?.response?.data?.error || e.message); }
+  };
+  if (st === "limit") return <div className="msg-older">Histórico carregado até 90 dias atrás.</div>;
+  return (
+    <div className="msg-older">
+      <button className="pill-btn" disabled={st === "busy"} onClick={go}>{st === "busy" ? "Buscando no WhatsApp…" : "Buscar mensagens antigas no WhatsApp"}</button>
     </div>
   );
 }

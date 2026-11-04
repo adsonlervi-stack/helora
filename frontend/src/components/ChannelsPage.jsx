@@ -1,6 +1,6 @@
 import { askConfirm } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Smartphone, QrCode, Pencil, Workflow, ChevronDown, ChevronRight, Wifi, WifiOff, RotateCw, Power, Users, Clock, Instagram, Facebook, Mail, MessageCircle } from "lucide-react";
+import { Plus, Trash2, Smartphone, QrCode, Pencil, Workflow, ChevronDown, ChevronRight, Wifi, WifiOff, RotateCw, Power, Users, Clock, Instagram, Facebook, Mail, MessageCircle , History } from "lucide-react";
 import {
   getChannels,
   createChannelApi,
@@ -13,6 +13,8 @@ import {
   updateChannelApi,
   logoutWhatsAppApi,
   resetWhatsAppApi,
+  historyImportApi,
+  historyStatusApi,
   API_BASE
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
@@ -237,6 +239,11 @@ export default function ChannelsPage() {
     await logoutWhatsAppApi(c.id).catch(() => {}); load();
   };
   const restart = async (c) => { await resetWhatsAppApi(c.id).catch(() => {}); load(); };
+  const importHistory = async (c) => {
+    const ok = await askConfirm(`Importar as conversas dos últimos 90 dias de "${c.name}"?\n\nO WhatsApp só envia o histórico na hora de conectar, então o número vai ser desconectado e aparece um QR Code novo. Leia o QR com o mesmo celular. As mensagens antigas entram sem notificar ninguém e sem acionar o bot ou a IA. Fotos e áudios antigos aparecem só como aviso.`);
+    if (!ok) return;
+    try { await historyImportApi(c.id, { days: 90, reconnect: true }); setQrChannel(c); load(); } catch (e) { alert(e?.response?.data?.error || e.message); }
+  };
 
   return (
     <div className="page ch2">
@@ -291,6 +298,7 @@ export default function ChannelsPage() {
                   ? <button className="ch2-btn danger" onClick={() => disconnect(c)}><Power size={14} /> Desconectar</button>
                   : <button className="ch2-btn ok" onClick={() => setQrChannel(c)}><QrCode size={14} /> Conectar</button>)}
                 {wa && c.provider !== "cloud" && <button className="ch2-icon" title="Reiniciar conexão" onClick={() => restart(c)}><RotateCw size={15} /></button>}
+                {wa && c.provider !== "cloud" && <HistoryButton channel={c} onImport={() => importHistory(c)} />}
                 <button className="ch2-btn ghost" onClick={() => setPermChannel(c)}>Permissões</button>
                 <span className="ch2-sp" />
                 <button className="ch2-icon del" title="Remover canal" onClick={() => handleDelete(c.id)}><Trash2 size={15} /></button>
@@ -324,4 +332,21 @@ export default function ChannelsPage() {
       )}
     </div>
   );
+}
+
+/** Botão "Importar histórico" com o andamento da importação. */
+function HistoryButton({ channel, onImport }) {
+  const [st, setSt] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => historyStatusApi(channel.id).then((r) => alive && setSt(r)).catch(() => {});
+    tick();
+    const t = setInterval(tick, 8000);
+    return () => { alive = false; clearInterval(t); };
+  }, [channel.id]);
+  const label = !st ? "Importar histórico" :
+    st.status === "pending" ? "Aguardando leitura do QR" :
+    st.status === "running" ? `Importando… ${st.imported || 0} msgs` :
+    st.status === "done" ? `Histórico: ${st.imported || 0} msgs` : "Importar histórico";
+  return <button className="ch2-btn ghost" title="Trazer as conversas dos últimos 90 dias" onClick={onImport}><History size={14} /> {label}</button>;
 }

@@ -149,6 +149,9 @@ export const updateChannelApi = (id, patch) => api.post(`/channels/${id}`, patch
 export const removeChannel = (id) => api.delete(`/channels/${id}`);
 export const getChannelStatusApi = (id) => api.get(`/channels/${id}/status`).then((r) => r.data);
 export const connectWhatsAppApi = (id) => api.post(`/channels/${id}/whatsapp/connect`).then((r) => r.data);
+export const historyImportApi = (id, body) => api.post(`/channels/${id}/whatsapp/history`, body).then((r) => r.data);
+export const historyStatusApi = (id) => api.get(`/channels/${id}/whatsapp/history`).then((r) => r.data);
+export const loadOlderFromWhatsApp = (id) => api.post(`/conversations/${id}/load-older`).then((r) => r.data);
 export const resetWhatsAppApi = (id) => api.post(`/channels/${id}/whatsapp/reset`).then((r) => r.data);
 export const requestPairingCodeApi = (id, phone) =>
   api.post(`/channels/${id}/whatsapp/pairing-code`, { phone }).then((r) => r.data);

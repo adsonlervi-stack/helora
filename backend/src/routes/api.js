@@ -157,7 +157,10 @@ import {
   sendWhatsAppPayload,
   downloadPendingMedia,
   getOnlineJids,
-  markWhatsAppRead
+  markWhatsAppRead,
+  requestHistoryImport,
+  getHistoryImport,
+  requestOlderMessages
 } from "../whatsapp/baileysClient.js";
 import { toJpeg, toWebp } from "../imageTools.js";
 import { uploadCrmFile, removeCrmFile } from "../storage.js";
@@ -633,6 +636,20 @@ router.post("/channels/:id/whatsapp/reset", requireOwner, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Importar histórico de conversas (últimos N dias) — vale na próxima leitura do QR Code.
+router.get("/channels/:id/whatsapp/history", async (req, res) => {
+  try { res.json((await getHistoryImport(req.accountId, req.params.id)) || null); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.post("/channels/:id/whatsapp/history", requireOwner, async (req, res) => {
+  if (!(await loadWhatsAppChannel(req, res))) return;
+  try {
+    const cfg = await requestHistoryImport(req.accountId, req.params.id, req.body?.days || 90);
+    // Para o WhatsApp mandar o histórico, o número precisa ser lido de novo (QR Code novo).
+    const status = req.body?.reconnect ? await resetWhatsAppChannel(req.params.id, req.accountId) : null;
+    res.json({ ...cfg, status });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Conecta digitando um código no celular, sem escanear QR.
@@ -1444,6 +1461,22 @@ router.post("/conversations/:id/send-media", upload.single("file"), async (req, 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Pede ao WhatsApp mensagens mais antigas desta conversa (até 50 por vez)
+router.post("/conversations/:id/load-older", async (req, res) => {
+  try {
+    const conversation = await getConversation(req.accountId, req.params.id);
+    if (!(await assertConversationAccess(req, res, conversation))) return;
+    if (conversation.platform !== "whatsapp") return res.status(400).json({ error: "Só funciona em conversas do WhatsApp." });
+    const channelId = conversation.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
+    const { data: oldest } = await whDb.from("messages").select("whatsapp_message_id, timestamp, direction")
+      .eq("account_id", req.accountId).eq("conversation_id", conversation.id).not("whatsapp_message_id", "is", null)
+      .order("timestamp", { ascending: true }).limit(1).maybeSingle();
+    if (oldest && Date.now() - new Date(oldest.timestamp).getTime() > 90 * 86400000) return res.json({ ok: false, reason: "limit", message: "Já está carregado até 90 dias atrás." });
+    await requestOlderMessages(channelId, conversation.externalId, oldest ? { whatsappMessageId: oldest.whatsapp_message_id, timestamp: oldest.timestamp, direction: oldest.direction } : null);
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 // Envio de nota de voz gravada no navegador (webm/opus -> ogg/opus)

@@ -302,6 +302,7 @@ export default function ConversationsPage({
         messages={messages}
         hasMore={hasMore}
         onLoadOlder={loadOlder}
+        onReloadMessages={() => selectedId && loadMessages(selectedId)}
         onSend={handleSend}
         onSendMedia={handleSendMedia}
         onSendAudio={handleSendAudio}

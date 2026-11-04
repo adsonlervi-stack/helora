@@ -3,8 +3,10 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
-  BufferJSON
+  BufferJSON,
+  Browsers
 } from "baileys";
+import { supabase } from "../config/db.js";
 import QRCode from "qrcode";
 import path from "path";
 import fs from "fs";
@@ -380,6 +382,117 @@ export async function requestWhatsAppPairingCode(channelId, accountId, phone) {
   throw new Error("O WhatsApp demorou para gerar o código. Tente de novo.");
 }
 
+// ---------------------------------------------------------------- Importar histórico
+// Ao ler o QR Code, o celular manda o histórico das conversas. Com a importação ligada para o canal,
+// o Helora guarda as mensagens dos últimos N dias (sem notificar, sem acionar bot/IA, sem contar como não lida).
+const histKey = (channelId) => `hist_import_${channelId}`;
+export async function getHistoryImport(accountId, channelId) {
+  const { data } = await supabase.from("account_integrations").select("config").eq("account_id", accountId).eq("provider", histKey(channelId)).maybeSingle();
+  return data?.config || null;
+}
+async function saveHistoryImport(accountId, channelId, cfg) {
+  await supabase.from("account_integrations").upsert(
+    { account_id: accountId, provider: histKey(channelId), config: cfg, status: "connected", updated_at: new Date().toISOString() },
+    { onConflict: "account_id,provider" }
+  );
+}
+export async function requestHistoryImport(accountId, channelId, days = 90) {
+  const cfg = { days: Math.min(365, Math.max(1, Number(days) || 90)), status: "pending", requestedAt: new Date().toISOString(), imported: 0, conversations: 0 };
+  await saveHistoryImport(accountId, channelId, cfg);
+  return cfg;
+}
+
+const HIST_TEXT = (inner) => {
+  const t = textOf(inner);
+  if (inner?.imageMessage) return inner.imageMessage.caption ? `📷 ${inner.imageMessage.caption}` : "📷 Foto (histórico)";
+  if (inner?.videoMessage) return inner.videoMessage.caption ? `🎥 ${inner.videoMessage.caption}` : "🎥 Vídeo (histórico)";
+  if (inner?.audioMessage) return "🎤 Áudio (histórico)";
+  if (inner?.documentMessage) return `📄 ${inner.documentMessage.fileName || "Documento"} (histórico)`;
+  return t;
+};
+
+/** Grava mensagens antigas vindas da sincronização do WhatsApp. */
+async function importHistoryMessages(sock, accountId, channelId, messages, { days = 90 } = {}) {
+  const since = Date.now() - days * 86400000;
+  const byJid = new Map();
+  for (const msg of messages || []) {
+    const jid = msg?.key?.remoteJid;
+    if (!jid || !msg.message || jid === "status@broadcast" || jid.endsWith("@newsletter") || jid.endsWith("@broadcast")) continue;
+    if (msg.message.protocolMessage || msg.message.reactionMessage) continue;
+    const ts = Number(msg.messageTimestamp?.low ?? msg.messageTimestamp ?? 0) * 1000;
+    if (!ts || ts < since) continue;
+    const inner = msg.message.ephemeralMessage?.message || msg.message.viewOnceMessage?.message || msg.message.viewOnceMessageV2?.message || msg.message;
+    const text = HIST_TEXT(inner);
+    if (!text) continue;
+    if (!byJid.has(jid)) byJid.set(jid, []);
+    byJid.get(jid).push({ msg, ts, text });
+  }
+  let imported = 0, convs = 0;
+  for (const [jid, list] of byJid) {
+    try {
+      const isGroup = jid.endsWith("@g.us");
+      const first = list[0].msg;
+      const pnJid = [first.key.remoteJidAlt, jid].find((j) => j && /@s\.whatsapp\.net$/.test(j)) || "";
+      const phone = pnJid.split("@")[0].split(":")[0];
+      const pushName = list.find((x) => !x.msg.key.fromMe && x.msg.pushName)?.msg.pushName;
+      const name = isGroup ? (await groupSubject(sock, jid).catch(() => null)) || jid : pushName || (/^\d{10,15}$/.test(phone) ? `+${phone}` : jid);
+      const conversation = await findOrCreateConversation({
+        accountId, platform: "whatsapp", externalId: jid,
+        altExternalIds: isGroup ? [] : [pnJid].filter((j) => j && j !== jid),
+        phone: !isGroup && /^\d{10,15}$/.test(phone) ? phone : null, name, channelId
+      });
+      if (isGroup) await markConversationAsGroup(conversation.id, name).catch(() => {});
+      const ids = list.map((x) => x.msg.key.id);
+      const { data: existing } = await supabase.from("messages").select("whatsapp_message_id").eq("account_id", accountId).in("whatsapp_message_id", ids);
+      const have = new Set((existing || []).map((r) => r.whatsapp_message_id));
+      const { count: before } = await supabase.from("messages").select("id", { count: "exact", head: true }).eq("conversation_id", conversation.id);
+      const rows = list.filter((x) => !have.has(x.msg.key.id)).sort((a, b) => a.ts - b.ts).map((x) => ({
+        account_id: accountId, conversation_id: conversation.id,
+        direction: x.msg.key.fromMe ? "out" : "in",
+        author: x.msg.key.fromMe ? "operator" : "user",
+        text: x.text,
+        whatsapp_message_id: x.msg.key.id,
+        sender_name: x.msg.key.fromMe ? "Histórico (celular)" : isGroup ? x.msg.pushName || null : null,
+        timestamp: new Date(x.ts).toISOString(),
+        status: x.msg.key.fromMe ? "read" : undefined,
+        extra: { history: true }
+      }));
+      for (let i = 0; i < rows.length; i += 200) {
+        let batch = rows.slice(i, i + 200);
+        let { error } = await supabase.from("messages").insert(batch);
+        if (error && /column .* does not exist|schema cache/i.test(error.message)) {
+          batch = batch.map(({ status, extra, ...r }) => r);
+          ({ error } = await supabase.from("messages").insert(batch));
+        }
+        if (error) throw error;
+      }
+      if (!rows.length) continue;
+      imported += rows.length; convs++;
+      const last = rows[rows.length - 1];
+      const { data: cur } = await supabase.from("conversations").select("last_message_at").eq("id", conversation.id).maybeSingle();
+      const patch = {};
+      if (!cur?.last_message_at || new Date(cur.last_message_at) < new Date(last.timestamp)) {
+        patch.last_message_at = last.timestamp;
+        patch.last_message_preview = String(last.text).slice(0, 120);
+      }
+      // Conversa criada só pelo histórico: entra encerrada, sem ir para a fila nem notificar ninguém
+      if (!before) Object.assign(patch, { status: "resolved", is_new: false, mode: "human", unread: 0 });
+      if (Object.keys(patch).length) await supabase.from("conversations").update(patch).eq("id", conversation.id);
+    } catch (err) {
+      console.warn(`[Histórico] ${jid}:`, err.message);
+    }
+  }
+  return { imported, conversations: convs };
+}
+
+/** Pede ao celular mais 50 mensagens antigas de uma conversa (chegam pelo evento de histórico). */
+export async function requestOlderMessages(channelId, jid, oldest) {
+  const sock = liveSock(channelId);
+  if (!oldest?.whatsappMessageId) throw new Error("Esta conversa ainda não tem mensagens do WhatsApp para servir de ponto de partida.");
+  const ts = Math.floor(new Date(oldest.timestamp).getTime() / 1000);
+  return sock.fetchMessageHistory(50, { remoteJid: jid, id: oldest.whatsappMessageId, fromMe: oldest.direction === "out" }, ts);
+}
+
 export async function startWhatsAppForChannel(channelId, accountId, { pairingPhone = null, retries = 0, everOpened = false } = {}) {
   // Nunca deixa duas conexões vivas pro mesmo número (isso derruba a sessão).
   const previous = connections.get(channelId);
@@ -399,13 +512,18 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
   const keysSet = state.keys.set.bind(state.keys);
   state.keys.set = async (data) => { await keysSet(data); backup(); };
   const { version } = await fetchLatestBaileysVersion();
+  const hist = await getHistoryImport(accountId, channelId).catch(() => null);
+  const wantsFull = hist?.status === "pending" && !state.creds.registered;
 
   const sock = makeWASocket({
     version,
     auth: state,
     logger: pino({ level: "silent" }),
     printQRInTerminal: false,
-    browser: ["Helora", "Chrome", "1.0.0"],
+    // Para receber o histórico completo, o WhatsApp exige que o aparelho se apresente como "computador"
+    browser: wantsFull ? Browsers.macOS("Desktop") : ["Helora", "Chrome", "1.0.0"],
+    syncFullHistory: wantsFull,
+    shouldSyncHistoryMessage: () => true,
     markOnlineOnConnect: false
   });
 
@@ -446,7 +564,23 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
   };
   sock.ev.on("contacts.upsert", saveContacts);
   sock.ev.on("contacts.update", (list) => saveContacts(list.filter((c) => c.name || c.notify)));
-  sock.ev.on("messaging-history.set", ({ contacts }) => saveContacts(contacts));
+  sock.ev.on("messaging-history.set", async ({ contacts, messages, syncType, isLatest, progress }) => {
+    saveContacts(contacts);
+    try {
+      const cfg = await getHistoryImport(accountId, channelId);
+      const onDemand = syncType === 6; // pedido "Carregar mensagens antigas" (ON_DEMAND)
+      if (!onDemand && !(cfg && (cfg.status === "pending" || cfg.status === "running"))) return;
+      const r = await importHistoryMessages(sock, accountId, channelId, messages, { days: cfg?.days || 90 });
+      if (cfg && !onDemand) {
+        const next = { ...cfg, status: isLatest || progress === 100 ? "done" : "running", imported: (cfg.imported || 0) + r.imported, conversations: (cfg.conversations || 0) + r.conversations, updatedAt: new Date().toISOString() };
+        if (next.status === "done") next.finishedAt = new Date().toISOString();
+        await saveHistoryImport(accountId, channelId, next);
+      }
+      if (r.imported) console.log(`[Histórico] ${channelId}: +${r.imported} mensagens em ${r.conversations} conversa(s)`);
+    } catch (err) {
+      console.warn("[Histórico] importação falhou:", err.message);
+    }
+  });
 
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
