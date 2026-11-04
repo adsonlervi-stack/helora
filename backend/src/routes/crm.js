@@ -573,6 +573,15 @@ export async function syncTaskToLead(accountId, task, done, byName) {
   }
 }
 
+/** Anotação feita no card do CRM → vira comentário nas tarefas abertas desse card (aba Tarefas). */
+async function noteToTasks(accountId, leadId, text, byName, byId) {
+  const { data: lead } = await supabase.from("crm_leads").select("name").eq("id", leadId).maybeSingle();
+  let { data: tasks, error } = await supabase.from("tasks").select("id, done_at, description, lead_id").eq("account_id", accountId).is("done_at", null).or(`lead_id.eq.${leadId}${lead?.name ? `,description.ilike.%Lead do CRM: ${lead.name.replace(/[,%()]/g, " ")}%` : ""}`).limit(20);
+  if (error) ({ data: tasks } = await supabase.from("tasks").select("id, done_at, description").eq("account_id", accountId).is("done_at", null).ilike("description", `%Lead do CRM: ${String(lead?.name || "").replace(/[%]/g, "")}%`).limit(20));
+  const { pushTaskItem } = await import("../config/db.js");
+  for (const t of tasks || []) await pushTaskItem(accountId, t.id, "comments", { text: `📝 Pelo CRM: ${text}`, by: byName || null, byId: byId || null, fromCrm: true }).catch(() => {});
+}
+
 async function pushHistory(leadId, entries) {
   if (!entries.length) return;
   try {
@@ -757,6 +766,7 @@ router.post("/leads/:id/notes", async (req, res) => {
     const { data: lead } = await supabase.from("crm_leads").select("id").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
     if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
     await pushHistory(lead.id, [{ type: "note", text, by: req.userName || null, byId: req.userId }]);
+    if (!/^📌 Tarefa criada:/.test(text)) noteToTasks(req.accountId, lead.id, text, req.userName, req.userId).catch(() => {});
     const { data, error } = await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", lead.id).select(LEAD_SELECT).single();
     if (error) throw error;
     if (!data.history) return res.status(500).json({ error: "Rode a migration 035 no Supabase." });
