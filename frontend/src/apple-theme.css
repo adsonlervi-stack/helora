@@ -2974,3 +2974,6 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
   .bg-search.sm { width: 140px; }
   .bg-legend { min-width: 150px; top: auto; bottom: 40px; }
 }
+.cv-muted-ico { color: #8e8e93; flex: none; margin-left: 4px; }
+.cv-unread.muted { background: #c7c7cc !important; }
+.cv-icon-btn.on { color: #ff9500; }

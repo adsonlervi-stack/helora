@@ -57,6 +57,11 @@ export async function pushIncoming(accountId, conversationId, preview) {
       }
       users = ids;
     }
+    if (users.length) {
+      const { data: m } = await supabase.from("account_integrations").select("provider, config").eq("account_id", accountId).in("provider", users.map((u) => `muted_${u}`));
+      const muted = new Set((m || []).filter((r) => (r.config?.ids || []).includes(conversationId)).map((r) => r.provider.slice(6)));
+      users = users.filter((u) => !muted.has(u));
+    }
     await pushToUsers(users, { title: conv.name || "Nova mensagem", body: preview || "Nova mensagem", url: `/?c=${conversationId}`, tag: conversationId });
   } catch (err) {
     console.warn("[Push] incoming:", err.message);

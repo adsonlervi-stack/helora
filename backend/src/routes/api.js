@@ -1615,6 +1615,21 @@ router.post("/scheduled-messages/:id/attachment", upload.single("file"), async (
 
 // ---------- Tarefas ----------
 // Colunas extras do quadro de tarefas (por empresa)
+// Conversas/grupos silenciados pelo usuário (sem som, notificação nem push).
+router.get("/muted", async (req, res) => {
+  try { const { getIntegration } = await import("../integrations/store.js"); res.json((await getIntegration(req.accountId, `muted_${req.userId}`))?.config?.ids || []); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.put("/muted/:conversationId", async (req, res) => {
+  try {
+    const { getIntegration, saveIntegration } = await import("../integrations/store.js");
+    const key = `muted_${req.userId}`;
+    const ids = new Set((await getIntegration(req.accountId, key))?.config?.ids || []);
+    if (req.body?.muted) ids.add(req.params.conversationId); else ids.delete(req.params.conversationId);
+    await saveIntegration(req.accountId, key, { ids: [...ids].slice(-2000) });
+    res.json([...ids]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 router.get("/task-columns", async (req, res) => {
   try { const { getIntegration } = await import("../integrations/store.js"); res.json((await getIntegration(req.accountId, "task_columns"))?.config?.columns || []); }
   catch (err) { res.status(500).json({ error: err.message }); }

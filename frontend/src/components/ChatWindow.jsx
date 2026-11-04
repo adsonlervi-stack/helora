@@ -4,8 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, PanelRight, Paperclip, Mic, Square, Hand, Undo2, Send, PenLine, ArrowRightLeft, MailOpen, CheckCircle2,
   RotateCcw, Users, Check, CheckCheck, Clock, AlertCircle, Forward, Reply, Copy, Trash2, Ban, UserRound, MapPin, X,
-  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles, Bot, Headset, Plus, FileDown
+  LocateFixed, FileText, WifiOff, CalendarClock, Sticker, Upload, Smile, Trash, Sparkles, Bot, Headset, Plus, FileDown, Bell, BellOff
 } from "lucide-react";
+import { useMuted, setMuted } from "../muted.js";
 import ExportConversationModal from "./ExportConversationModal.jsx";
 import QuickReplies from "./QuickReplies.jsx";
 import Avatar from "./Avatar.jsx";
@@ -567,6 +568,7 @@ export default function ChatWindow({
   onBack,
   className = ""
 }) {
+  const isMuted = useMuted();
   const [text, setText] = useState(() => DRAFTS.get(conversation?.id) || "");
   // Rascunho por conversa: o que foi digitado fica na conversa certa ao trocar
   const draftConvRef = useRef(conversation?.id);
@@ -918,6 +920,9 @@ export default function ChatWindow({
           )}
           <button className="cv-icon-btn" onClick={() => setShowExport(true)} title="Exportar conversa (relatório para uso jurídico)">
             <FileDown size={15} />
+          </button>
+          <button className={`cv-icon-btn ${isMuted(conversation.id) ? "on" : ""}`} onClick={() => setMuted(conversation.id, !isMuted(conversation.id)).catch(() => {})} title={isMuted(conversation.id) ? `Reativar avisos ${conversation.isGroup ? "do grupo" : "da conversa"}` : `Silenciar ${conversation.isGroup ? "grupo" : "conversa"} (sem som e sem notificação)`}>
+            {isMuted(conversation.id) ? <BellOff size={15} /> : <Bell size={15} />}
           </button>
           <button className="cv-icon-btn" onClick={onMarkUnread} title="Marcar como não lida">
             <MailOpen size={15} />

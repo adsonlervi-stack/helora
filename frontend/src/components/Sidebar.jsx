@@ -1,6 +1,7 @@
 import { newTabHandlers } from "../newTab.js";
 import React, { useEffect, useMemo, useState } from "react";
-import { Search, SquarePen, SlidersHorizontal, X, MessageCircle, Hourglass, Users, CheckCircle2 } from "lucide-react";
+import { Search, SquarePen, SlidersHorizontal, X, MessageCircle, Hourglass, Users, CheckCircle2, BellOff } from "lucide-react";
+import { useMuted } from "../muted.js";
 import { getLabels, getDepartments } from "../api.js";
 import { priorityMeta } from "./PrioritySelector.jsx";
 import Avatar from "./Avatar.jsx";
@@ -52,6 +53,7 @@ function inQueue(c, q, userId, viewAll) {
 }
 
 export default function Sidebar({ conversations, selectedId, onSelect, onNewConversation, currentUserId, canSeeAll = false, className = "" }) {
+  const isMuted = useMuted();
   const [search, setSearch] = useState("");
   const [queue, setQueue] = useState("pending");
   const [viewAll, setViewAll] = useState(() => {
@@ -219,7 +221,8 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
                   <span className="cv-preview">
                     {(c.lastMessagePreview || "").replace(/^\*([^*\n]{1,60}):\*\s*/, "$1: ").replace(/\*([^*\n]+)\*/g, "$1") || (c.mode === "bot" ? "Bot em atendimento" : "Atendimento humano")}
                   </span>
-                  {c.unread > 0 && <span className="cv-unread">{c.unread}</span>}
+                  {isMuted(c.id) && <BellOff size={13} className="cv-muted-ico" aria-label="Silenciada" />}
+                  {c.unread > 0 && <span className={`cv-unread ${isMuted(c.id) ? "muted" : ""}`}>{c.unread}</span>}
                 </div>
                 <div className="cv-tags">
                   {pMeta && (
