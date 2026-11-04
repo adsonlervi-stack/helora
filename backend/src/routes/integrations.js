@@ -206,6 +206,13 @@ router.get("/brain/graph", async (req, res) => {
       links.push({ s: c.id, t: c.doc_id, k: "doc" });
       for (const w of words.slice(0, 5)) { if (!byWord.has(w)) byWord.set(w, []); byWord.get(w).push(c.id); }
     }
+    // Temas: palavras que se repetem viram nós (como as tags do Obsidian), ligando trechos parecidos.
+    const minShare = chunks.length < 40 ? 1 : 2;
+    const temas = [...byWord.entries()].filter(([, l]) => l.length >= minShare && l.length <= 40).sort((a, b) => b[1].length - a[1].length).slice(0, chunks.length < 40 ? 40 : 80);
+    for (const [w, list] of temas) {
+      nodes.push({ id: `t_${w}`, type: "tema", source: "tema", label: w });
+      for (const cid of list) links.push({ s: cid, t: `t_${w}`, k: "tema" });
+    }
     const pair = new Map();
     for (const list of byWord.values()) {
       if (list.length < 2 || list.length > 40) continue;

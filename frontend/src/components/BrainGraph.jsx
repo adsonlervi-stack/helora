@@ -15,7 +15,8 @@ export const CATS = {
   google_drive: ["Google Drive", "#64748b"],
   email: ["E-mails", "#ff3b30"],
   formulario: ["Formulários", "#af52de"],
-  conversas: ["Aprendido das conversas", "#ff2d55"]
+  conversas: ["Aprendido das conversas", "#ff2d55"],
+  tema: ["Temas", "#a1a1aa"]
 };
 const cat = (s) => CATS[s] || [s, "#8e8e93"];
 
@@ -166,6 +167,16 @@ function Canvas({ data, off, q, physics, hoverId, onOpenDoc }) {
         }
       }
 
+      // Enquadra sozinho até o usuário mexer no zoom/arrastar
+      if (!s.touched && vis.length) {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const n of vis) { x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y); }
+        const bw = Math.max(80, x1 - x0), bh = Math.max(80, y1 - y0);
+        const kk = Math.min(3, Math.max(0.35, Math.min((w - 260) / bw, (h - 80) / bh) * 0.85));
+        s.view.k += (kk - s.view.k) * 0.08;
+        s.view.x += (-((x0 + x1) / 2) * s.view.k - 60 - s.view.x) * 0.08;
+        s.view.y += (-((y0 + y1) / 2) * s.view.k - s.view.y) * 0.08;
+      }
       // Desenho
       const { x: vx, y: vy, k } = s.view;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -183,7 +194,7 @@ function Canvas({ data, off, q, physics, hoverId, onOpenDoc }) {
       }
       for (const n of vis) {
         const color = cat(n.source)[1];
-        const r = n.type === "doc" ? 4.5 + Math.min(6, Math.sqrt(n.deg)) : 2.4 + Math.min(2.5, n.deg * 0.25);
+        const r = n.type === "doc" ? 5.5 + Math.min(7, Math.sqrt(n.deg)) : n.type === "tema" ? 2 + Math.min(4, n.deg * 0.6) : 3 + Math.min(2.5, n.deg * 0.25);
         const match = ql && (n.label || "").toLowerCase().includes(ql);
         const dim = (ql && !match) || (focus && n.id !== focus && !near.has(n.id));
         ctx.globalAlpha = dim ? 0.18 : 1;
@@ -192,7 +203,7 @@ function Canvas({ data, off, q, physics, hoverId, onOpenDoc }) {
         if (n.type === "doc" || match || n.id === focus) {
           ctx.lineWidth = 1.2 / k; ctx.strokeStyle = "#fff"; ctx.stroke();
         }
-        if ((n.type === "doc" && k > 1.3) || n.id === focus || match) {
+        if ((n.type === "doc" && (k > 1.3 || vis.length < 60)) || (n.type === "tema" && k > 1.8) || n.id === focus || match) {
           ctx.globalAlpha = dim ? 0.25 : 0.9;
           ctx.fillStyle = "#1d1d1f";
           ctx.font = `${11 / k}px -apple-system, BlinkMacSystemFont, Inter, sans-serif`;
@@ -224,7 +235,7 @@ function Canvas({ data, off, q, physics, hoverId, onOpenDoc }) {
     const s = st.current; if (!s) return;
     const n = hit(toWorld(e));
     if (n) { s.drag = { node: n, moved: false }; s.alpha = Math.max(s.alpha, 0.4); }
-    else s.pan = { x: e.clientX - s.view.x, y: e.clientY - s.view.y };
+    else { s.touched = true; s.pan = { x: e.clientX - s.view.x, y: e.clientY - s.view.y }; }
   };
   const move = (e) => {
     const s = st.current; if (!s) return;
@@ -237,12 +248,13 @@ function Canvas({ data, off, q, physics, hoverId, onOpenDoc }) {
   };
   const up = () => {
     const s = st.current; if (!s) return;
-    if (s.drag && !s.drag.moved) { const n = s.drag.node; onOpenDoc?.(n.type === "doc" ? n.id : n.docId); }
+    if (s.drag && !s.drag.moved) { const n = s.drag.node; if (n.type !== "tema") onOpenDoc?.(n.type === "doc" ? n.id : n.docId); }
     s.drag = null; s.pan = null;
   };
   const wheel = (e) => {
     const s = st.current; if (!s) return;
     e.preventDefault();
+    s.touched = true;
     const f = Math.exp(-e.deltaY * 0.0015);
     const k = Math.min(4, Math.max(0.3, s.view.k * f));
     const r = ref.current.getBoundingClientRect();
@@ -256,7 +268,7 @@ function Canvas({ data, off, q, physics, hoverId, onOpenDoc }) {
     cv.addEventListener("wheel", wheel, { passive: false });
     return () => cv.removeEventListener("wheel", wheel);
   });
-  const reset = () => { const s = st.current; if (s) { s.view = { x: 0, y: 0, k: 1 }; s.alpha = 1; } };
+  const reset = () => { const s = st.current; if (s) { s.touched = false; s.alpha = 1; } };
 
   return (
     <div className="bg-canvas-wrap">
@@ -265,7 +277,7 @@ function Canvas({ data, off, q, physics, hoverId, onOpenDoc }) {
       {tip && (
         <div className="bg-tip" style={{ left: tip.x + 14, top: tip.y + 10 }}>
           <i style={{ background: cat(tip.n.source)[1] }} />
-          <strong>{tip.n.type === "doc" ? tip.n.label : cat(tip.n.source)[0]}</strong>
+          <strong>{tip.n.type === "doc" ? tip.n.label : tip.n.type === "tema" ? `Tema: ${tip.n.label}` : cat(tip.n.source)[0]}</strong>
           {tip.n.type === "chunk" && <span>{tip.n.excerpt}…</span>}
           {tip.n.type === "doc" && <span>{cat(tip.n.source)[0]}{tip.n.chars ? ` · ${(tip.n.chars / 1000).toFixed(1)} mil caracteres` : ""}</span>}
         </div>
