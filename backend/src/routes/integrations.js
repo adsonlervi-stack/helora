@@ -169,6 +169,13 @@ router.get("/brain/docs", async (req, res) => {
     res.json((data || []).map(docOut));
   } catch (err) { fail(res, err); }
 });
+// Uso da Helora IA no mês (plano, limite, usados)
+router.get("/ai-usage", async (req, res) => {
+  try { const { aiUsage } = await import("../aiQuota.js"); res.json(await aiUsage(req.accountId)); } catch (err) { fail(res, err); }
+});
+router.get("/ai-usage/list", async (req, res) => {
+  try { const { listAtendimentos } = await import("../aiQuota.js"); res.json(await listAtendimentos(req.accountId, /^\d{6}$/.test(req.query.month || "") ? req.query.month : undefined)); } catch (err) { fail(res, err); }
+});
 // Mapa do cérebro: documentos + trechos ligados por assuntos em comum (para o grafo da aba Cérebro).
 const GRAPH_STOP = new Set("para pela pelo pelos pelas com sem que qual quais como quando onde porque mais menos muito pouco sobre entre ainda sempre também tambem isso esse essa este esta estes estas esses essas aquele aquela cada todo toda todos todas outro outra outros outras mesmo mesma depois antes então entao assim apenas pode podem deve devem será sera serão são foram está estao estão tinha tenho temos fazer feito valor dados cliente clientes empresa nosso nossa seus suas dele dela eles elas você voce vocês voces aqui onde https http www com br".split(" "));
 const graphWords = (t) => {
@@ -351,13 +358,20 @@ router.post("/studio/chat", async (req, res) => {
     const messages = (req.body?.messages || []).slice(-40);
     const lastQ = String([...messages].reverse().find((m) => m.role === "user")?.content || "");
     const needsWeb = /\b(hoje|agora|atual|atualmente|noticia|notícia|noticias|notícias|ultim[oa]s?|últim[oa]s?|recente|cota[cç][aã]o|d[oó]lar|clima|previs[aã]o|resultado|placar|jogo|elei[cç]|quem (é|e|ganhou)|pesquis[ae] na (web|internet)|g1|google|site)\b|20[2-3]\d/i.test(lastQ);
-    const { reply, provider, sources } = await studioChat(req.accountId, messages, { web: !!req.body?.web || (needsWeb && !!process.env.TAVILY_API_KEY), deep: !!req.body?.deep });
+    const { getAIPlan } = await import("../aiQuota.js");
+    const plan = await getAIPlan(req.accountId).catch(() => ({ web: true }));
+    const { reply, provider, sources } = await studioChat(req.accountId, messages, { web: plan.web !== false && (!!req.body?.web || (needsWeb && !!process.env.TAVILY_API_KEY)), deep: !!req.body?.deep });
     const all = [...messages, { role: "assistant", content: reply, sources: sources?.length ? sources : undefined, at: new Date().toISOString() }];
     const chatId = await saveChat(req, req.body?.chatId, all).catch(() => req.body?.chatId || null);
     res.json({ reply, provider, chatId, sources });
   } catch (err) { fail(res, err); }
 });
 router.post("/studio/image", async (req, res) => {
+  try {
+    const { getAIPlan } = await import("../aiQuota.js");
+    const plan = await getAIPlan(req.accountId);
+    if (plan.images === false) return res.status(403).json({ error: "Gerar imagens está disponível no plano Avançado da Helora IA. Fale com a gente para mudar de plano." });
+  } catch { /* sem plano: segue */ }
   try {
     const { url } = await studioImage(req.accountId, req.body?.prompt, req.body?.size);
     res.json({ url });

@@ -9,7 +9,7 @@ export async function integrationsOf(accountId) {
   if (!accountId) return {};
   const hit = cache.get(accountId);
   if (hit && Date.now() - hit.at < TTL) return hit.map;
-  const { data, error } = await supabase.from("account_integrations").select("provider, config, status, connected_at, updated_at").eq("account_id", accountId);
+  const { data, error } = await supabase.from("account_integrations").select("provider, config, status, connected_at, updated_at").eq("account_id", accountId).not("provider", "like", "ai_at_%");
   const map = {};
   if (!error) for (const r of data || []) map[r.provider] = r;
   cache.set(accountId, { at: Date.now(), map });

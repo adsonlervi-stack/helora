@@ -124,7 +124,12 @@ export async function handleIncoming(accountId, conversation, rawText, send) {
 
   // ---------- Atendente IA no canal: responde tudo com o que a empresa alimentou ----------
   const attendantId = await channelAttendant(conversation.channelId).catch(() => null);
+  let quotaOk = true;
   if (attendantId) {
+    const { claimAtendimento } = await import("../aiQuota.js");
+    quotaOk = (await claimAtendimento(accountId, conversation).catch(() => ({ ok: true }))).ok;
+  }
+  if (attendantId && quotaOk) {
     try {
       const reply = await runChannelAttendant({ accountId, conversation, promptId: attendantId });
       if (reply && send) { await send(reply); return null; }

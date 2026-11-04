@@ -29,7 +29,8 @@ import {
   getAdminCredits,
   getAdminCreditLedger,
   setAdminMonthlyCredits,
-  addAdminCredits
+  addAdminCredits,
+  getAccountAIPlanAdmin, setAccountAIPlanAdmin
 } from "../api.js";
 
 export const brl = (v) =>
@@ -181,6 +182,8 @@ export function CommercialEditor({ account, onClose, onSaved }) {
           ))}
         </div>
       </Group>
+
+      <AIPlanGroup accountId={account.id} />
 
       <Group title="Contrato" hint="O gestor aceita no primeiro acesso; a cópia vai por e-mail.">
         <Row label="Situação"><span style={{ color: account.contract_accepted_at ? "#248a3d" : "#c93400", fontWeight: 600, fontSize: 15 }}>
@@ -714,5 +717,37 @@ function BillingAutomationCard({ onMsg }) {
         <button className="pill-btn" disabled={!to} onClick={test}>Enviar e-mail de teste</button>
       </div>
     </div>
+  );
+}
+
+/** Plano da Helora IA da empresa: limite mensal de atendimentos e uso atual. */
+function AIPlanGroup({ accountId }) {
+  const [u, setU] = useState(null);
+  const [f, setF] = useState({ plan: "", limit: "", extra: 0 });
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    getAccountAIPlanAdmin(accountId).then((r) => { setU(r); setF({ plan: r.plan || "", limit: r.plan === "personalizado" ? r.limit || "" : "", extra: 0 }); }).catch(() => setU({}));
+  }, [accountId]);
+  const save = async () => {
+    setBusy(true);
+    try { const r = await setAccountAIPlanAdmin(accountId, f); setU(r); } catch (e) { alert(e?.response?.data?.error || e.message); }
+    setBusy(false);
+  };
+  if (!u) return null;
+  return (
+    <Group title="Helora IA" hint="1 atendimento = 1 conversa respondida pela IA no mês. Ao atingir o limite, conversas novas vão para o fluxo e a equipe; o gestor é avisado em 80% e 100%.">
+      <Row label="Plano da IA">
+        <select value={f.plan} onChange={(e) => setF({ ...f, plan: e.target.value })}>
+          <option value="">Sem limite</option>
+          <option value="essencial">Essencial · 500/mês</option>
+          <option value="profissional">Profissional · 1.000/mês (web)</option>
+          <option value="avancado">Avançado · 3.000/mês (web e imagens)</option>
+          <option value="personalizado">Personalizado</option>
+        </select>
+      </Row>
+      {f.plan === "personalizado" && <Row label="Limite por mês"><input type="number" min="1" value={f.limit} onChange={(e) => setF({ ...f, limit: e.target.value })} placeholder="Vazio = sem limite" /></Row>}
+      <Row label="Uso do mês"><span style={{ fontSize: 15, color: u.reached ? "#c93400" : "#1d1d1f" }}>{u.used ?? 0}{u.limit != null ? ` de ${u.limit}` : ""}{u.reached ? " · limite atingido" : ""}</span></Row>
+      <Row label=""><Button disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar plano da IA"}</Button></Row>
+    </Group>
   );
 }

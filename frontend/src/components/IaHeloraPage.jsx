@@ -27,11 +27,42 @@ export default function IaHeloraPage({ isManager, onGo }) {
           ))}
         </div>
       </div>
+      <UsageBar />
       {noAI && (
         <div className="ih-warn">A Helora IA não está ativa no plano da sua empresa. Fale com o suporte para contratar.</div>
       )}
       {tab === "criar" && <Studio canva={!!status?.integrations?.canva?.connected} isManager={isManager} status={status} />}
       {tab === "cerebro" && <BrainTab isManager={isManager} />}
+    </div>
+  );
+}
+
+/** Uso do mês: atendimentos da IA x limite do plano. */
+function UsageBar() {
+  const [u, setU] = useState(null);
+  const [list, setList] = useState(null);
+  useEffect(() => { integrations.aiUsage().then(setU).catch(() => {}); }, []);
+  if (!u || !u.plan) return null;
+  const tone = u.reached ? "bad" : u.percent >= 80 ? "warn" : "ok";
+  return (
+    <div className={`ih-usage ${tone}`}>
+      <div className="ih-usage-t">
+        <strong>Plano {u.planName}</strong>
+        <span>{u.limit == null ? `${u.used} atendimento(s) da IA neste mês` : `${u.used.toLocaleString("pt-BR")} de ${u.limit.toLocaleString("pt-BR")} atendimentos usados neste mês`}</span>
+        <button className="pill-btn" onClick={async () => { try { setList(await integrations.aiUsageList()); } catch (e) { notify(errText(e), "error"); } }}>Ver conversas</button>
+      </div>
+      {u.limit != null && <div className="ih-usage-bar"><i style={{ width: `${u.percent}%` }} /></div>}
+      {u.reached
+        ? <div className="ih-usage-msg">Limite atingido. Conversas novas vão para o fluxo e para a equipe até {u.resetsOn}. As conversas que já estavam com a IA continuam normalmente.</div>
+        : u.limit != null && <small>Restam {u.remaining.toLocaleString("pt-BR")}. O contador zera em {u.resetsOn}. Cada conversa conta uma vez por mês, não importa quantas mensagens.</small>}
+      {list && (
+        <Sheet title="Atendimentos da IA neste mês" subtitle={`${list.length} conversa(s) contada(s)`} onClose={() => setList(null)} width={560}>
+          <div className="ih-usage-list">
+            {list.map((r, i) => <div key={r.conversationId}><span>{list.length - i}</span><strong>{r.name || "Cliente"}</strong><small>{new Date(r.at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</small></div>)}
+            {!list.length && <div className="ap-empty">Nenhum atendimento da IA neste mês ainda.</div>}
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }

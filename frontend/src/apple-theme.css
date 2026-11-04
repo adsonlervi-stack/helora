@@ -2977,3 +2977,17 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .cv-muted-ico { color: #8e8e93; flex: none; margin-left: 4px; }
 .cv-unread.muted { background: #c7c7cc !important; }
 .cv-icon-btn.on { color: #ff9500; }
+/* ===== Uso da Helora IA ===== */
+.ih-usage { margin: 0 0 14px; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,.8); border: 1px solid rgba(0,0,0,.06); display: grid; gap: 8px; }
+.ih-usage-t { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ih-usage-t strong { font-size: 14px; }
+.ih-usage-t span { font-size: 14px; color: #3a3a3c; margin-right: auto; }
+.ih-usage small { color: #86868b; font-size: 12.5px; }
+.ih-usage-bar { height: 8px; border-radius: 99px; background: rgba(0,0,0,.06); overflow: hidden; }
+.ih-usage-bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #0071e3, #5ac8fa); transition: width .4s; }
+.ih-usage.warn .ih-usage-bar i { background: linear-gradient(90deg, #ff9500, #ffcc00); }
+.ih-usage.bad .ih-usage-bar i { background: #ff3b30; }
+.ih-usage-msg { font-size: 13px; color: #c93400; background: rgba(255,59,48,.08); padding: 8px 10px; border-radius: 10px; }
+.ih-usage-list > div { display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; padding: 9px 4px; border-bottom: 1px solid rgba(0,0,0,.05); font-size: 14px; align-items: center; }
+.ih-usage-list span { color: #86868b; font-size: 12px; }
+.ih-usage-list small { color: #86868b; }

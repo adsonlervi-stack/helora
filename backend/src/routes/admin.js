@@ -83,6 +83,17 @@ router.post("/invoices/:id/paid", async (req, res) => {
   await markInvoicePaid(req.params.id, { method: req.body?.method || "manual" });
   res.sendStatus(204);
 });
+// Plano da Helora IA da empresa (limite mensal de atendimentos)
+router.get("/accounts/:id/ai-plan", async (req, res) => {
+  try { const { aiUsage } = await import("../aiQuota.js"); res.json(await aiUsage(req.params.id)); } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.put("/accounts/:id/ai-plan", async (req, res) => {
+  try {
+    const { setAIPlan, aiUsage } = await import("../aiQuota.js");
+    await setAIPlan(req.params.id, req.body || {});
+    res.json(await aiUsage(req.params.id));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 router.post("/email/test", async (req, res) => {
   try {
     const ok = await sendMail({

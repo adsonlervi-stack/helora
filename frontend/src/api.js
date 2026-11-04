@@ -361,6 +361,8 @@ export const acceptLegalApi = (contract) => api.post("/legal/accept", { contract
 export const getPlansAdmin = () => api.get("/admin/plans").then((r) => r.data);
 export const savePlanAdmin = (id, data) => (id ? api.patch(`/admin/plans/${id}`, data) : api.post("/admin/plans", data)).then((r) => r.data);
 export const deletePlanAdmin = (id) => api.delete(`/admin/plans/${id}`);
+export const getAccountAIPlanAdmin = (id) => api.get(`/admin/accounts/${id}/ai-plan`).then((r) => r.data);
+export const setAccountAIPlanAdmin = (id, body) => api.put(`/admin/accounts/${id}/ai-plan`, body).then((r) => r.data);
 export const setAccountPlanAdmin = (accountId, planId) => api.post(`/admin/accounts/${accountId}/plan`, { planId });
 
 // ---- V6: abas liberadas ----
@@ -458,6 +460,8 @@ export const integrations = {
   canvaDesigns: (q) => api.get("/integrations/canva/designs", { params: { q } }).then((r) => r.data),
   canvaExport: (id, format) => api.post(`/integrations/canva/designs/${id}/export`, { format }, { timeout: 0 }).then((r) => r.data),
   brainDocs: (agent) => api.get("/integrations/brain/docs", { params: agent ? { agent } : {} }).then((r) => r.data),
+  aiUsage: () => api.get("/integrations/ai-usage").then((r) => r.data),
+  aiUsageList: () => api.get("/integrations/ai-usage/list").then((r) => r.data),
   brainGraph: () => api.get("/integrations/brain/graph").then((r) => r.data),
   brainDoc: (id) => api.get(`/integrations/brain/docs/${id}`).then((r) => r.data),
   brainAdd: (d) => api.post("/integrations/brain/docs", d, { timeout: 120000 }).then((r) => r.data),
