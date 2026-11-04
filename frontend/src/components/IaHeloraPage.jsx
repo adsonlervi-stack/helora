@@ -6,6 +6,7 @@ import {
 import { integrations, aiPrompts, getDepartments } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import { askConfirm, notify } from "../dialogs.js";
+import BrainGraph from "./BrainGraph.jsx";
 
 const errText = (e) => e?.response?.data?.error || e?.message || "Erro";
 const copy = (t) => { navigator.clipboard?.writeText(t); notify("Copiado.", "success"); };
@@ -320,7 +321,7 @@ const SRC = {
 };
 
 /** Lista + adicionar conhecimento. agentId: só deste atendente (senão, da empresa toda). */
-function Knowledge({ agentId = null, isManager }) {
+function Knowledge({ agentId = null, isManager, onChange }) {
   const [docs, setDocs] = useState(null);
   const [mode, setMode] = useState(null);
   const [f, setF] = useState({ title: "", content: "", url: "" });
@@ -328,8 +329,8 @@ function Knowledge({ agentId = null, isManager }) {
   const [view, setView] = useState(null);
   const [filter, setFilter] = useState("");
   const fileRef = useRef(null);
-  const load = () => integrations.brainDocs(agentId).then(setDocs).catch((e) => { notify(errText(e), "error"); setDocs([]); });
-  useEffect(() => { load(); }, [agentId]);
+  const load = (changed) => { if (changed !== false && docs) onChange?.(); return integrations.brainDocs(agentId).then(setDocs).catch((e) => { notify(errText(e), "error"); setDocs([]); }); };
+  useEffect(() => { load(false); }, [agentId]);
   const agentIds = agentId ? [agentId] : undefined;
   const add = async () => {
     setBusy(true);
@@ -442,6 +443,8 @@ function SourceCards({ list }) {
 
 function BrainTab({ isManager }) {
   const [deep, setDeep] = useState(false);
+  const [view, setView] = useState(null);
+  const [graphKey, setGraphKey] = useState(0);
   const [q, setQ] = useState("");
   const [ans, setAns] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -453,6 +456,7 @@ function BrainTab({ isManager }) {
   };
   return (
     <div className="ih-brain">
+      <div className="ih-card ih-graph-card"><BrainGraph key={graphKey} onOpenDoc={async (id) => { try { setView(await integrations.brainDoc(id)); } catch (e) { notify(errText(e), "error"); } }} /></div>
       <LearnCard isManager={isManager} />
       <div className="ih-card ih-ask">
         <h3><Brain size={18} /> Pergunte ao cérebro</h3>
@@ -467,8 +471,13 @@ function BrainTab({ isManager }) {
       </div>
       <div className="ih-card">
         <div className="ih-card-head"><div><h3>Conhecimento da empresa</h3><p>Vale para a Helora IA e todos os atendentes.</p></div></div>
-        <Knowledge isManager={isManager} />
+        <Knowledge isManager={isManager} onChange={() => setGraphKey((k) => k + 1)} />
       </div>
+      {view && (
+        <Sheet title={view.title} subtitle={view.url || ""} onClose={() => setView(null)} width={700}>
+          <pre className="ih-view">{view.content}</pre>
+        </Sheet>
+      )}
     </div>
   );
 }

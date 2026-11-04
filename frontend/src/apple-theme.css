@@ -2928,3 +2928,49 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .tb-col:hover .tb-col-tools { opacity: 1; }
 .tb-col-tools button { border: 0; background: transparent; color: #8e8e93; cursor: pointer; padding: 3px; border-radius: 6px; display: inline-flex; }
 .tb-col-tools button:hover { background: rgba(0,0,0,.06); color: #1d1d1f; }
+
+/* ===== Cérebro em grafo ===== */
+.ih-graph-card { padding: 0 !important; overflow: hidden; }
+.bg-wrap { display: grid; grid-template-columns: 280px minmax(0, 1fr); height: 560px; }
+.bg-vault { border-right: 1px solid rgba(0,0,0,.06); display: flex; flex-direction: column; min-height: 0; background: rgba(245,245,247,.6); }
+.bg-vault-h { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 8px; font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: #6e6e73; }
+.bg-search { display: flex; align-items: center; gap: 6px; margin: 0 12px 8px; padding: 7px 10px; border-radius: 10px; background: #fff; border: 1px solid rgba(0,0,0,.08); color: #86868b; }
+.bg-search input { border: 0; outline: 0; background: transparent; font-size: 13px; width: 100%; color: #1d1d1f; }
+.bg-search.sm { margin: 0; width: 220px; }
+.bg-tree { overflow-y: auto; padding: 0 6px 12px; flex: 1; min-height: 0; }
+.bg-folder, .bg-file { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; border-radius: 8px; color: #1d1d1f; }
+.bg-folder { padding: 7px 8px; font-size: 13px; font-weight: 600; }
+.bg-folder i, .bg-legend i, .bg-tip i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.bg-folder small { margin-left: auto; color: #86868b; font-weight: 500; }
+.bg-file { padding: 5px 8px 5px 30px; font-size: 12.5px; color: #3a3a3c; }
+.bg-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-file svg { flex: none; color: #86868b; }
+.bg-folder:hover, .bg-file:hover, .bg-file.on { background: rgba(0,113,227,.08); }
+.bg-empty { padding: 16px; font-size: 13px; color: #86868b; line-height: 1.5; }
+.bg-graph { position: relative; min-width: 0; display: flex; flex-direction: column;
+  background: radial-gradient(circle at 50% 45%, rgba(90,200,250,.10), transparent 60%), #fbfbfd; }
+.bg-top { display: flex; align-items: center; gap: 12px; padding: 12px 14px; z-index: 2; }
+.bg-title { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; color: #1d1d1f; margin-right: auto; }
+.bg-phys { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #3a3a3c; cursor: pointer; }
+.bg-canvas-wrap { position: relative; flex: 1; min-height: 0; }
+.bg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.bg-reset { position: absolute; left: 14px; bottom: 34px; border: 1px solid rgba(0,0,0,.08); background: #fff; border-radius: 9px; width: 30px; height: 30px; display: grid; place-items: center; cursor: pointer; color: #3a3a3c; }
+.bg-loading { flex: 1; display: grid; place-items: center; color: #86868b; font-size: 13px; }
+.bg-legend { position: absolute; top: 56px; right: 14px; display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 14px;
+  background: rgba(255,255,255,.75); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.9); box-shadow: 0 8px 24px rgba(0,0,0,.06); min-width: 190px; max-height: 70%; overflow-y: auto; }
+.bg-legend small { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: #86868b; padding: 0 6px 4px; }
+.bg-legend button { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 5px 6px; border-radius: 7px; font-size: 12.5px; color: #1d1d1f; cursor: pointer; text-align: left; }
+.bg-legend button b { margin-left: auto; font-weight: 500; color: #86868b; font-size: 12px; }
+.bg-legend button:hover { background: rgba(0,0,0,.04); }
+.bg-legend button.off { opacity: .35; }
+.bg-foot { position: absolute; left: 54px; bottom: 12px; font-size: 11.5px; color: #86868b; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.bg-tip { position: absolute; z-index: 3; max-width: 280px; pointer-events: none; padding: 9px 11px; border-radius: 11px; background: rgba(255,255,255,.95); box-shadow: 0 10px 28px rgba(0,0,0,.12); font-size: 12px; display: grid; grid-template-columns: 8px 1fr; column-gap: 7px; row-gap: 3px; align-items: center; }
+.bg-tip strong { font-size: 12.5px; color: #1d1d1f; }
+.bg-tip span { grid-column: 2; color: #6e6e73; line-height: 1.4; }
+@media (max-width: 860px) {
+  .bg-wrap { grid-template-columns: 1fr; height: auto; }
+  .bg-vault { border-right: 0; border-bottom: 1px solid rgba(0,0,0,.06); max-height: 220px; }
+  .bg-graph { height: 460px; }
+  .bg-search.sm { width: 140px; }
+  .bg-legend { min-width: 150px; top: auto; bottom: 40px; }
+}

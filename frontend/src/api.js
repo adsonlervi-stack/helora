@@ -458,6 +458,7 @@ export const integrations = {
   canvaDesigns: (q) => api.get("/integrations/canva/designs", { params: { q } }).then((r) => r.data),
   canvaExport: (id, format) => api.post(`/integrations/canva/designs/${id}/export`, { format }, { timeout: 0 }).then((r) => r.data),
   brainDocs: (agent) => api.get("/integrations/brain/docs", { params: agent ? { agent } : {} }).then((r) => r.data),
+  brainGraph: () => api.get("/integrations/brain/graph").then((r) => r.data),
   brainDoc: (id) => api.get(`/integrations/brain/docs/${id}`).then((r) => r.data),
   brainAdd: (d) => api.post("/integrations/brain/docs", d, { timeout: 120000 }).then((r) => r.data),
   brainUpload: (file, extra = {}) => {

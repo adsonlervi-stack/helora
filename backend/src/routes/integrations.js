@@ -169,6 +169,55 @@ router.get("/brain/docs", async (req, res) => {
     res.json((data || []).map(docOut));
   } catch (err) { fail(res, err); }
 });
+// Mapa do cérebro: documentos + trechos ligados por assuntos em comum (para o grafo da aba Cérebro).
+const GRAPH_STOP = new Set("para pela pelo pelos pelas com sem que qual quais como quando onde porque mais menos muito pouco sobre entre ainda sempre também tambem isso esse essa este esta estes estas esses essas aquele aquela cada todo toda todos todas outro outra outros outras mesmo mesma depois antes então entao assim apenas pode podem deve devem será sera serão são foram está estao estão tinha tenho temos fazer feito valor dados cliente clientes empresa nosso nossa seus suas dele dela eles elas você voce vocês voces aqui onde https http www com br".split(" "));
+const graphWords = (t) => {
+  const f = new Map();
+  for (const w of String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[a-z0-9]{5,}/g) || []) {
+    if (GRAPH_STOP.has(w) || /^\d+$/.test(w)) continue;
+    f.set(w, (f.get(w) || 0) + 1);
+  }
+  return [...f.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([w]) => w);
+};
+router.get("/brain/graph", async (req, res) => {
+  try {
+    const { data: docs, error } = await supabase.from("brain_docs").select("id, source, title, url, chars, updated_at").eq("account_id", req.accountId).order("updated_at", { ascending: false }).limit(300);
+    if (error) throw error;
+    const ids = (docs || []).map((d) => d.id);
+    let chunks = [];
+    if (ids.length) {
+      const { data } = await supabase.from("brain_chunks").select("id, doc_id, idx, content").eq("account_id", req.accountId).in("doc_id", ids).lt("idx", 12).limit(900);
+      chunks = data || [];
+    }
+    const nodes = [], links = [];
+    for (const d of docs || []) nodes.push({ id: d.id, type: "doc", source: d.source, label: d.title, url: d.url, chars: d.chars, updatedAt: d.updated_at });
+    const byWord = new Map();
+    for (const c of chunks) {
+      const words = graphWords(c.content);
+      const doc = (docs || []).find((d) => d.id === c.doc_id);
+      nodes.push({ id: c.id, type: "chunk", source: doc?.source || "texto", label: words.slice(0, 3).join(" · ") || `Trecho ${c.idx + 1}`, docId: c.doc_id, excerpt: String(c.content || "").slice(0, 180) });
+      links.push({ s: c.id, t: c.doc_id, k: "doc" });
+      for (const w of words.slice(0, 5)) { if (!byWord.has(w)) byWord.set(w, []); byWord.get(w).push(c.id); }
+    }
+    const pair = new Map();
+    for (const list of byWord.values()) {
+      if (list.length < 2 || list.length > 40) continue;
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+        const k = list[i] < list[j] ? `${list[i]}|${list[j]}` : `${list[j]}|${list[i]}`;
+        pair.set(k, (pair.get(k) || 0) + 1);
+      }
+    }
+    const deg = new Map();
+    for (const [k, n] of [...pair.entries()].sort((a, b) => b[1] - a[1])) {
+      if (n < 2) continue;
+      const [a, b] = k.split("|");
+      if ((deg.get(a) || 0) >= 6 || (deg.get(b) || 0) >= 6) continue;
+      deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1);
+      links.push({ s: a, t: b, k: "tema" });
+    }
+    res.json({ nodes, links });
+  } catch (err) { fail(res, err); }
+});
 const agentIdsOf = (v) => {
   const arr = Array.isArray(v) ? v : String(v || "").split(",");
   return arr.map((x) => String(x).trim()).filter((x) => /^[0-9a-f-]{36}$/i.test(x));
@@ -300,7 +349,9 @@ async function saveChat(req, chatId, messages) {
 router.post("/studio/chat", async (req, res) => {
   try {
     const messages = (req.body?.messages || []).slice(-40);
-    const { reply, provider, sources } = await studioChat(req.accountId, messages, { web: !!req.body?.web, deep: !!req.body?.deep });
+    const lastQ = String([...messages].reverse().find((m) => m.role === "user")?.content || "");
+    const needsWeb = /\b(hoje|agora|atual|atualmente|noticia|notícia|noticias|notícias|ultim[oa]s?|últim[oa]s?|recente|cota[cç][aã]o|d[oó]lar|clima|previs[aã]o|resultado|placar|jogo|elei[cç]|quem (é|e|ganhou)|pesquis[ae] na (web|internet)|g1|google|site)\b|20[2-3]\d/i.test(lastQ);
+    const { reply, provider, sources } = await studioChat(req.accountId, messages, { web: !!req.body?.web || (needsWeb && !!process.env.TAVILY_API_KEY), deep: !!req.body?.deep });
     const all = [...messages, { role: "assistant", content: reply, sources: sources?.length ? sources : undefined, at: new Date().toISOString() }];
     const chatId = await saveChat(req, req.body?.chatId, all).catch(() => req.body?.chatId || null);
     res.json({ reply, provider, chatId, sources });
