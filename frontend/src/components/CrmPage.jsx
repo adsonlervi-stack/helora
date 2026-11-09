@@ -136,6 +136,7 @@ function FunnelView({ ctx }) {
   const [dragId, setDragId] = useState(null);
   const [clientId, setClientId] = useState(null);
   const [moreNav, setMoreNav] = useState(false);
+  const [pipeMenu, setPipeMenu] = useState(false);
   const [newMenu, setNewMenu] = useState(false);
   const [clientForm, setClientForm] = useState(null);
   const [sidePanel, setSidePanelS] = useState(() => { try { return localStorage.getItem("helora_crm_side") === "1"; } catch { return false; } });
@@ -343,7 +344,21 @@ function FunnelView({ ctx }) {
           )}
         </div>
         <div className="crm-views">
-          {[["board", "Funil"], ["list", "Lista"], ["activities", "Atividades"], ["clients", "Empresas"]].map(([k, l]) => (
+          <button type="button" className={view === "activities" ? "on" : ""} onClick={() => setView("activities")}>Atividades</button>
+          <span className="crm-more">
+            <button type="button" className={view === "board" ? "on" : ""} title="Clique de novo para trocar de funil" onClick={() => (view === "board" ? setPipeMenu((v) => !v) : setView("board"))}>
+              {all ? "Todos os funis" : pipeline?.name || "Funil"} <ChevronDown size={13} />
+            </button>
+            {pipeMenu && (
+              <span className="crm-more-menu" onMouseLeave={() => setPipeMenu(false)}>
+                <small className="crm-menu-t">Funis</small>
+                {pipelines.map((p) => <button key={p.id} className={!all && p.id === pipelineId ? "cur" : ""} onClick={() => { ctx.setAllMode(false); setPipelineId(p.id); setPipeMenu(false); setView("board"); }}>{!all && p.id === pipelineId ? "✓ " : ""}{p.name}</button>)}
+                {pipelines.length > 1 && <button className={all ? "cur" : ""} onClick={() => { ctx.setAllMode(true); setPipeMenu(false); setView("board"); }}>{all ? "✓ " : ""}Todos os funis</button>}
+                {isManager && <><hr /><button onClick={() => { setPipeMenu(false); setNewPipe(true); }}>+ Novo funil</button></>}
+              </span>
+            )}
+          </span>
+          {[["list", "Lista"], ["clients", "Empresas"]].map(([k, l]) => (
             <button key={k} type="button" className={view === k ? "on" : ""} onClick={() => setView(k)}>{l}</button>
           ))}
           <span className="crm-more">
@@ -360,14 +375,6 @@ function FunnelView({ ctx }) {
             )}
           </span>
         </div>
-        {view !== "activities" && view !== "clients" && <label className="crm-select">
-          <span>Funil</span>
-          <select value={all ? "__all" : pipelineId || ""} onChange={(e) => { const v = e.target.value; if (v === "__new") return setNewPipe(true); if (v === "__all") return ctx.setAllMode(true); ctx.setAllMode(false); setPipelineId(v); }}>
-            {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            {pipelines.length > 1 && <option value="__all">Todos os funis</option>}
-            {isManager && <option value="__new">+ Novo funil…</option>}
-          </select>
-        </label>}
         {view === "board" && !sidePanel && <button type="button" className="crm-side-btn" onClick={() => setSidePanel(true)} title="Lista de clientes ao lado do funil"><Users size={15} /> Clientes</button>}
         <div style={{ flex: 1 }} />
         {(() => {
