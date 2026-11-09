@@ -307,11 +307,12 @@ function FunnelView({ ctx }) {
             {isManager && <option value="__new">+ Novo funil…</option>}
           </select>
         </label>
-        <div className="crm-search"><Search size={15} /><input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <div className="crm-flt-wrap">
-          <button type="button" className={`crm-flt-btn ${fltCount ? "on" : ""}`} onClick={() => setFltOpen((v) => !v)}>
-            <SlidersHorizontal size={15} /> Filtros{fltCount ? ` · ${fltCount}` : ""}
-          </button>
+          <div className="crm-search with-flt"><Search size={15} /><input placeholder="Buscar negócio, cliente ou telefone" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <button type="button" className={`crm-flt-in ${fltCount ? "on" : ""}`} title="Filtros" onClick={() => setFltOpen((v) => !v)}>
+              <SlidersHorizontal size={15} />{fltCount ? <b>{fltCount}</b> : null}
+            </button>
+          </div>
           {fltOpen && (
             <div className="crm-flt-pop" onMouseLeave={() => setFltOpen(false)}>
               <label><span>Responsável</span>
@@ -399,7 +400,7 @@ function FunnelView({ ctx }) {
           );
         })()}
         <span className="crm-new">
-          <Button onClick={() => setNewMenu((v) => !v)}><Plus size={15} /> Adicionar <ChevronDown size={14} /></Button>
+          <button type="button" className="crm-plus" title="Adicionar" onClick={() => setNewMenu((v) => !v)}><Plus size={20} /></button>
           {newMenu && (
             <span className="crm-new-menu" onMouseLeave={() => setNewMenu(false)}>
               <span className="crm-new-row">
