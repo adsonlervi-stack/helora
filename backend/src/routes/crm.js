@@ -1205,7 +1205,10 @@ router.delete("/products/:id", async (req, res) => {
 // ---------------------------------------------------------------- Agenda
 router.get("/events", async (req, res) => {
   try {
-    let q = supabase.from("crm_events").select("*, crm_leads(name, phone), owner:profiles!crm_events_owner_id_fkey(name)").eq("account_id", req.accountId).order("starts_at");
+    let q = supabase.from("crm_events").select("*, crm_leads(name, phone, company, pipeline_id), owner:profiles!crm_events_owner_id_fkey(name)").eq("account_id", req.accountId).order("starts_at").limit(2000);
+    if (req.query.done === "1") q = q.eq("done", true);
+    if (req.query.done === "0") q = q.eq("done", false);
+    if (req.query.ownerId && isManager(req)) q = q.eq("owner_id", req.query.ownerId);
     if (req.query.from) q = q.gte("starts_at", req.query.from);
     if (req.query.to) q = q.lte("starts_at", req.query.to);
     if (req.query.leadId) q = q.eq("lead_id", req.query.leadId);
@@ -1214,13 +1217,13 @@ router.get("/events", async (req, res) => {
     if (error) throw error;
     res.json(data.map((e) => ({
       id: e.id, title: e.title, kind: e.kind, startsAt: e.starts_at, endsAt: e.ends_at, done: e.done, notes: e.notes,
-      leadId: e.lead_id, leadName: e.crm_leads?.name || null, leadPhone: e.crm_leads?.phone || null, ownerId: e.owner_id, ownerName: e.owner?.name || null,
+      leadId: e.lead_id, leadName: e.crm_leads?.name || null, leadCompany: e.crm_leads?.company || null, pipelineId: e.crm_leads?.pipeline_id || null, createdAt: e.created_at, leadPhone: e.crm_leads?.phone || null, ownerId: e.owner_id, ownerName: e.owner?.name || null,
       meetLink: e.meet_link || null, googleEventId: e.google_event_id || null
     })));
   } catch (err) { fail(res, err); }
 });
 // Tipos de atividade criados pela equipe (os que já foram usados em alguma atividade)
-const BASE_KINDS = ["reuniao", "call", "followup", "tarefa"];
+const BASE_KINDS = ["reuniao", "call", "followup", "tarefa", "email", "whatsapp", "proposta", "visita"];
 router.get("/activity-kinds", async (req, res) => {
   try {
     const { data, error } = await supabase.from("crm_events").select("kind").eq("account_id", req.accountId).order("created_at", { ascending: false }).limit(3000);
@@ -1240,7 +1243,7 @@ router.post("/events", async (req, res) => {
     if (!b.startsAt) return res.status(400).json({ error: "Escolha data e hora." });
     const { data, error } = await supabase.from("crm_events").insert({
       account_id: req.accountId, lead_id: b.leadId || null, title: String(b.title || "Reunião").slice(0, 120), kind: String(b.kind || "reuniao").trim().slice(0, 40) || "reuniao",
-      starts_at: b.startsAt, ends_at: b.endsAt || null, notes: b.notes || null, owner_id: b.ownerId || req.userId
+      starts_at: b.startsAt, ends_at: b.endsAt || null, notes: b.notes || null, owner_id: b.ownerId || req.userId, done: !!b.done
     }).select().single();
     if (error) throw error;
     if (b.leadId) await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", b.leadId);

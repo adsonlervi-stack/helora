@@ -5,7 +5,7 @@ import SlotPicker from "./SlotPicker.jsx";
 import { loadQuickReplies } from "./QuickReplies.jsx";
 import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
-  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin, Pencil
+  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin, Pencil, Users, MapPin
 } from "lucide-react";
 import { crm, createTaskApi } from "../api.js";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
@@ -43,7 +43,7 @@ const toLocalInput = (d) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 const daysUntil = (d) => { if (!d) return null; return Math.round((new Date(`${String(d).slice(0, 10)}T12:00:00`) - new Date()) / 86400000); };
-const EV_KIND = { reuniao: "Reunião", call: "Ligação", followup: "Follow-up", tarefa: "Tarefa", cad_call: "Ligação", cad_whats: "WhatsApp", cad_email: "E-mail", cad_task: "Tarefa", cad_meeting: "Reunião" };
+export const EV_KIND = { reuniao: "Reunião", call: "Ligação", followup: "Follow-up", tarefa: "Tarefa", email: "E-mail", whatsapp: "WhatsApp", proposta: "Proposta", visita: "Visita", cad_call: "Ligação", cad_whats: "WhatsApp", cad_email: "E-mail", cad_task: "Tarefa", cad_meeting: "Reunião" };
 const WON_RE = /fechad|ganh|vendid|conclu|indeniz/i;
 const LOST_RE = /perdid|cancel|desist|negad|n[aã]o fechou/i;
 
@@ -57,6 +57,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
   const [checklist, setChecklist] = useState(initial.checklist || []);
   const [events, setEvents] = useState([]);
   const [tab, setTab] = useState("note");
+  const [moreTab, setMoreTab] = useState(false);
   const [histFilter, setHistFilter] = useState("all");
   const [saving, setSaving] = useState("");
   const [open, setOpen] = useState({ resumo: true, produtos: true, detalhes: true, contato: true });
@@ -426,16 +427,25 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
           {/* ---------- Coluna direita ---------- */}
           <main className="lp-right">
             <div className="lp-composer">
-              <div className="lp-tabs">
-                {[
-                  ["note", StickyNote, "Anotações"], ["task", ListTodo, "Tarefa"], ["activity", CalendarDays, "Atividade"], ["whats", MessageCircle, "WhatsApp"],
-                  ["files", Paperclip, "Arquivos"], ["check", CheckSquare, "Checklist"]
-                ].map(([k, Ic, l]) => (
+              <div className="lp-tabs ag">
+                {AG_TABS.map(([k, Ic, l]) => (
                   <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}><Ic size={15} /> {l}</button>
+                ))}
+                <span className="lp-tabs-sep" />
+                {[["whats", Send, "Enviar mensagem"], ["files", Paperclip, "Arquivos"], ["check", CheckSquare, "Checklist"], ["task", ListTodo, "Tarefa no quadro"]].map(([k, Ic, l]) => (
+                  <button key={k} className={`sm ${tab === k ? "on" : ""}`} title={l} onClick={() => setTab(k)}><Ic size={14} /><span>{l}</span></button>
                 ))}
               </div>
               <div className="lp-tab-body">
                 {tab === "note" && <NoteBox onSave={async (t) => { try { changed(await crm.addLeadNote(lead.id, t)); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
+                {AG_TABS.some((x) => x[0] === tab) && tab !== "note" && tab !== "reuniao" && (
+                  <AgActivity key={tab} kind={tab} team={team} me={ctx.profile} defaultOwner={f.ownerId}
+                    onCancel={() => setTab("note")}
+                    onSave={async (a) => {
+                      try { await crm.createEvent({ ...a, leadId: lead.id }); loadEvents(); notify(a.done ? "Atividade registrada." : "Atividade agendada.", "success"); setTab("note"); return true; }
+                      catch (e) { notify(errText(e), "error"); return false; }
+                    }} />
+                )}
                 {tab === "task" && (
                   <TaskBox team={team} defaultOwner={f.ownerId} leadName={f.name}
                     onSave={async (t) => {
@@ -452,7 +462,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                       } catch (e) { notify(errText(e), "error"); return false; }
                     }} />
                 )}
-                {tab === "activity" && <ActivityBox onSave={async (ev) => { try { const r = await crm.createEvent({ ...ev, leadId: lead.id, startsAt: new Date(ev.startsAt).toISOString() }); loadEvents(); notify(`Atividade agendada.${notifyText(r.notifyResult)}`, /erro/.test(JSON.stringify(r.notifyResult || {})) ? "error" : "success"); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
+                {tab === "reuniao" && <ActivityBox onSave={async (ev) => { try { const r = await crm.createEvent({ ...ev, leadId: lead.id, startsAt: new Date(ev.startsAt).toISOString() }); loadEvents(); notify(`Atividade agendada.${notifyText(r.notifyResult)}`, /erro/.test(JSON.stringify(r.notifyResult || {})) ? "error" : "success"); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
                 {tab === "whats" && (
                   <MessageBox
                     ctx={ctx} pipe={pipe} lead={lead} f={f} custom={custom} value={value} stageName={stages[stageIdx]?.name || ""} ownerName={f.ownerId ? memberName(f.ownerId) : ""}
@@ -482,18 +492,20 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                 onDone={async (ev, done = true) => { await crm.updateEvent(ev.id, { done }); loadEvents(); }}
                 onSend={async (text) => { try { await flush(); const r = await crm.sendLeadMessage(lead.id, text); changed(r.lead); notify("Mensagem enviada pelo WhatsApp.", "success"); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />
             )}
-            <h3 className="lp-h3">Foco</h3>
+            <h3 className="lp-h3">Atividades pendentes</h3>
             {pendingEvents.length || checklist.some((c) => !c.done) ? (
               <div className="lp-focus">
                 {pendingEvents.map((ev) => {
                   const late = new Date(ev.startsAt) < new Date();
                   return (
                     <div key={ev.id} className="lp-focus-item">
-                      <button className="lp-round" onClick={async () => { await crm.updateEvent(ev.id, { done: true }); loadEvents(); }} title="Concluir" />
+                      <span className="lp-ag-ic">{agIcon(ev.kind)}</span>
                       <div>
+                        <small className="lp-ag-k">{EV_KIND[ev.kind] || ev.kind}{ev.ownerName ? ` · ${ev.ownerName}` : ""}</small>
                         <strong>{ev.title}</strong>
-                        <span className={late ? "late" : ""}><Clock size={12} /> {when(ev.startsAt)} · {EV_KIND[ev.kind] || ev.kind}</span>
+                        <span className={`lp-ag-due ${late ? "late" : ""}`}><Clock size={12} /> Prazo: {when(ev.startsAt)}</span>
                       </div>
+                      <label className="lp-fin"><input type="checkbox" onChange={async () => { await crm.updateEvent(ev.id, { done: true }); loadEvents(); notify("Atividade finalizada.", "success"); }} /> Finalizar</label>
                     </div>
                   );
                 })}
@@ -562,8 +574,48 @@ function NoteBox({ onSave }) {
   const go = async () => { if (!t.trim()) return; setBusy(true); if (await onSave(t.trim())) setT(""); setBusy(false); };
   return (
     <div className="lp-notebox">
-      <textarea rows={3} value={t} onChange={(e) => setT(e.target.value)} placeholder="Escreva uma anotação: o que o cliente disse, próximos passos…" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); } }} />
+      <textarea rows={3} value={t} onChange={(e) => setT(e.target.value)} placeholder="O que foi feito e qual o próximo passo?" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(); } }} />
       <div className="lp-row-end"><button className="lp-primary" disabled={!t.trim() || busy} onClick={go}><Send size={14} /> Salvar anotação</button></div>
+    </div>
+  );
+}
+
+const AG_TABS = [["note", StickyNote, "Nota"], ["email", Mail, "E-mail"], ["call", Phone, "Ligação"], ["whatsapp", MessageCircle, "WhatsApp"], ["proposta", FileText, "Proposta"], ["reuniao", Users, "Reunião"], ["visita", MapPin, "Visita"], ["tarefa", CheckSquare, "Tarefa"]];
+export const agIcon = (k, size = 15) => { const I = { email: Mail, call: Phone, cad_call: Phone, whatsapp: MessageCircle, cad_whats: MessageCircle, proposta: FileText, reuniao: Users, cad_meeting: Users, visita: MapPin, tarefa: CheckSquare, cad_task: CheckSquare, cad_email: Mail }[k] || CalendarDays; return <I size={size} />; };
+
+/** Registro rápido de atividade, igual ao Agendor: o que foi feito / próximo passo, responsável, prazo e horário. */
+function AgActivity({ kind, team, me, defaultOwner, onSave, onCancel }) {
+  const now = new Date();
+  const [text, setText] = useState("");
+  const [owner, setOwner] = useState(defaultOwner || me?.id || "");
+  const [date, setDate] = useState(now.toISOString().slice(0, 10));
+  const [time, setTime] = useState(now.toTimeString().slice(0, 5));
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const label = EV_KIND[kind];
+  const save = async () => {
+    setBusy(true);
+    const startsAt = new Date(`${date}T${time || "09:00"}:00`).toISOString();
+    if (await onSave({ kind, title: (text.trim() || label).slice(0, 120), notes: text.trim().length > 120 ? text.trim() : null, ownerId: owner || undefined, startsAt, done })) setText("");
+    setBusy(false);
+  };
+  return (
+    <div className="lp-ag">
+      <textarea rows={3} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={`${label}: o que foi feito e qual o próximo passo?`} />
+      <div className="lp-ag-row">
+        <label><span>Responsável</span>
+          <select value={owner} onChange={(e) => setOwner(e.target.value)}>
+            {team.map((m) => <option key={m.id} value={m.id}>{m.id === me?.id ? `Eu (${(m.name || "").split(" ")[0]})` : m.name || m.email}</option>)}
+          </select></label>
+        <label><span>Prazo</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        <label><span>Horário</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>
+      </div>
+      <div className="lp-ag-foot">
+        <label className="lp-fin"><input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> Já foi feita (registrar no histórico)</label>
+        <span style={{ flex: 1 }} />
+        <button className="lp-ghost" onClick={onCancel}>Cancelar</button>
+        <button className="lp-primary" disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>
+      </div>
     </div>
   );
 }

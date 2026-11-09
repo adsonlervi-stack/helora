@@ -17,6 +17,7 @@ import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjDat
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
 import CrmCliente from "./CrmCliente.jsx";
+import CrmActivities from "./CrmActivities.jsx";
 import CrmReportSheet from "./CrmReportSheet.jsx";
 
 const COLORS = ["#0a84ff", "#5ac8fa", "#bf5af2", "#ff375f", "#ff9f0a", "#ffcc00", "#30d158", "#64d2ff", "#8e8e93", "#ac8e68"];
@@ -136,7 +137,7 @@ function FunnelView({ ctx }) {
   const [reporting, setReporting] = useState(false);
   useEffect(() => {
     const oc = (e) => setClientId(e.detail);
-    const ol = (e) => { const id = e.detail; const x = (leads || []).find((y) => y.id === id); if (x) setOpen(x); else crm.leads({ include: "all" }).then((list) => { const y = (list || []).find((z) => z.id === id); if (y) setOpen(y); }).catch(() => {}); };
+    const ol = (e) => { const id = e.detail; const x = (leads || []).find((y) => y.id === id); if (x) setOpen(x); else crm.lead(id).then((y) => y && setOpen(y)).catch(() => {}); };
     window.addEventListener("helora:client", oc); window.addEventListener("helora:open-lead", ol);
     return () => { window.removeEventListener("helora:client", oc); window.removeEventListener("helora:open-lead", ol); };
   }, [leads]);
@@ -187,7 +188,7 @@ function FunnelView({ ctx }) {
   };
   useEffect(() => { setLeads(null); load(); }, [pipelineId, all]);
   const loadSide = () => {
-    if (view === "board" || view === "list") return setSide(null);
+    if (view === "board" || view === "list" || view === "activities") return setSide(null);
     setSide(null);
     const params = { ...(all || !pipelineId ? {} : { pipelineId }), ...(view === "archived" ? { archived: "1" } : { snoozed: "1" }) };
     crm.leads(params).then(setSide).catch(() => setSide([]));
@@ -335,7 +336,7 @@ function FunnelView({ ctx }) {
           )}
         </div>
         <div className="crm-views">
-          {[["board", "Funil"], ["list", "Lista"], ["snoozed", "Reagendados"], ["archived", "Arquivados"]].map(([k, l]) => (
+          {[["board", "Funil"], ["list", "Lista"], ["activities", "Atividades"], ["snoozed", "Reagendados"], ["archived", "Arquivados"]].map(([k, l]) => (
             <button key={k} type="button" className={view === k ? "on" : ""} onClick={() => setView(k)}>{l}</button>
           ))}
         </div>
@@ -373,7 +374,8 @@ function FunnelView({ ctx }) {
       </div>
 
       {view === "list" && <LeadTable leads={leads} pipeById={pipeById} team={ctx.team || []} onOpen={(l) => setOpen(l)} />}
-      {view !== "board" && view !== "list" && (
+      {view === "activities" && <CrmActivities ctx={ctx} onOpenLead={(id) => window.dispatchEvent(new CustomEvent("helora:open-lead", { detail: id }))} />}
+      {view !== "board" && view !== "list" && view !== "activities" && (
         <div className="crm-side-list">
           {side === null && <div className="cv-muted" style={{ padding: 16 }}>Carregando…</div>}
           {side && !side.length && <div className="ap-empty">{view === "archived" ? "Nenhum card arquivado." : "Nenhum card reagendado."}</div>}
