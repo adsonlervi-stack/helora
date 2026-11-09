@@ -3094,3 +3094,4 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
   .mb-back,.mb-close-m{display:inline-grid}
 }
 .lp-btn.primary{background:#0071e3;color:#fff}.lp-btn.primary:hover{background:#0062c4}.lp-btn:disabled{opacity:.55;cursor:default}
+.meta-btn{display:inline-flex;align-items:center;gap:10px;background:#1877F2;color:#fff;border:0;border-radius:12px;padding:13px 22px;font:inherit;font-size:15px;font-weight:600;cursor:pointer}.meta-btn:hover{background:#166fe5}

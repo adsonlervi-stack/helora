@@ -1,3 +1,4 @@
+import { metaRouter, metaCallbackRouter } from "./meta/oauth.js";
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -84,6 +85,8 @@ app.use("/api/crm", crmRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/integrations", integrationsRoutes);
 app.use("/api/google", googleRouter);
+app.use("/api/meta", metaRouter);
+app.use("/", metaCallbackRouter);
 app.use("/api/push", pushRouter);
 app.use("/", googleCallbackRouter);
 app.use("/api", apiRoutes);

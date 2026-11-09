@@ -18,6 +18,7 @@ import {
   API_BASE
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
+import { meta as metaApi } from "../api.js";
 import { Sheet, Group, Row, Button } from "./ui.jsx";
 
 const PLATFORM_LABELS = { whatsapp: "WhatsApp", messenger: "Messenger", instagram: "Instagram" };
@@ -179,6 +180,9 @@ export default function ChannelsPage() {
   const [departments, setDepartments] = useState([]);
   const [team, setTeam] = useState([]);
   const [showNew, setShowNew] = useState(false);
+  const [metaOpen, setMetaOpen] = useState(() => new URLSearchParams(window.location.search).get("meta") || null);
+  const [metaOn, setMetaOn] = useState(false);
+  useEffect(() => { metaApi.status().then((s) => setMetaOn(!!s.configured)); }, []);
   const [qrChannel, setQrChannel] = useState(null);
   const [permChannel, setPermChannel] = useState(null);
   const [editChannel, setEditChannel] = useState(null);
@@ -258,7 +262,7 @@ export default function ChannelsPage() {
             <div className="ch2-menu" onMouseLeave={() => setMenu(false)}>
               <div className="ch2-menu-t">Adicionar novo canal</div>
               {ADD.map((o) => (
-                <button key={o.k} onClick={() => { setMenu(false); if (o.go) { window.history.replaceState(null, "", `${window.location.pathname}?aba=${o.go}`); window.location.reload(); } else setShowNew(o.preset); }}>
+                <button key={o.k} onClick={() => { setMenu(false); if (o.go) { window.history.replaceState(null, "", `${window.location.pathname}?aba=${o.go}`); window.location.reload(); } else if ((o.k === "ig" || o.k === "fb") && metaOn) setMetaOpen("start"); else setShowNew(o.preset); }}>
                   <span className="ch2-mi" style={{ background: o.color }}><o.icon size={18} /></span>
                   <span><strong>{o.title}</strong><small>{o.sub}</small></span>
                   <ChevronRight size={16} />
@@ -309,6 +313,7 @@ export default function ChannelsPage() {
         {channels.length === 0 && <div className="ch2-empty">Nenhum canal ainda. Clique em <b>Adicionar canal</b>.</div>}
       </div>
 
+      {metaOpen && <MetaConnect state={metaOpen} onManual={(platform) => { setMetaOpen(null); setShowNew({ platform }); }} onClose={() => { setMetaOpen(null); const q = new URLSearchParams(window.location.search); q.delete("meta"); q.delete("msg"); window.history.replaceState(null, "", `${window.location.pathname}?${q}`); }} onDone={() => load()} />}
       {showNew && (
         <NewChannelModal departments={departments} flows={flows} preset={typeof showNew === "object" ? showNew : null} onClose={() => setShowNew(false)} onCreate={handleCreate} />
       )}
@@ -349,4 +354,44 @@ function HistoryButton({ channel, onImport }) {
     st.status === "running" ? `Importando… ${st.imported || 0} msgs` :
     st.status === "done" ? `Histórico: ${st.imported || 0} msgs` : "Importar histórico";
   return <button className="ch2-btn ghost" title="Trazer as conversas dos últimos 90 dias" onClick={onImport}><History size={14} /> {label}</button>;
+}
+
+/** Conectar Messenger e Instagram entrando com o Facebook, sem colar token. */
+function MetaConnect({ state, onClose, onManual, onDone }) {
+  const [pages, setPages] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const errMsg = state === "erro" ? new URLSearchParams(window.location.search).get("msg") : null;
+  const load = () => metaApi.pages().then(setPages).catch(() => setPages([]));
+  useEffect(() => { if (state === "ok") load(); else setPages([]); }, [state]);
+  const go = async () => { try { window.location.href = await metaApi.authUrl(); } catch (e) { alert(e?.response?.data?.error || e.message); } };
+  const connect = async (p) => {
+    setBusy(p.id);
+    try { await metaApi.connect({ id: p.id, platform: p.platform }); await load(); onDone(); }
+    catch (e) { alert(e?.response?.data?.error || e.message); }
+    setBusy(null);
+  };
+  return (
+    <Sheet title="Facebook e Instagram" subtitle="Entre com o Facebook e escolha a Página ou o Instagram que vai atender pelo Helora." onClose={onClose} width={560}
+      footer={<Button variant="secondary" onClick={onClose}>Fechar</Button>}>
+      {errMsg && <div className="admin-feedback error" style={{ marginBottom: 12 }}>{errMsg}</div>}
+      {pages && pages.length > 0 ? (
+        <Group title="Escolha o que conectar">
+          {pages.map((p) => (
+            <Row key={p.platform + p.id} label={<span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>{p.platform === "instagram" ? <Instagram size={16} color="#C13584" /> : <Facebook size={16} color="#1877F2" />}{p.name}</span>}>
+              {p.connected ? <span style={{ color: "#34c759", fontWeight: 600, fontSize: 14 }}>Conectado</span>
+                : <Button disabled={busy === p.id} onClick={() => connect(p)}>{busy === p.id ? "Conectando…" : "Conectar"}</Button>}
+            </Row>
+          ))}
+        </Group>
+      ) : (
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <button className="meta-btn" onClick={go}><Facebook size={18} /> Continuar com o Facebook</button>
+          <p style={{ color: "#6e6e73", fontSize: 13, marginTop: 14 }}>Você precisa ser administrador da Página. Para o Instagram, a conta tem que ser Profissional e estar ligada à Página.</p>
+        </div>
+      )}
+      <div style={{ textAlign: "center", marginTop: 8 }}>
+        <button className="lp-link sm" onClick={() => onManual("messenger")}>Prefiro configurar com token (avançado)</button>
+      </div>
+    </Sheet>
+  );
 }

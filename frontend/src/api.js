@@ -500,3 +500,10 @@ export const integrations = {
   studioCanva: (d) => api.post("/integrations/studio/canva", d, { timeout: 120000 }).then((r) => r.data),
   studioFlow: (description) => api.post("/integrations/studio/flow", { description }, { timeout: 180000 }).then((r) => r.data)
 };
+
+export const meta = {
+  status: () => api.get("/meta/status").then((r) => r.data).catch(() => ({ configured: false })),
+  authUrl: () => api.get("/meta/auth-url").then((r) => r.data.url),
+  pages: () => api.get("/meta/pages").then((r) => r.data),
+  connect: (d) => api.post("/meta/connect", d).then((r) => r.data)
+};
