@@ -3312,3 +3312,15 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .cl-hist{gap:12px}
 .cl-h{padding:14px 18px !important}
 @media (max-width:900px){.cl{width:100vw !important;height:100vh !important;border-radius:0}.cl-split{grid-template-columns:1fr !important}}
+
+.kind-badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:6px;margin-bottom:4px;flex:none}
+.kind-badge.negocio{background:#eaf3ff;color:#0071e3}.kind-badge.cliente{background:#f3ecff;color:#7a3ff2}
+.cl-deals{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-bottom:16px}
+.cl-dc{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid #e5e5ea;border-left:4px solid #0071e3;background:#fff;border-radius:12px;padding:12px 14px;cursor:pointer;font:inherit}
+.cl-dc.won{border-left-color:#34c759}.cl-dc.lost{border-left-color:#ff3b30;opacity:.75}
+.cl-dc:hover{box-shadow:0 10px 24px -14px rgba(0,60,140,.4)}
+.cl-dc small{color:#8e8e93;font-size:12px}.cl-dc strong{font-size:14px}
+.cl-dc-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.cl-dc em{font-style:normal;font-size:12px;color:#0071e3;font-weight:600}
+.cl-hint{font-size:12px;color:#8e8e93;text-align:center;margin:6px 0 0}
+.lp-title{flex-wrap:wrap;align-items:center;gap:8px}

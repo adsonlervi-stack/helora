@@ -64,7 +64,6 @@ const toLocalInput = (d) => {
 const TABS = [
   { key: "funnel", label: "Funil", icon: KanbanSquare },
   { key: "contacts", label: "Contatos", icon: Users },
-  { key: "agenda", label: "Agenda", icon: CalendarDays },
   { key: "products", label: "Produtos", icon: Package },
   { key: "tags", label: "Tags", icon: Tag }
 ];

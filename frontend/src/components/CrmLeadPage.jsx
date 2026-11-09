@@ -273,6 +273,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
         {/* ---------- Cabeçalho ---------- */}
         <header className="lp-head">
           <div className="lp-title">
+            <span className="kind-badge negocio">Negócio</span>
             <input value={f.name} onChange={(e) => setField("name", e.target.value)} placeholder="Nome do negócio" />
             {outcome && <span className={`lp-outcome ${outcome}`}>{outcome === "won" ? "Ganho" : "Perdido"}{lead.lostReason ? ` · ${lead.lostReason}` : ""}</span>}
           </div>
@@ -443,7 +444,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                   <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}><Ic size={15} /> {l}</button>
                 ))}
                 <span className="lp-tabs-sep" />
-                {[["whats", Send, "Enviar mensagem"], ["files", Paperclip, "Arquivos"], ["check", CheckSquare, "Checklist"], ["task", ListTodo, "Tarefa no quadro"]].map(([k, Ic, l]) => (
+                {[["whats", Send, "Enviar mensagem"], ["files", Paperclip, "Arquivos"], ["check", CheckSquare, "Checklist"]].map(([k, Ic, l]) => (
                   <button key={k} className={`sm ${tab === k ? "on" : ""}`} title={l} onClick={() => setTab(k)}><Ic size={14} /><span>{l}</span></button>
                 ))}
               </div>
@@ -505,7 +506,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                 onSend={async (text) => { try { await flush(); const r = await crm.sendLeadMessage(lead.id, text); changed(r.lead); notify("Mensagem enviada pelo WhatsApp.", "success"); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />
             )}
             <h3 className="lp-h3">Atividades pendentes</h3>
-            {pendingEvents.length || checklist.some((c) => !c.done) ? (
+            {pendingEvents.length ? (
               <div className="lp-focus">
                 {pendingEvents.map((ev) => {
                   const late = new Date(ev.startsAt) < new Date();
@@ -521,14 +522,22 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                     </div>
                   );
                 })}
+
+              </div>
+            ) : <div className="lp-empty">Nenhuma atividade pendente. Registre a próxima Ligação, WhatsApp ou Visita para não perder o negócio de vista.</div>}
+            {checklist.some((c) => !c.done) && (
+              <>
+                <h3 className="lp-h3">Checklist <small className="lp-muted" style={{ fontWeight: 400, fontSize: 12 }}>· {checklist.filter((c) => c.done).length}/{checklist.length} feitos</small></h3>
+                <div className="lp-focus lp-check-list">
                 {checklist.filter((c) => !c.done).map((c) => (
                   <div key={c.id} className="lp-focus-item">
                     <button className="lp-round" onClick={() => { const l = checklist.map((x) => (x.id === c.id ? { ...x, done: true } : x)); setChecklist(l); schedule(); }} title="Marcar feito" />
                     <div><strong>{c.text}</strong><span><CheckSquare size={12} /> Checklist</span></div>
                   </div>
                 ))}
-              </div>
-            ) : <div className="lp-empty">Nada pendente. Agende a próxima atividade para não perder o negócio de vista.</div>}
+                </div>
+              </>
+            )}
 
             {/* Fixados */}
             {history.some((h) => pinned.includes(h.id)) && (

@@ -37,6 +37,7 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
         <header className="cl-head">
           <span className="cl-ico"><Building2 size={22} /></span>
           <div className="cl-who">
+            <span className="kind-badge cliente">Cliente</span>
             <h2>{c?.name || "Carregando…"}</h2>
             <small>{[c?.doc && `${c.docType} ${fmtDoc(c.doc)}`, c?.phone && fmtPhone(c.phone), c?.email].filter(Boolean).join(" · ")}</small>
           </div>
@@ -61,23 +62,15 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
         <div className="cl-body">
           {data && tab === "history" && !data.deals.length && <div className="cl-pend"><div className="ap-empty">Este cliente ainda não tem negócio. Clique em <b>Adicionar negócio</b> para começar e registrar atividades.</div></div>}
           {data && tab === "history" && data.deals.length > 0 && (
-            <div className="lp-composer cl-comp">
-              <div className="lp-tabs ag">
-                {AG_TABS.map(([k, Ic, l]) => <button key={k} className={act === k ? "on" : ""} onClick={() => setAct(k)}><Ic size={15} /> {l}</button>)}
-              </div>
-              <div className="lp-tab-body">
-                <label className="cl-deal-pick">Negócio
-                  <select value={dealId} onChange={(e) => setDealId(e.target.value)}>
-                    {data.deals.map((d) => <option key={d.id} value={d.id}>{d.pipeline} · {d.name}{d.outcome === "won" ? " (ganho)" : d.outcome === "lost" ? " (perdido)" : ""}</option>)}
-                  </select>
-                </label>
-                {act === "note"
-                  ? <NoteBox onSave={async (t) => { try { await crm.addLeadNote(dealId, t); load(); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />
-                  : <AgActivity key={act} kind={act} team={ctx?.team || []} me={ctx?.profile} defaultOwner={ctx?.profile?.id}
-                      uploadFile={async (file) => { const l = await crm.uploadLeadFile(dealId, file); const a = (l.attachments || []).slice(-1)[0]; return a ? { name: a.name, url: a.url } : null; }}
-                      onCancel={() => setAct("note")}
-                      onSave={async (a) => { try { await crm.createEvent({ ...a, leadId: dealId }); notify(a.done ? "Atividade registrada." : "Atividade agendada.", "success"); setAct("note"); load(); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
-              </div>
+            <div className="cl-deals">
+              {data.deals.map((d) => (
+                <button key={d.id} className={`cl-dc ${d.outcome || "open"}`} onClick={() => { onClose(); openLead(d.id); }} title="Abrir este negócio para registrar atividades">
+                  <small>{d.pipeline}</small>
+                  <strong>{d.name}</strong>
+                  <span className="cl-dc-row"><span className="cl-stage" style={{ "--c": d.stageColor || "#0071e3" }}>{d.outcome === "won" ? "🏆 Ganho" : d.outcome === "lost" ? "Perdido" : d.stage || "—"}</span><b>{d.value != null ? brl(d.value) : ""}</b></span>
+                  <em>Abrir negócio →</em>
+                </button>
+              ))}
             </div>
           )}
           {!data && <div className="ap-empty">Carregando…</div>}
@@ -101,24 +94,24 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
           {data && tab === "history" && (
             <div className="cl-hist">
               {events.filter((e) => !e.done).length > 0 && <div className="cl-pend">
-                <strong>Atividades pendentes</strong>
+                <strong>Atividades pendentes <small className="lp-muted" style={{ fontWeight: 400 }}>· clique para abrir o negócio</small></strong>
                 {events.filter((e) => !e.done).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt)).map((e) => (
                   <div key={e.id} className="lp-focus-item">
                     <span className="lp-ag-ic">{agIcon(e.kind)}</span>
-                    <div className="lp-ag-click" onClick={() => setEdit(e)}><small className="lp-ag-k">{EV_KIND[e.kind] || e.kind} · {e.leadName}</small><strong>{e.title}</strong>
+                    <div className="lp-ag-click" onClick={() => { onClose(); openLead(e.leadId); }}><small className="lp-ag-k">{EV_KIND[e.kind] || e.kind} · {e.leadName}</small><strong>{e.title}</strong>
                       <span className={`lp-ag-due ${new Date(e.startsAt) < new Date() ? "late" : ""}`}>Prazo: {when(e.startsAt)}{e.ownerName ? ` · ${e.ownerName}` : ""}</span></div>
-                    <label className="lp-fin"><input type="checkbox" onChange={async () => { await crm.updateEvent(e.id, { done: true }); load(); }} /> Finalizar</label>
                   </div>
                 ))}
               </div>}
               {[...data.history, ...events.filter((e) => e.done).map((e) => ({ id: `ev-${e.id}`, at: e.startsAt, type: "event", ev: e, dealName: e.leadName, by: e.ownerName }))].sort((a, b) => new Date(b.at) - new Date(a.at)).map((h) => (
                 <div key={h.id || h.at} className="cl-h">
                   <small className="cl-h-deal">{h.dealName}</small>
-                  <div className={`cl-h-text ${h.ev ? "lp-ag-click" : ""}`} onClick={() => h.ev && setEdit(h.ev)}>{h.ev ? <>{agIcon(h.ev.kind, 13)} <strong>{EV_KIND[h.ev.kind] || h.ev.kind} ✓</strong> {h.ev.notes || h.ev.title}</> : histText(h)}</div>
+                  <div className={`cl-h-text ${h.ev ? "lp-ag-click" : ""}`} onClick={() => h.leadId && (onClose(), openLead(h.leadId))}>{h.ev ? <>{agIcon(h.ev.kind, 13)} <strong>{EV_KIND[h.ev.kind] || h.ev.kind} ✓</strong> {h.ev.notes || h.ev.title}</> : histText(h)}</div>
                   <small>{when(h.at)}{h.by ? ` · ${h.by}` : ""}</small>
                 </div>
               ))}
               {!data.history.length && !events.length && <div className="ap-empty">Nada registrado ainda.</div>}
+              <p className="cl-hint">Para registrar uma ligação, WhatsApp ou visita, abra o negócio acima.</p>
             </div>
           )}
           {data && tab === "people" && (
@@ -139,15 +132,6 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
         </div>
         {data && (
           <aside className="cl-side">
-            <div className="lp-actions">
-              <h4>Ações</h4>
-              <div>
-                <button onClick={() => (c.email ? integrations.myEmail().then((m) => (m.connected ? setMail({ to: c.email }) : (window.location.href = `mailto:${c.email}`))).catch(() => (window.location.href = `mailto:${c.email}`)) : notify("Este cliente não tem e-mail cadastrado.", "error"))}><Mail size={15} /> Enviar e-mail</button>
-                <button onClick={() => (c.phone ? (window.location.href = `tel:+${String(c.phone).replace(/\D/g, "")}`) : notify("Este cliente não tem telefone.", "error"))}><Phone size={15} /> Fazer ligação</button>
-                <button onClick={() => { const conv = data.people.find((p) => p.conversationId); if (conv && ctx?.onOpenConversation) { onClose(); ctx.onOpenConversation(conv.conversationId); } else if (c.phone) window.open(`https://wa.me/${String(c.phone).replace(/\D/g, "")}`, "_blank"); }}><MessageCircle size={15} /> Enviar WhatsApp</button>
-                <button onClick={() => setAdding(true)}><Plus size={15} /> Novo negócio</button>
-              </div>
-            </div>
             <div className="cl-data">
               <h4 style={{ display: "flex", justifyContent: "space-between" }}>Dados do cliente <button className="lp-link sm" onClick={() => setEditing(true)}>{data.register ? "Editar" : "Completar cadastro"}</button></h4>
               {[[c.docType || "CPF/CNPJ", c.doc ? fmtDoc(c.doc) : ""], ["Razão social", data.register?.legalName], ["Empresa", c.company], ["Categoria", data.register?.category], ["Setor", data.register?.sector], ["Endereço", data.register?.address], ["Descrição", data.register?.description], ["Telefone", c.phone ? fmtPhone(c.phone) : ""], ["E-mail", c.email], ["Origem", data.register?.source || data.origin], ["Responsável", data.deals.find((d) => d.owner)?.owner], ["Cliente desde", data.deals.length ? new Date(data.deals.reduce((m, d) => (d.createdAt < m ? d.createdAt : m), data.deals[0].createdAt)).toLocaleDateString("pt-BR") : ""]].filter(([k, v]) => v || ["Telefone", "E-mail", "Responsável"].includes(k) || k === (c.docType || "CPF/CNPJ")).map(([k, v]) => (
