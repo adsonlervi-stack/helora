@@ -5,7 +5,7 @@ import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
   Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown, MoreHorizontal, Mail
-  , AlertTriangle as AlertTriangleIc, CalendarCheck, ChevronDown
+  , AlertTriangle as AlertTriangleIc, CalendarCheck, ChevronDown, CircleDollarSign, Building2, User as UserIc
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
@@ -19,7 +19,7 @@ import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
 import CrmCliente from "./CrmCliente.jsx";
 import CrmActivities from "./CrmActivities.jsx";
-import CrmEmpresas, { ClientsSidePanel } from "./CrmEmpresas.jsx";
+import CrmEmpresas, { ClientsSidePanel, ClientForm } from "./CrmEmpresas.jsx";
 import CrmReportSheet from "./CrmReportSheet.jsx";
 
 const COLORS = ["#0a84ff", "#5ac8fa", "#bf5af2", "#ff375f", "#ff9f0a", "#ffcc00", "#30d158", "#64d2ff", "#8e8e93", "#ac8e68"];
@@ -136,6 +136,8 @@ function FunnelView({ ctx }) {
   const [dragId, setDragId] = useState(null);
   const [clientId, setClientId] = useState(null);
   const [moreNav, setMoreNav] = useState(false);
+  const [newMenu, setNewMenu] = useState(false);
+  const [clientForm, setClientForm] = useState(null);
   const [sidePanel, setSidePanelS] = useState(() => { try { return localStorage.getItem("helora_crm_side") === "1"; } catch { return false; } });
   const setSidePanel = (v) => { setSidePanelS(v); try { localStorage.setItem("helora_crm_side", v ? "1" : "0"); } catch {} };
   const [nextAct, setNextAct] = useState(new Map());
@@ -396,7 +398,20 @@ function FunnelView({ ctx }) {
             </div>
           );
         })()}
-        {!all && <Button onClick={() => setOpen({ isNew: true, stage: stages[0]?.id })}><Plus size={15} /> Novo lead</Button>}
+        <span className="crm-new">
+          <Button onClick={() => setNewMenu((v) => !v)}><Plus size={15} /> Adicionar <ChevronDown size={14} /></Button>
+          {newMenu && (
+            <span className="crm-new-menu" onMouseLeave={() => setNewMenu(false)}>
+              <span className="crm-new-row">
+                <button className="soft" onClick={() => { setNewMenu(false); setImporting(true); }} disabled={all} title={all ? "Escolha um funil para importar" : ""}><Upload size={16} /> Importar</button>
+                <button className="soft" onClick={() => { setNewMenu(false); setReporting(true); }}><Download size={16} /> Exportar</button>
+              </span>
+              <button onClick={() => { setNewMenu(false); setClientForm({ kind: "empresa" }); }}><Building2 size={17} /> Adicionar uma empresa</button>
+              <button onClick={() => { setNewMenu(false); setClientForm({ kind: "pessoa" }); }}><UserIc size={17} /> Adicionar uma pessoa</button>
+              <button onClick={() => { setNewMenu(false); if (all) return notify("Escolha um funil para adicionar o negócio.", "error"); setOpen({ isNew: true, stage: stages[0]?.id }); }}><CircleDollarSign size={17} /> Adicionar um negócio</button>
+            </span>
+          )}
+        </span>
       </div>
 
       {view === "list" && <LeadTable leads={leads} pipeById={pipeById} team={ctx.team || []} onOpen={(l) => setOpen(l)} />}
@@ -540,6 +555,7 @@ function FunnelView({ ctx }) {
         </Sheet>
       )}
       {importing && <ImportSheet ctx={ctx} onClose={() => setImporting(false)} onDone={() => { setImporting(false); load(); ctx.loadTags(); }} />}
+      {clientForm && <ClientForm initial={clientForm} team={ctx.team || []} me={ctx.profile} onClose={() => setClientForm(null)} onSaved={(c) => { setClientForm(null); if (c?.id) setClientId(`c:${c.id}`); }} />}
       {cadOpen && pipeline && <CadenceSheet pipeline={pipeline} onClose={() => setCadOpen(false)} onSave={async (st) => { await saveStages(st); setCadOpen(false); }} />}
       {autoOpen && pipeline && <AutomationsSheet pipeline={pipeline} pipelines={pipelines} tags={tags} team={ctx.team || []} departments={ctx.departments || []} onClose={() => setAutoOpen(false)} onSaved={() => { setAutoOpen(false); loadPipelines(); }} />}
       {clientId && <CrmCliente leadId={clientId} ctx={ctx} onClose={() => { setClientId(null); load(); }} />}

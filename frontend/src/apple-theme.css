@@ -3331,3 +3331,12 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .crm-more-menu button{border:0;background:none;text-align:left;padding:8px 10px;border-radius:8px;font:inherit;font-size:14px;cursor:pointer;color:#1d1d1f}
 .crm-more-menu button:hover{background:#eaf3ff;color:#0071e3}
 .crm-more-menu hr{border:0;border-top:1px solid #eee;margin:4px 0}
+
+.crm-new{position:relative;display:inline-flex}
+.crm-new-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:50;background:#fff;border:1px solid #e5e5ea;border-radius:16px;box-shadow:0 18px 44px rgba(0,0,0,.16);padding:14px;width:330px;display:flex;flex-direction:column;gap:10px}
+.crm-new-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.crm-new-menu button{display:flex;align-items:center;gap:12px;border:0;border-radius:10px;padding:13px 16px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;background:#0071e3;color:#fff;text-align:left}
+.crm-new-menu button:hover{background:#0062c4}
+.crm-new-menu button.soft{background:#eef0f6;color:#1d1d1f;justify-content:center}
+.crm-new-menu button.soft svg{color:#0071e3}.crm-new-menu button.soft:hover{background:#e3e7f2}
+.crm-new-menu button:disabled{opacity:.5;cursor:default}
