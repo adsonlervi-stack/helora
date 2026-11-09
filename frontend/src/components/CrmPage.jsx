@@ -128,7 +128,7 @@ function FunnelView({ ctx }) {
   const [flt, setFlt] = useState({ owner: "", tag: "", outcome: "", fields: {} });
   const [fltOpen, setFltOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [view, setView] = useState("board"); // board | snoozed | archived
+  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get("lead") ? "board" : "activities")); // abre em Atividades, como o Agendor
   const [side, setSide] = useState(null); // leads arquivados / reagendados
   const [exporting, setExporting] = useState(false);
   const [autoOpen, setAutoOpen] = useState(false);
