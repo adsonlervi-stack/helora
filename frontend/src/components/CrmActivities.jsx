@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Clock, Building2 } from "lucide-react";
+import { Plus, Clock, Building2, List, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { crm } from "../api.js";
 import { notify } from "../dialogs.js";
-import { EV_KIND, agIcon } from "./CrmLeadPage.jsx";
+import { EV_KIND, agIcon, EditActivity } from "./CrmLeadPage.jsx";
 
 const KINDS = ["email", "call", "whatsapp", "proposta", "visita", "reuniao", "tarefa"];
 const fmt = (d) => {
@@ -21,6 +21,8 @@ export default function CrmActivities({ ctx, onOpenLead }) {
   const [status, setStatus] = useState("0");
   const [owner, setOwner] = useState(me || "");
   const [period, setPeriod] = useState("");
+  const [mode, setMode] = useState("list");
+  const [edit, setEdit] = useState(null);
   const load = () => crm.events({ done: status || undefined, ownerId: owner || undefined }).then(setList).catch((e) => { notify(e?.response?.data?.error || e.message, "error"); setList([]); });
   useEffect(() => { setList(null); load(); }, [status, owner]);
 
@@ -32,7 +34,7 @@ export default function CrmActivities({ ctx, onOpenLead }) {
       if (String(e.kind).startsWith("cad_") && !kinds.length) { /* cadência entra junto */ }
       const k = String(e.kind).replace(/^cad_(meeting|task|whats)$/, (m, x) => ({ meeting: "reuniao", task: "tarefa", whats: "whatsapp" })[x]).replace("cad_call", "call").replace("cad_email", "email");
       if (kinds.length && !kinds.includes(k)) return false;
-      if (owner && e.ownerId && e.ownerId !== owner) return false;
+      if (owner && !(e.owners || [e.ownerId]).includes(owner)) return false;
       const d = new Date(e.startsAt);
       if (period === "atrasadas") return !e.done && d < now;
       if (period === "hoje") return d >= t0 && d < end(1);
@@ -61,6 +63,10 @@ export default function CrmActivities({ ctx, onOpenLead }) {
           {[["", "Todas"], ["0", "Pendentes"], ["1", "Finalizadas"]].map(([k, l]) => <button key={k} className={status === k ? "on" : ""} onClick={() => setStatus(k)}>{l}</button>)}
         </div>
         <span style={{ flex: 1 }} />
+        <div className="ac-seg">
+          <button className={mode === "list" ? "on" : ""} onClick={() => setMode("list")}><List size={14} /> Listagem</button>
+          <button className={mode === "cal" ? "on" : ""} onClick={() => setMode("cal")}><CalendarDays size={14} /> Calendário</button>
+        </div>
         <select value={period} onChange={(e) => setPeriod(e.target.value)}>{PERIODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <select value={owner} onChange={(e) => setOwner(e.target.value)}>
           <option value="">Todos os responsáveis</option>
@@ -74,7 +80,9 @@ export default function CrmActivities({ ctx, onOpenLead }) {
       </div>
       {!list && <div className="ap-empty">Carregando…</div>}
       {list && !rows.length && <div className="ap-empty">Nenhuma atividade com esses filtros.</div>}
-      {rows.map((e) => {
+      {edit && <EditActivity ev={edit} team={ctx.team || []} me={ctx.profile} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
+      {mode === "cal" && list && <MonthCal rows={rows} onPick={setEdit} />}
+      {mode === "list" && rows.map((e) => {
         const isLate = !e.done && new Date(e.startsAt) < new Date();
         const today = new Date(e.startsAt).toDateString() === new Date().toDateString();
         return (
@@ -86,17 +94,54 @@ export default function CrmActivities({ ctx, onOpenLead }) {
             )}
             <div className="ac-main">
               <span className="lp-ag-ic">{agIcon(e.kind)}</span>
-              <div className="ac-t">
+              <div className="ac-t lp-ag-click" onClick={() => setEdit(e)} title="Clique para editar">
                 <strong>{EV_KIND[e.kind] || e.kind}</strong>
                 <small>{e.ownerName ? `Responsável: ${e.ownerName}` : ""}</small>
               </div>
               <span className={`ac-due ${e.done ? "ok" : isLate ? "late" : today ? "today" : ""}`}><Clock size={12} /> {e.done ? "Feita" : "Prazo"}: {fmt(e.startsAt)}</span>
               <label className="lp-fin"><input type="checkbox" checked={!!e.done} onChange={(x) => finish(e, x.target.checked)} /> Finalizar</label>
             </div>
-            <div className="ac-text">{e.notes || e.title}</div>
+            <div className="ac-text lp-ag-click" onClick={() => setEdit(e)}>{e.notes || e.title}{e.files?.length ? <div className="lp-ag-files">{e.files.map((x, i) => <a key={i} href={x.url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>📎 {x.name}</a>)}</div> : null}</div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Calendário do mês com as atividades em cada dia. */
+function MonthCal({ rows, onPick }) {
+  const [ref, setRef] = useState(() => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; });
+  const start = new Date(ref); start.setDate(1 - ((ref.getDay() + 6) % 7));
+  const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
+  const by = new Map();
+  for (const e of rows) { const k = new Date(e.startsAt).toDateString(); by.set(k, [...(by.get(k) || []), e]); }
+  const move = (n) => setRef((r) => { const d = new Date(r); d.setMonth(d.getMonth() + n); return d; });
+  const today = new Date().toDateString();
+  return (
+    <div className="mc">
+      <div className="mc-head">
+        <button className="lp-icon" onClick={() => move(-1)}><ChevronLeft size={18} /></button>
+        <strong>{ref.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}</strong>
+        <button className="lp-icon" onClick={() => move(1)}><ChevronRight size={18} /></button>
+      </div>
+      <div className="mc-grid">
+        {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d) => <div key={d} className="mc-wd">{d}</div>)}
+        {days.map((d) => {
+          const list = (by.get(d.toDateString()) || []).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+          return (
+            <div key={d.toISOString()} className={`mc-day ${d.getMonth() !== ref.getMonth() ? "out" : ""} ${d.toDateString() === today ? "today" : ""}`}>
+              <span className="mc-n">{d.getDate()}</span>
+              {list.slice(0, 4).map((e) => (
+                <button key={e.id} className={`mc-ev ${e.done ? "done" : new Date(e.startsAt) < new Date() ? "late" : ""}`} onClick={() => onPick(e)} title={`${EV_KIND[e.kind] || e.kind}: ${e.title}${e.leadName ? ` · ${e.leadName}` : ""}`}>
+                  {agIcon(e.kind, 11)} {new Date(e.startsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} {e.leadName || e.title}
+                </button>
+              ))}
+              {list.length > 4 && <small className="mc-more">+{list.length - 4}</small>}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

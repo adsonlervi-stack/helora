@@ -7,7 +7,8 @@ import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
   Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin, Pencil, Users, MapPin
 } from "lucide-react";
-import { crm, createTaskApi } from "../api.js";
+import { crm, createTaskApi, integrations } from "../api.js";
+import MailBox from "./MailBox.jsx";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
@@ -57,7 +58,8 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
   const [checklist, setChecklist] = useState(initial.checklist || []);
   const [events, setEvents] = useState([]);
   const [tab, setTab] = useState("note");
-  const [moreTab, setMoreTab] = useState(false);
+  const [editEv, setEditEv] = useState(null);
+  const [mailTo, setMailTo] = useState(null);
   const [histFilter, setHistFilter] = useState("all");
   const [saving, setSaving] = useState("");
   const [open, setOpen] = useState({ resumo: true, produtos: true, detalhes: true, contato: true });
@@ -247,7 +249,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
       </div>
     )}
     {h.type === "whats" && <div className="lp-note whats"><p>{h.text}</p></div>}
-    {h.type === "event" && <div className="lp-tl-text"><strong>{h.ev.title}</strong> · {EV_KIND[h.ev.kind] || h.ev.kind}{h.ev.done ? " · feito ✓" : ""}</div>}
+    {h.type === "event" && <div className="lp-tl-text lp-ag-click" onClick={() => setEditEv(h.ev)}><strong>{EV_KIND[h.ev.kind] || h.ev.kind}{h.ev.done ? " ✓ feita" : " · pendente"}</strong>{h.ev.ownerName ? ` · ${h.ev.ownerName}` : ""}<div className="lp-ag-note">{h.ev.notes || h.ev.title}</div>{h.ev.files?.length ? <div className="lp-ag-files">{h.ev.files.map((x, i) => <a key={i} href={x.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}><Paperclip size={12} /> {x.name}</a>)}</div> : null}</div>}
     {h.type === "stage" && <div className="lp-tl-text">Etapa: {stageName(h.fromPipeline, h.from)} <ArrowRight size={12} /> <strong>{stageName(h.toPipeline, h.to)}</strong></div>}
     {h.type === "owner" && <div className="lp-tl-text">Responsável: <strong>{memberName(h.to)}</strong></div>}
     {h.type === "value" && <div className="lp-tl-text">Valor: {brl(h.from)} <ArrowRight size={12} /> <strong>{brl(h.to)}</strong></div>}
@@ -329,6 +331,15 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
         <div className="lp-body">
           {/* ---------- Coluna esquerda ---------- */}
           <aside className="lp-left">
+            <div className="lp-actions">
+              <h4>Ações</h4>
+              <div>
+                <button onClick={() => (f.email ? integrations.myEmail().then((m) => (m.connected ? setMailTo({ to: f.email }) : (window.location.href = `mailto:${f.email}`))).catch(() => (window.location.href = `mailto:${f.email}`)) : notify("Cadastre o e-mail do cliente em Pessoa.", "error"))}><Mail size={15} /> Enviar e-mail</button>
+                <button onClick={() => { if (!f.phone) return notify("Cadastre o telefone em Pessoa.", "error"); window.location.href = `tel:+${String(f.phone).replace(/\D/g, "")}`; setTab("call"); }}><Phone size={15} /> Fazer ligação</button>
+                <button onClick={() => setTab("proposta")}><FileText size={15} /> Gerar proposta</button>
+                <button onClick={() => setTab("whats")}><MessageCircle size={15} /> Enviar WhatsApp</button>
+              </div>
+            </div>
             <Section title="Resumo" open={open.resumo} onToggle={() => setOpen((o) => ({ ...o, resumo: !o.resumo }))}>
               <div className="lp-sum-row">
                 <span className="lp-sum-ico">R$</span>
@@ -440,6 +451,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                 {tab === "note" && <NoteBox onSave={async (t) => { try { changed(await crm.addLeadNote(lead.id, t)); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
                 {AG_TABS.some((x) => x[0] === tab) && tab !== "note" && tab !== "reuniao" && (
                   <AgActivity key={tab} kind={tab} team={team} me={ctx.profile} defaultOwner={f.ownerId}
+                    uploadFile={async (file) => { const l = await crm.uploadLeadFile(lead.id, file); changed(l); const a = [...(l.attachments || [])].reverse().find((x) => x.name === file.name) || (l.attachments || []).slice(-1)[0]; return a ? { name: a.name, url: a.url } : null; }}
                     onCancel={() => setTab("note")}
                     onSave={async (a) => {
                       try { await crm.createEvent({ ...a, leadId: lead.id }); loadEvents(); notify(a.done ? "Atividade registrada." : "Atividade agendada.", "success"); setTab("note"); return true; }
@@ -500,7 +512,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                   return (
                     <div key={ev.id} className="lp-focus-item">
                       <span className="lp-ag-ic">{agIcon(ev.kind)}</span>
-                      <div>
+                      <div className="lp-ag-click" title="Clique para editar" onClick={() => setEditEv(ev)}>
                         <small className="lp-ag-k">{EV_KIND[ev.kind] || ev.kind}{ev.ownerName ? ` · ${ev.ownerName}` : ""}</small>
                         <strong>{ev.title}</strong>
                         <span className={`lp-ag-due ${late ? "late" : ""}`}><Clock size={12} /> Prazo: {when(ev.startsAt)}</span>
@@ -545,6 +557,8 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
             </div>
           </main>
         </div>
+        {mailTo && <MailBox compose={mailTo} onClose={() => setMailTo(null)} />}
+        {editEv && <EditActivity ev={editEv} team={team} me={ctx.profile} onClose={() => setEditEv(null)} onSaved={() => { setEditEv(null); loadEvents(); }} />}
       </div>
     </div>,
     document.body
@@ -584,39 +598,92 @@ const AG_TABS = [["note", StickyNote, "Nota"], ["email", Mail, "E-mail"], ["call
 export const agIcon = (k, size = 15) => { const I = { email: Mail, call: Phone, cad_call: Phone, whatsapp: MessageCircle, cad_whats: MessageCircle, proposta: FileText, reuniao: Users, cad_meeting: Users, visita: MapPin, tarefa: CheckSquare, cad_task: CheckSquare, cad_email: Mail }[k] || CalendarDays; return <I size={size} />; };
 
 /** Registro rápido de atividade, igual ao Agendor: o que foi feito / próximo passo, responsável, prazo e horário. */
-function AgActivity({ kind, team, me, defaultOwner, onSave, onCancel }) {
+function AgActivity({ kind, team, me, defaultOwner, onSave, onCancel, uploadFile }) {
   const now = new Date();
   const [text, setText] = useState("");
-  const [owner, setOwner] = useState(defaultOwner || me?.id || "");
-  const [date, setDate] = useState(now.toISOString().slice(0, 10));
+  const [owners, setOwners] = useState([defaultOwner || me?.id].filter(Boolean));
+  const [date, setDate] = useState(toLocalInput(now).slice(0, 10));
   const [time, setTime] = useState(now.toTimeString().slice(0, 5));
   const [done, setDone] = useState(false);
+  const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const label = EV_KIND[kind];
+  const ref = useRef(null);
   const save = async () => {
     setBusy(true);
     const startsAt = new Date(`${date}T${time || "09:00"}:00`).toISOString();
-    if (await onSave({ kind, title: (text.trim() || label).slice(0, 120), notes: text.trim().length > 120 ? text.trim() : null, ownerId: owner || undefined, startsAt, done })) setText("");
+    const t = text.trim();
+    if (await onSave({ kind, title: (t.split("\n")[0] || label).slice(0, 120), notes: t || null, owners, ownerId: owners[0], startsAt, done, files })) { setText(""); setFiles([]); }
     setBusy(false);
   };
   return (
     <div className="lp-ag">
       <textarea rows={3} autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder={`${label}: o que foi feito e qual o próximo passo?`} />
       <div className="lp-ag-row">
-        <label><span>Responsável</span>
-          <select value={owner} onChange={(e) => setOwner(e.target.value)}>
-            {team.map((m) => <option key={m.id} value={m.id}>{m.id === me?.id ? `Eu (${(m.name || "").split(" ")[0]})` : m.name || m.email}</option>)}
-          </select></label>
+        <label><span>Responsáveis</span><OwnersPicker team={team} me={me} value={owners} onChange={setOwners} /></label>
         <label><span>Prazo</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
         <label><span>Horário</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>
       </div>
+      {files.length > 0 && <div className="lp-ag-files">{files.map((x, i) => <span key={i}><Paperclip size={12} /> {x.name}<button onClick={() => setFiles((l) => l.filter((_, j) => j !== i))}><X size={11} /></button></span>)}</div>}
       <div className="lp-ag-foot">
-        <label className="lp-fin"><input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> Já foi feita (registrar no histórico)</label>
+        {uploadFile && <button className="lp-ghost" disabled={busy} onClick={() => ref.current?.click()}><Paperclip size={14} /> Adicionar anexo</button>}
+        <input ref={ref} type="file" multiple hidden onChange={async (e) => { const l = [...(e.target.files || [])]; e.target.value = ""; setBusy(true); for (const fl of l) { try { const r = await uploadFile(fl); if (r) setFiles((x) => [...x, r]); } catch (er) { notify(errText(er), "error"); } } setBusy(false); }} />
+        <label className="lp-fin"><input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} /> Já foi feita</label>
         <span style={{ flex: 1 }} />
         <button className="lp-ghost" onClick={onCancel}>Cancelar</button>
         <button className="lp-primary" disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>
       </div>
     </div>
+  );
+}
+
+/** Escolha de um ou mais responsáveis, em chips (igual ao Agendor). */
+export function OwnersPicker({ team, me, value, onChange }) {
+  const name = (id) => { const m = team.find((x) => x.id === id); return id === me?.id ? `Eu (${(m?.name || me?.name || "").split(" ")[0]})` : m?.name || m?.email || "—"; };
+  const rest = team.filter((m) => !value.includes(m.id));
+  return (
+    <div className="lp-owners">
+      {value.map((id) => <span key={id}>{name(id)}{value.length > 1 && <button onClick={() => onChange(value.filter((x) => x !== id))}><X size={11} /></button>}</span>)}
+      {rest.length > 0 && <select value="" onChange={(e) => e.target.value && onChange([...value, e.target.value])}><option value="">+</option>{rest.map((m) => <option key={m.id} value={m.id}>{name(m.id)}</option>)}</select>}
+    </div>
+  );
+}
+
+/** Editar uma atividade: texto, tipo, responsáveis, prazo; finalizar ou excluir. */
+export function EditActivity({ ev, team, me, onClose, onSaved }) {
+  const d = new Date(ev.startsAt);
+  const [f, setF] = useState({ kind: ev.kind, text: ev.notes || ev.title || "", owners: ev.owners?.length ? ev.owners : [ev.ownerId].filter(Boolean), date: toLocalInput(d).slice(0, 10), time: d.toTimeString().slice(0, 5), done: !!ev.done });
+  const [busy, setBusy] = useState(false);
+  const kinds = ["email", "call", "whatsapp", "proposta", "reuniao", "visita", "tarefa"];
+  if (!kinds.includes(f.kind)) kinds.push(f.kind);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const t = f.text.trim();
+      await crm.updateEvent(ev.id, { kind: f.kind, title: (t.split("\n")[0] || EV_KIND[f.kind] || f.kind).slice(0, 120), notes: t || null, owners: f.owners, startsAt: new Date(`${f.date}T${f.time || "09:00"}:00`).toISOString(), done: f.done });
+      notify("Atividade atualizada.", "success"); onSaved();
+    } catch (e) { notify(errText(e), "error"); }
+    setBusy(false);
+  };
+  const del = async () => { if (!await askConfirm("Excluir esta atividade?", { okText: "Excluir", danger: true })) return; try { await crm.deleteEvent(ev.id); onSaved(); } catch (e) { notify(errText(e), "error"); } };
+  return createPortal(
+    <div className="lp-overlay" style={{ zIndex: 1300 }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="cl-form ea">
+        <h3>Editar atividade</h3>
+        <div className="full ea-kinds">{kinds.map((k) => <button key={k} className={f.kind === k ? "on" : ""} onClick={() => setF({ ...f, kind: k })}>{agIcon(k, 14)} {EV_KIND[k] || k}</button>)}</div>
+        <label className="full"><span>Descrição</span><textarea rows={4} value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} /></label>
+        <label className="full"><span>Responsáveis</span><OwnersPicker team={team} me={me} value={f.owners} onChange={(owners) => setF({ ...f, owners })} /></label>
+        <label><span>Prazo</span><input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></label>
+        <label><span>Horário</span><input type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></label>
+        {ev.files?.length > 0 && <div className="full lp-ag-files">{ev.files.map((x, i) => <a key={i} href={x.url} target="_blank" rel="noreferrer"><Paperclip size={12} /> {x.name}</a>)}</div>}
+        <label className="full lp-fin"><input type="checkbox" checked={f.done} onChange={(e) => setF({ ...f, done: e.target.checked })} /> Finalizada</label>
+        <div className="cl-form-foot" style={{ justifyContent: "space-between" }}>
+          <button className="lp-btn" style={{ color: "#d70015" }} onClick={del}><Trash2 size={14} /> Excluir</button>
+          <span style={{ display: "flex", gap: 8 }}><button className="lp-btn" onClick={onClose}>Cancelar</button><button className="lp-btn primary" disabled={busy} onClick={save}>Salvar</button></span>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

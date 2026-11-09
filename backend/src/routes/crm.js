@@ -1208,14 +1208,15 @@ router.get("/events", async (req, res) => {
     let q = supabase.from("crm_events").select("*, crm_leads(name, phone, company, pipeline_id), owner:profiles!crm_events_owner_id_fkey(name)").eq("account_id", req.accountId).order("starts_at").limit(2000);
     if (req.query.done === "1") q = q.eq("done", true);
     if (req.query.done === "0") q = q.eq("done", false);
-    if (req.query.ownerId && isManager(req)) q = q.eq("owner_id", req.query.ownerId);
+    if (req.query.ownerId && isManager(req) && /^[0-9a-f-]{36}$/.test(req.query.ownerId)) q = q.or(`owner_id.eq.${req.query.ownerId},notify->owners.cs.["${req.query.ownerId}"]`);
     if (req.query.from) q = q.gte("starts_at", req.query.from);
     if (req.query.to) q = q.lte("starts_at", req.query.to);
     if (req.query.leadId) q = q.eq("lead_id", req.query.leadId);
-    if (!isManager(req)) q = q.eq("owner_id", req.userId);
+    if (!isManager(req)) q = q.or(`owner_id.eq.${req.userId},notify->owners.cs.["${req.userId}"]`);
     const { data, error } = await q;
     if (error) throw error;
     res.json(data.map((e) => ({
+      owners: [e.owner_id, ...((e.notify?.owners || []).filter((x) => x !== e.owner_id))].filter(Boolean), files: e.notify?.files || [],
       id: e.id, title: e.title, kind: e.kind, startsAt: e.starts_at, endsAt: e.ends_at, done: e.done, notes: e.notes,
       leadId: e.lead_id, leadName: e.crm_leads?.name || null, leadCompany: e.crm_leads?.company || null, pipelineId: e.crm_leads?.pipeline_id || null, createdAt: e.created_at, leadPhone: e.crm_leads?.phone || null, ownerId: e.owner_id, ownerName: e.owner?.name || null,
       meetLink: e.meet_link || null, googleEventId: e.google_event_id || null
@@ -1243,7 +1244,8 @@ router.post("/events", async (req, res) => {
     if (!b.startsAt) return res.status(400).json({ error: "Escolha data e hora." });
     const { data, error } = await supabase.from("crm_events").insert({
       account_id: req.accountId, lead_id: b.leadId || null, title: String(b.title || "Reunião").slice(0, 120), kind: String(b.kind || "reuniao").trim().slice(0, 40) || "reuniao",
-      starts_at: b.startsAt, ends_at: b.endsAt || null, notes: b.notes || null, owner_id: b.ownerId || req.userId, done: !!b.done
+      starts_at: b.startsAt, ends_at: b.endsAt || null, notes: b.notes || null, owner_id: (Array.isArray(b.owners) && b.owners[0]) || b.ownerId || req.userId, done: !!b.done,
+      ...(Array.isArray(b.owners) && b.owners.length > 1 || Array.isArray(b.files) && b.files.length ? { notify: { owners: (b.owners || []).slice(1, 10), files: (b.files || []).slice(0, 10) } } : {})
     }).select().single();
     if (error) throw error;
     if (b.leadId) await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", b.leadId);
@@ -1285,6 +1287,13 @@ router.patch("/events/:id", async (req, res) => {
     const b = req.body || {};
     const patch = {};
     for (const [k, col] of [["title", "title"], ["kind", "kind"], ["startsAt", "starts_at"], ["endsAt", "ends_at"], ["notes", "notes"], ["done", "done"]]) if (b[k] !== undefined) patch[col] = b[k];
+    if (Array.isArray(b.owners) || Array.isArray(b.files)) {
+      const { data: cur } = await supabase.from("crm_events").select("notify").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
+      const n = { ...(cur?.notify || {}) };
+      if (Array.isArray(b.owners) && b.owners.length) { patch.owner_id = b.owners[0]; n.owners = b.owners.slice(1, 10); }
+      if (Array.isArray(b.files)) n.files = b.files.slice(0, 10);
+      patch.notify = n;
+    }
     const { data, error } = await supabase.from("crm_events").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
     res.json(data);
