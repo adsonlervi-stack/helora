@@ -3407,3 +3407,15 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 @keyframes plIn{from{opacity:0}to{opacity:1}}
 .pl-bar{position:fixed;top:0;left:0;height:3px;z-index:3000;background:linear-gradient(90deg,#0050b0,#0071e3,#3d8bf0);box-shadow:0 0 10px rgba(0,113,227,.6);border-radius:0 3px 3px 0;transition:width .25s ease,opacity .25s ease .1s;pointer-events:none}
 .pl-wrap{display:none !important}
+
+.gd-login{display:flex;flex-direction:column;align-items:center;gap:12px;padding:26px 10px;text-align:center}
+.gd-login p{margin:0;color:#6e6e73;font-size:13px;max-width:380px}
+.gd-btn{display:inline-flex;align-items:center;gap:10px;border:1px solid #dadce0;background:#fff;border-radius:999px;padding:11px 22px;font:inherit;font-size:15px;font-weight:600;color:#3c4043;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.gd-btn:hover{background:#f8faff;border-color:#c6dafc}
+.gd-top{display:flex;gap:8px;align-items:center}
+.gd-acc{display:block;color:#8e8e93;font-size:12px;margin:6px 2px}
+.gd-list{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow:auto}
+.gd-it{display:flex;align-items:center;gap:10px;border:1px solid #eee;border-radius:12px;padding:8px 10px;background:#fff}
+.gd-ic{font-size:20px;width:28px;text-align:center}
+.gd-n{flex:1;min-width:0}.gd-n strong{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gd-n small{color:#8e8e93;font-size:12px}
+.gd-ok{display:inline-flex;align-items:center;gap:4px;color:#1f9d4a;font-size:13px;font-weight:600}

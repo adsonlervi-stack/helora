@@ -450,7 +450,12 @@ export const adminUploadBoleto = (id, file) => { const fd = new FormData(); fd.a
 // ---- V6: IA (só nos fluxos) ----
 export const aiStatusApi = () => api.get("/ai/status").then((r) => r.data).catch(() => ({ enabled: false }));
 export const googleStatusApi = () => api.get("/google/status").then((r) => r.data).catch(() => ({ configured: false, connected: false }));
-export const googleAuthUrlApi = () => api.get("/google/auth-url").then((r) => r.data.url);
+export const googleAuthUrlApi = (params) => api.get("/google/auth-url", { params }).then((r) => r.data.url);
+export const googleDrive = {
+  status: () => api.get("/google/status", { params: { scopes: 1 } }).then((r) => r.data).catch(() => ({ configured: false, connected: false })),
+  files: (params) => api.get("/google/drive/files", { params }).then((r) => r.data),
+  importFile: (d) => api.post("/google/drive/import", d, { timeout: 0 }).then((r) => r.data)
+};
 export const googleDisconnectApi = () => api.delete("/google");
 export const aiPrompts = {
   list: () => api.get("/ai/prompts").then((r) => r.data),

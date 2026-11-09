@@ -15,14 +15,15 @@ export const googleConfigured = () => !!(process.env.GOOGLE_CLIENT_ID && process
 const SCOPES = "https://www.googleapis.com/auth/calendar.events openid email";
 
 const sign = (v) => crypto.createHmac("sha256", process.env.GOOGLE_CLIENT_SECRET || "x").update(v).digest("hex").slice(0, 32);
-const makeState = (userId, accountId) => { const v = `${userId}.${accountId}.${Date.now()}`; return `${v}.${sign(v)}`; };
+const makeState = (userId, accountId, aba = "") => { const v = `${userId}.${accountId}.${Date.now()}.${String(aba).replace(/[^a-z]/g, "")}`; return `${v}.${sign(v)}`; };
 function readState(state) {
   const parts = String(state || "").split(".");
-  if (parts.length !== 4) return null;
-  const v = parts.slice(0, 3).join(".");
-  if (sign(v) !== parts[3] || Date.now() - Number(parts[2]) > 15 * 60 * 1000) return null;
-  return { userId: parts[0], accountId: parts[1] };
+  if (parts.length !== 4 && parts.length !== 5) return null;
+  const v = parts.slice(0, parts.length - 1).join(".");
+  if (sign(v) !== parts[parts.length - 1] || Date.now() - Number(parts[2]) > 15 * 60 * 1000) return null;
+  return { userId: parts[0], accountId: parts[1], aba: parts.length === 5 ? parts[3] : "" };
 }
+export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 
 async function tokenRequest(params) {
   const r = await fetch("https://oauth2.googleapis.com/token", {
@@ -35,7 +36,7 @@ async function tokenRequest(params) {
   return data;
 }
 
-async function accessTokenFor(userId) {
+export async function accessTokenFor(userId) {
   const { data } = await supabase.from("google_tokens").select("refresh_token").eq("user_id", userId).maybeSingle();
   if (!data?.refresh_token) return null;
   const t = await tokenRequest({ grant_type: "refresh_token", refresh_token: data.refresh_token });
@@ -95,9 +96,9 @@ export async function deleteGoogleEvent(userId, eventId) {
 // Callback público do OAuth (o Google redireciona o navegador pra cá)
 export const googleCallbackRouter = Router();
 googleCallbackRouter.get("/google/callback", async (req, res) => {
-  const back = (ok, msg) => res.redirect(`${FRONT() || "/"}/?google=${ok ? "ok" : "erro"}${msg ? `&msg=${encodeURIComponent(msg)}` : ""}`);
+  const st = readState(req.query.state);
+  const back = (ok, msg) => res.redirect(`${FRONT() || "/"}/?${st?.aba ? `aba=${st.aba}&` : ""}google=${ok ? "ok" : "erro"}${msg ? `&msg=${encodeURIComponent(msg)}` : ""}`);
   try {
-    const st = readState(req.query.state);
     if (!st || !req.query.code) return back(false, "Link expirado. Tente conectar de novo.");
     const t = await tokenRequest({ grant_type: "authorization_code", code: req.query.code, redirect_uri: REDIRECT() });
     let email = null;
@@ -117,18 +118,69 @@ export const googleRouter = Router();
 googleRouter.use(requireAuth);
 googleRouter.get("/status", async (req, res) => {
   const { data } = await supabase.from("google_tokens").select("email, refresh_token").eq("user_id", req.userId).maybeSingle().then((r) => r, () => ({ data: null }));
-  res.json({ configured: googleConfigured(), connected: !!data?.refresh_token, email: data?.email || null });
+  let drive = false;
+  if (data?.refresh_token && req.query.scopes) {
+    try {
+      const tok = await accessTokenFor(req.userId);
+      const info = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${tok}`).then((r) => r.json());
+      drive = String(info.scope || "").includes("drive");
+    } catch {}
+  }
+  res.json({ configured: googleConfigured(), connected: !!data?.refresh_token, email: data?.email || null, drive });
 });
 googleRouter.get("/auth-url", (req, res) => {
   if (!googleConfigured()) return res.status(503).json({ error: "Integração com o Google ainda não configurada. Peça ao suporte Helora." });
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.search = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: REDIRECT(), response_type: "code", scope: SCOPES,
-    access_type: "offline", prompt: "consent", state: makeState(req.userId, req.accountId)
+    client_id: process.env.GOOGLE_CLIENT_ID, redirect_uri: REDIRECT(), response_type: "code", scope: req.query.drive ? `${SCOPES} ${DRIVE_SCOPE}` : SCOPES,
+    access_type: "offline", prompt: "consent", include_granted_scopes: "true", state: makeState(req.userId, req.accountId, req.query.aba || "")
   }).toString();
   res.json({ url: url.toString() });
 });
 googleRouter.delete("/", async (req, res) => {
   await supabase.from("google_tokens").delete().eq("user_id", req.userId);
   res.sendStatus(204);
+});
+
+/* ---------- Google Drive: escolher Docs, Planilhas, Apresentações e PDFs da própria conta para o Cérebro ---------- */
+const DRIVE_TYPES = {
+  "application/vnd.google-apps.document": { kind: "google_docs", export: "text/plain" },
+  "application/vnd.google-apps.spreadsheet": { kind: "google_sheets", export: "text/csv" },
+  "application/vnd.google-apps.presentation": { kind: "google_slides", export: "text/plain" },
+  "application/pdf": { kind: "pdf" }
+};
+googleRouter.get("/drive/files", async (req, res) => {
+  try {
+    const token = await accessTokenFor(req.userId).catch(() => null);
+    if (!token) return res.status(400).json({ error: "Conecte sua conta Google primeiro." });
+    const types = req.query.type && DRIVE_TYPES[req.query.type] ? [req.query.type] : Object.keys(DRIVE_TYPES);
+    const qs = [`(${types.map((t) => `mimeType='${t}'`).join(" or ")})`, "trashed=false"];
+    const term = String(req.query.q || "").replace(/['\\]/g, " ").trim();
+    if (term) qs.push(`name contains '${term}'`);
+    const u = new URL("https://www.googleapis.com/drive/v3/files");
+    u.search = new URLSearchParams({ q: qs.join(" and "), pageSize: "50", orderBy: "modifiedTime desc", fields: "files(id,name,mimeType,modifiedTime,iconLink,owners(displayName))", supportsAllDrives: "true", includeItemsFromAllDrives: "true" });
+    const r = await fetch(u, { headers: { authorization: `Bearer ${token}` } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(r.status === 403 ? 403 : 400).json({ error: r.status === 403 || r.status === 401 ? "Falta permissão do Google Drive. Clique em Entrar com Google de novo." : d?.error?.message || "Falha ao listar arquivos" });
+    res.json((d.files || []).map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, kind: DRIVE_TYPES[f.mimeType]?.kind, modifiedTime: f.modifiedTime, owner: f.owners?.[0]?.displayName || "" })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+googleRouter.post("/drive/import", async (req, res) => {
+  try {
+    const { fileId, name, mimeType, agentIds } = req.body || {};
+    const t = DRIVE_TYPES[mimeType];
+    if (!fileId || !t) return res.status(400).json({ error: "Arquivo inválido." });
+    const token = await accessTokenFor(req.userId).catch(() => null);
+    if (!token) return res.status(400).json({ error: "Conecte sua conta Google primeiro." });
+    const url = t.export ? `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(t.export)}` : `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`;
+    const r = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+    if (!r.ok) return res.status(400).json({ error: "Não consegui ler o arquivo no Google Drive." });
+    const { addDoc, readFile } = await import("./integrations/brain.js");
+    let content;
+    if (t.export) content = await r.text();
+    else { const buf = Buffer.from(await r.arrayBuffer()); content = (await readFile(buf, name || "arquivo.pdf", mimeType)).content; }
+    const link = `https://drive.google.com/open?id=${fileId}`;
+    const out = await addDoc(req.accountId, { source: t.kind, title: name || "Arquivo do Google", url: link, ref: `gdrive:${fileId}`, content, createdBy: req.userId, agentIds: Array.isArray(agentIds) ? agentIds : undefined });
+    res.status(201).json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });

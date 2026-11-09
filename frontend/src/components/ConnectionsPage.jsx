@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Plug, Check, Search, Settings2, Mail, FileText, Sheet as SheetIcon, Palette, Copy, Trash2, RefreshCw, Plus, ExternalLink, Download, Sparkles, Link2 } from "lucide-react";
-import { integrations, crm, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
+import { integrations, crm, googleStatusApi, googleAuthUrlApi, googleDisconnectApi, googleDrive } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import { askConfirm, notify } from "../dialogs.js";
 
@@ -128,19 +128,69 @@ export default function ConnectionsPage({ isManager }) {
   );
 }
 
+const G_TYPE = { "Google Docs": "application/vnd.google-apps.document", "Google Sheets": "application/vnd.google-apps.spreadsheet", "Google Drive": "" };
+const G_ICON = { "application/vnd.google-apps.document": "📄", "application/vnd.google-apps.spreadsheet": "📊", "application/vnd.google-apps.presentation": "📽️", "application/pdf": "📕" };
 function GoogleSheet({ kind, onClose }) {
+  const [st, setSt] = useState(null);
+  const [files, setFiles] = useState(null);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(null);
+  const [done, setDone] = useState({});
   const [link, setLink] = useState("");
-  const [busy, setBusy] = useState(false);
-  const add = async () => {
-    setBusy(true);
+  const [showLink, setShowLink] = useState(false);
+  const type = G_TYPE[kind] || "";
+  useEffect(() => { googleDrive.status().then(setSt); }, []);
+  const load = (term = q) => { setFiles(null); googleDrive.files({ q: term || undefined, type: type || undefined }).then(setFiles).catch((e) => { notify(errText(e), "error"); setFiles([]); if (/permiss/i.test(errText(e))) setSt((x) => ({ ...x, drive: false })); }); };
+  useEffect(() => { if (st?.drive) load(""); }, [st?.drive]);
+  const login = async () => { try { window.location.href = await googleAuthUrlApi({ drive: 1, aba: "connections" }); } catch (e) { notify(errText(e), "error"); } };
+  const pick = async (f) => {
+    setBusy(f.id);
+    try { const r = await googleDrive.importFile({ fileId: f.id, name: f.name, mimeType: f.mimeType }); setDone((d) => ({ ...d, [f.id]: true })); notify(`"${f.name}" foi para o Cérebro (${r.chunks} trechos).`, "success"); }
+    catch (e) { notify(errText(e), "error"); }
+    setBusy(null);
+  };
+  const addLink = async () => {
+    setBusy("link");
     try { const r = await integrations.brainAdd({ url: link.trim() }); notify(`Adicionado ao cérebro (${r.chunks} trechos).`, "success"); setLink(""); }
     catch (e) { notify(errText(e), "error"); }
-    setBusy(false);
+    setBusy(null);
   };
   return (
-    <Sheet title={kind} subtitle="O arquivo vai para o Cérebro. Depois, a Helora IA e os atendentes IA usam o conteúdo para responder. Para conferir, pergunte em Helora IA → Cérebro. No Google, deixe o arquivo em Compartilhar → Qualquer pessoa com o link." onClose={onClose} width={520}
-      footer={<><Button variant="secondary" onClick={onClose}>Fechar</Button><Button disabled={busy || !link.trim()} onClick={add}>{busy ? "Lendo…" : "Adicionar"}</Button></>}>
-      <Group><Row label="Link" stack><input autoFocus value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && link.trim() && add()} placeholder="https://docs.google.com/…" /></Row></Group>
+    <Sheet title={kind} subtitle="Escolha arquivos da sua conta Google. Eles vão para o Cérebro e a Helora IA passa a usar o conteúdo para responder." onClose={onClose} width={600}
+      footer={<Button variant="secondary" onClick={onClose}>Fechar</Button>}>
+      {!st && <div className="ap-empty">Carregando…</div>}
+      {st && st.configured === false && <div className="admin-feedback error">A integração com o Google ainda não está ativa. Fale com o suporte Helora.</div>}
+      {st && st.configured !== false && !st.drive && (
+        <div className="gd-login">
+          <button className="gd-btn" onClick={login}>
+            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+            Entrar com o Google
+          </button>
+          <p>Você escolhe os arquivos da sua conta, sem precisar deixar nada público. O Helora só lê os arquivos que você escolher.</p>
+        </div>
+      )}
+      {st?.drive && (
+        <>
+          <div className="gd-top">
+            <label className="emp-search" style={{ flex: 1 }}><input placeholder={`Buscar ${kind === "Google Sheets" ? "planilha" : kind === "Google Docs" ? "documento" : "arquivo"}`} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} /><Search size={14} /></label>
+            <Button variant="secondary" onClick={() => load()}>Buscar</Button>
+          </div>
+          <small className="gd-acc">Conta: {st.email}</small>
+          <div className="gd-list">
+            {!files && <div className="ap-empty">Carregando seus arquivos…</div>}
+            {files && !files.length && <div className="ap-empty">Nenhum arquivo encontrado.</div>}
+            {files?.map((f) => (
+              <div key={f.id} className="gd-it">
+                <span className="gd-ic">{G_ICON[f.mimeType] || "📄"}</span>
+                <span className="gd-n"><strong>{f.name}</strong><small>{f.modifiedTime ? `Editado em ${new Date(f.modifiedTime).toLocaleDateString("pt-BR")}` : ""}{f.owner ? ` · ${f.owner}` : ""}</small></span>
+                {done[f.id] ? <span className="gd-ok"><Check size={14} /> No Cérebro</span> : <Button disabled={!!busy} onClick={() => pick(f)}>{busy === f.id ? "Lendo…" : "Adicionar"}</Button>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <button className="lp-link sm" style={{ marginTop: 10 }} onClick={() => setShowLink((v) => !v)}>{showLink ? "Esconder" : "Prefiro colar um link público"}</button>
+      {showLink && <Group><Row label="Link" stack><input value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && link.trim() && addLink()} placeholder="https://docs.google.com/… (Compartilhar → Qualquer pessoa com o link)" /></Row><div style={{ display: "flex", justifyContent: "flex-end", padding: 8 }}><Button disabled={busy === "link" || !link.trim()} onClick={addLink}>{busy === "link" ? "Lendo…" : "Adicionar link"}</Button></div></Group>}
     </Sheet>
   );
 }
