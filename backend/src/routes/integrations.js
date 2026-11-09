@@ -7,7 +7,7 @@ import { requireAuth, requireOwner } from "../middleware/auth.js";
 import { integrationsOf, saveIntegration, deleteIntegration, mask, getIntegration } from "../integrations/store.js";
 import { callAI, DEFAULT_MODELS, resolveAI, aiEnabledFor } from "../aiClient.js";
 import { addDoc, readUrl, readFile, askBrain } from "../integrations/brain.js";
-import { testMail, syncMail, mailPreset } from "../integrations/mail.js";
+import { testMail, syncMail, mailPreset, getUserMail, userMailKey, listUserMail, readUserMail, sendUserMail } from "../integrations/mail.js";
 import { canvaAuthUrl, canvaConfigured, listDesigns, createDesign, exportDesign, CANVA_SIZES } from "../integrations/canva.js";
 import { studioChat, studioImage, studioFlow } from "../integrations/studio.js";
 import { learnFromConversations } from "../integrations/learn.js";
@@ -105,6 +105,44 @@ router.post("/email/sync", requireOwner, async (req, res) => {
     const it = await getIntegration(req.accountId, "email");
     if (it) await saveIntegration(req.accountId, "email", { ...it.config, lastSync: new Date().toISOString() });
     res.json(r);
+  } catch (err) { fail(res, err); }
+});
+
+// Caixa de e-mail de cada usuário (Meu Perfil → Integrações)
+router.get("/me/email", async (req, res) => {
+  const c = await getUserMail(req.accountId, req.userId).catch(() => null);
+  res.json(c ? { connected: true, email: c.email, fromName: c.fromName || "" } : { connected: false });
+});
+router.put("/me/email", async (req, res) => {
+  try {
+    const old = await getIntegration(req.accountId, userMailKey(req.userId));
+    const b = req.body || {};
+    const full = await testMail({ ...(old?.config || {}), ...b, password: b.password || old?.config?.password });
+    await saveIntegration(req.accountId, userMailKey(req.userId), { ...full, fromName: b.fromName || old?.config?.fromName || "" });
+    res.json({ ok: true });
+  } catch (err) { fail(res, err); }
+});
+router.delete("/me/email", async (req, res) => { await deleteIntegration(req.accountId, userMailKey(req.userId)); res.json({ ok: true }); });
+const myMail = async (req, res) => {
+  const c = await getUserMail(req.accountId, req.userId);
+  if (!c) { res.status(400).json({ error: "Conecte seu e-mail em Meu Perfil → Integrações." }); return null; }
+  return c;
+};
+router.get("/me/email/messages", async (req, res) => {
+  try { const c = await myMail(req, res); if (!c) return; res.json(await listUserMail(c, { folder: req.query.folder === "SENT" ? "SENT" : "INBOX", q: String(req.query.q || "").slice(0, 80) })); }
+  catch (err) { fail(res, err); }
+});
+router.get("/me/email/messages/:uid", async (req, res) => {
+  try { const c = await myMail(req, res); if (!c) return; res.json(await readUserMail(c, Number(req.params.uid), req.query.folder === "SENT" ? "SENT" : "INBOX")); }
+  catch (err) { fail(res, err); }
+});
+router.post("/me/email/send", upload.array("files", 10), async (req, res) => {
+  try {
+    const c = await myMail(req, res); if (!c) return;
+    const b = req.body || {};
+    if (!b.to || !String(b.to).includes("@")) return res.status(400).json({ error: "Informe o destinatário." });
+    const attachments = (req.files || []).map((f) => ({ filename: f.originalname, content: f.buffer, contentType: f.mimetype }));
+    res.json(await sendUserMail(c, { to: b.to, cc: b.cc, subject: b.subject || "(sem assunto)", text: b.text || "", inReplyTo: b.inReplyTo || undefined, attachments }));
   } catch (err) { fail(res, err); }
 });
 
