@@ -4,6 +4,7 @@ import { Building2, History, Briefcase, Users, Plus, X, Phone, Mail, MessageCirc
 import { crm, integrations } from "../api.js";
 import { AgActivity, NoteBox, AG_TABS, EV_KIND, agIcon, EditActivity } from "./CrmLeadPage.jsx";
 import MailBox from "./MailBox.jsx";
+import { ClientForm } from "./CrmEmpresas.jsx";
 import { notify } from "../dialogs.js";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -24,6 +25,7 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
   const [dealId, setDealId] = useState(leadId);
   const [edit, setEdit] = useState(null);
   const [mail, setMail] = useState(null);
+  const [editing, setEditing] = useState(false);
   const loadEvents = (ids) => crm.events({}).then((l) => setEvents((l || []).filter((e) => ids.includes(e.leadId)))).catch(() => {});
   const load = () => crm.client(leadId).then((d) => { setData(d); loadEvents(d.deals.map((x) => x.id)); if (!d.deals.some((x) => x.id === dealId)) setDealId(d.deals[0]?.id); }).catch((e) => { notify(errText(e), "error"); onClose(); });
   useEffect(() => { setData(null); load(); }, [leadId]);
@@ -57,6 +59,7 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
         </nav>
         <div className="cl-split">
         <div className="cl-body">
+          {data && tab === "history" && !data.deals.length && <div className="cl-pend"><div className="ap-empty">Este cliente ainda não tem negócio. Clique em <b>Adicionar negócio</b> para começar e registrar atividades.</div></div>}
           {data && tab === "history" && data.deals.length > 0 && (
             <div className="lp-composer cl-comp">
               <div className="lp-tabs ag">
@@ -146,8 +149,8 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
               </div>
             </div>
             <div className="cl-data">
-              <h4>Dados do cliente</h4>
-              {[[c.docType || "CPF/CNPJ", c.doc ? fmtDoc(c.doc) : ""], ["Empresa", c.company], ["Telefone", c.phone ? fmtPhone(c.phone) : ""], ["E-mail", c.email], ["Origem", data.origin], ["Responsável", data.deals.find((d) => d.owner)?.owner], ["Cliente desde", data.deals.length ? new Date(data.deals.reduce((m, d) => (d.createdAt < m ? d.createdAt : m), data.deals[0].createdAt)).toLocaleDateString("pt-BR") : ""]].map(([k, v]) => (
+              <h4 style={{ display: "flex", justifyContent: "space-between" }}>Dados do cliente <button className="lp-link sm" onClick={() => setEditing(true)}>{data.register ? "Editar" : "Completar cadastro"}</button></h4>
+              {[[c.docType || "CPF/CNPJ", c.doc ? fmtDoc(c.doc) : ""], ["Razão social", data.register?.legalName], ["Empresa", c.company], ["Categoria", data.register?.category], ["Setor", data.register?.sector], ["Endereço", data.register?.address], ["Descrição", data.register?.description], ["Telefone", c.phone ? fmtPhone(c.phone) : ""], ["E-mail", c.email], ["Origem", data.register?.source || data.origin], ["Responsável", data.deals.find((d) => d.owner)?.owner], ["Cliente desde", data.deals.length ? new Date(data.deals.reduce((m, d) => (d.createdAt < m ? d.createdAt : m), data.deals[0].createdAt)).toLocaleDateString("pt-BR") : ""]].filter(([k, v]) => v || ["Telefone", "E-mail", "Responsável"].includes(k) || k === (c.docType || "CPF/CNPJ")).map(([k, v]) => (
                 <div key={k}><span>{k}</span><strong>{v || "—"}</strong></div>
               ))}
             </div>
@@ -155,6 +158,7 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
         )}
         </div>
         {edit && <EditActivity ev={edit} team={ctx?.team || []} me={ctx?.profile} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
+        {editing && data && <ClientForm initial={data.register ? { ...data.register, doc: c.doc, email: c.email, phone: c.phone } : { kind: c.docType === "CPF" ? "pessoa" : "empresa", name: c.company || c.name, doc: c.doc || "", email: c.email, phone: c.phone, source: data.origin }} team={ctx?.team || []} me={ctx?.profile} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); }} />}
         {mail && <MailBox compose={mail} onClose={() => setMail(null)} />}
         {adding && data && <NewDeal ctx={ctx} client={data.client} onClose={() => setAdding(false)} onDone={() => { setAdding(false); setTab("deals"); load(); }} />}
       </div>

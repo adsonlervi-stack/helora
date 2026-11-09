@@ -505,16 +505,111 @@ router.get("/report", async (req, res) => {
 });
 
 /** Página do cliente: todos os negócios do mesmo cliente (CPF/CNPJ, ou nome+telefone), histórico unido e pessoas. */
+/* ---------------------------------------------------------------- Empresas e Pessoas (cadastro de clientes) */
+let clientsTableOk = null;
+async function hasClientsTable() {
+  if (clientsTableOk !== null) return clientsTableOk;
+  const { error } = await supabase.from("crm_clients").select("id").limit(1);
+  clientsTableOk = !error;
+  if (error) setTimeout(() => { clientsTableOk = null; }, 60000);
+  return clientsTableOk;
+}
+const keyOfClientRow = (c) => (onlyDigits(c.doc).length >= 11 ? onlyDigits(c.doc) : `n:${String(c.name || "").trim().toLowerCase()}|${onlyDigits(c.phone)}`);
+const CLIENT_COLS = { kind: "kind", name: "name", doc: "doc", legalName: "legal_name", email: "email", phone: "phone", ownerId: "owner_id", source: "source", sector: "sector", category: "category", description: "description", address: "address" };
+const clientRow = (b) => {
+  const r = {};
+  for (const [k, col] of Object.entries(CLIENT_COLS)) if (b[k] !== undefined) r[col] = b[k] === "" ? null : k === "doc" || k === "phone" ? onlyDigits(b[k]) || null : String(b[k]).slice(0, 500);
+  if (r.kind && !["empresa", "pessoa"].includes(r.kind)) r.kind = "empresa";
+  return r;
+};
+
+/** Lista de clientes: o cadastro (crm_clients) somado aos clientes que só existem nos negócios. */
+router.get("/companies", async (req, res) => {
+  try {
+    const { data: pipes } = await supabase.from("crm_pipelines").select("id, fields").eq("account_id", req.accountId);
+    const fieldsOf = new Map((pipes || []).map((p) => [p.id, p.fields || []]));
+    const leads = await allLeadsFor(req, "id, name, phone, email, company, source, custom, pipeline_id, value, outcome, owner_id, created_at, archived_at, last_interaction_at, owner:profiles!crm_leads_owner_id_fkey(name)");
+    const map = new Map();
+    for (const l of leads) {
+      const key = clientKeyOf(l, fieldsOf.get(l.pipeline_id));
+      const doc = docOfLead(l, fieldsOf.get(l.pipeline_id));
+      const cur = map.get(key) || { key, clientId: null, leadId: l.id, kind: doc.length === 14 || (!doc && l.company) ? "empresa" : "pessoa", name: l.company && doc.length === 14 ? l.company : l.name, doc, legalName: "", email: "", phone: "", ownerId: l.owner_id, ownerName: l.owner?.name || "", source: l.source || "", sector: "", category: "", deals: 0, open: 0, won: 0, value: 0, createdAt: l.created_at, lastAt: null };
+      cur.deals++; if (!l.outcome && !l.archived_at) cur.open++; if (l.outcome === "won") { cur.won++; cur.value += Number(l.value) || 0; }
+      if (!cur.email && l.email) cur.email = l.email;
+      if (!cur.phone && l.phone) cur.phone = l.phone;
+      if (!cur.ownerName && l.owner?.name) { cur.ownerName = l.owner.name; cur.ownerId = l.owner_id; }
+      if (l.created_at < cur.createdAt) cur.createdAt = l.created_at;
+      const la = l.last_interaction_at || l.created_at;
+      if (!cur.lastAt || la > cur.lastAt) { cur.lastAt = la; cur.leadId = l.id; }
+      map.set(key, cur);
+    }
+    let tableOk = await hasClientsTable();
+    if (tableOk) {
+      let q = supabase.from("crm_clients").select("*, owner:profiles!crm_clients_owner_id_fkey(name)").eq("account_id", req.accountId).limit(20000);
+      if (!isManager(req)) q = q.eq("owner_id", req.userId);
+      let { data, error } = await q;
+      if (error) ({ data, error } = await supabase.from("crm_clients").select("*").eq("account_id", req.accountId).limit(20000));
+      for (const c of data || []) {
+        const key = keyOfClientRow(c);
+        const cur = map.get(key) || { key, leadId: null, deals: 0, open: 0, won: 0, value: 0, lastAt: null, createdAt: c.created_at };
+        map.set(key, { ...cur, clientId: c.id, kind: c.kind, name: c.name, doc: onlyDigits(c.doc) || cur.doc || "", legalName: c.legal_name || "", email: c.email || cur.email || "", phone: c.phone || cur.phone || "",
+          ownerId: c.owner_id || cur.ownerId || null, ownerName: c.owner?.name || cur.ownerName || "", source: c.source || cur.source || "", sector: c.sector || "", category: c.category || "", description: c.description || "", address: c.address || "",
+          createdAt: c.created_at < (cur.createdAt || c.created_at) ? c.created_at : cur.createdAt });
+      }
+    }
+    res.json({ tableOk, rows: [...map.values()] });
+  } catch (err) { fail(res, err); }
+});
+router.post("/companies", async (req, res) => {
+  try {
+    if (!(await hasClientsTable())) return res.status(500).json({ error: "Rode a migration 042 (clientes) no Supabase." });
+    const list = Array.isArray(req.body?.items) ? req.body.items : [req.body || {}];
+    const rows = list.map((b) => ({ ...clientRow(b), account_id: req.accountId, owner_id: b.ownerId || req.userId })).filter((r) => r.name);
+    if (!rows.length) return res.status(400).json({ error: "Informe o nome." });
+    const { data, error } = await supabase.from("crm_clients").insert(rows.slice(0, 2000)).select();
+    if (error) throw error;
+    res.status(201).json(Array.isArray(req.body?.items) ? { created: data.length } : data[0]);
+  } catch (err) { fail(res, err); }
+});
+router.patch("/companies/:id", async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("crm_clients").update({ ...clientRow(req.body || {}), updated_at: new Date().toISOString() }).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { fail(res, err); }
+});
+router.delete("/companies/:id", async (req, res) => {
+  try {
+    if (!isManager(req)) return res.status(403).json({ error: "Só o gestor pode excluir clientes." });
+    const { error } = await supabase.from("crm_clients").delete().eq("account_id", req.accountId).eq("id", req.params.id);
+    if (error) throw error;
+    res.sendStatus(204);
+  } catch (err) { fail(res, err); }
+});
+
 router.get("/client/:leadId", async (req, res) => {
   try {
     const { data: pipes } = await supabase.from("crm_pipelines").select("id, name, stages, fields").eq("account_id", req.accountId);
     const pipeById = new Map((pipes || []).map((p) => [p.id, p]));
-    const { data: base } = await supabase.from("crm_leads").select("id, name, phone, email, company, custom, pipeline_id").eq("account_id", req.accountId).eq("id", req.params.leadId).maybeSingle();
-    if (!base) return res.status(404).json({ error: "Lead não encontrado." });
-    const key = clientKeyOf(base, pipeById.get(base.pipeline_id)?.fields);
+    let reg = null, base = null, key = null;
+    if (req.params.leadId.startsWith("c:")) {
+      const { data: c } = await supabase.from("crm_clients").select("*").eq("account_id", req.accountId).eq("id", req.params.leadId.slice(2)).maybeSingle();
+      if (!c) return res.status(404).json({ error: "Cliente não encontrado." });
+      reg = c; key = keyOfClientRow(c);
+      base = { id: null, name: c.name, phone: c.phone, email: c.email, company: c.kind === "empresa" ? c.name : "", custom: {}, pipeline_id: null };
+    } else {
+      ({ data: base } = await supabase.from("crm_leads").select("id, name, phone, email, company, custom, pipeline_id").eq("account_id", req.accountId).eq("id", req.params.leadId).maybeSingle());
+      if (!base) return res.status(404).json({ error: "Lead não encontrado." });
+      key = clientKeyOf(base, pipeById.get(base.pipeline_id)?.fields);
+    }
+    if (!reg && await hasClientsTable()) {
+      const d = key.startsWith("n:") ? null : key;
+      const { data: rs } = await supabase.from("crm_clients").select("*").eq("account_id", req.accountId).or(d ? `doc.eq.${d}` : `name.ilike.${String(base.name || "").replace(/[,()*]/g, " ")}`).limit(5);
+      reg = (rs || []).find((c) => keyOfClientRow(c) === key) || null;
+    }
     const all = await allLeadsFor(req, "id, name, phone, email, company, source, custom, pipeline_id, stage, value, outcome, owner_id, created_at, archived_at, history, conversation_id, owner:profiles!crm_leads_owner_id_fkey(name)");
     const mine = all.filter((l) => l.id === base.id || clientKeyOf(l, pipeById.get(l.pipeline_id)?.fields) === key);
-    const doc = docOfLead(base, pipeById.get(base.pipeline_id)?.fields) || mine.map((l) => docOfLead(l, pipeById.get(l.pipeline_id)?.fields)).find(Boolean) || "";
+    const doc = (reg && onlyDigits(reg.doc)) || docOfLead(base, pipeById.get(base.pipeline_id)?.fields) || mine.map((l) => docOfLead(l, pipeById.get(l.pipeline_id)?.fields)).find(Boolean) || "";
     const deals = mine.map((l) => {
       const p = pipeById.get(l.pipeline_id) || {};
       return { id: l.id, name: l.name, pipelineId: l.pipeline_id, pipeline: p.name || "", stage: (p.stages || []).find((s) => s.id === l.stage)?.name || "", stageColor: (p.stages || []).find((s) => s.id === l.stage)?.color || null,
@@ -532,7 +627,8 @@ router.get("/client/:leadId", async (req, res) => {
       people.set(k, cur);
     }
     res.json({
-      client: { name: base.name, company: base.company || mine.find((l) => l.company)?.company || "", phone: base.phone || "", email: base.email || mine.find((l) => l.email)?.email || "", doc, docType: doc.length === 14 ? "CNPJ" : doc ? "CPF" : null },
+      register: reg ? { id: reg.id, kind: reg.kind, name: reg.name, legalName: reg.legal_name || "", sector: reg.sector || "", category: reg.category || "", description: reg.description || "", address: reg.address || "", source: reg.source || "", ownerId: reg.owner_id } : null,
+      client: { name: reg?.name || base.name, company: base.company || mine.find((l) => l.company)?.company || "", phone: base.phone || "", email: base.email || mine.find((l) => l.email)?.email || "", doc, docType: doc.length === 14 ? "CNPJ" : doc ? "CPF" : null },
       deals, history, people: [...people.values()], origin: mine.find((l) => l.source)?.source || "",
       totals: { deals: deals.length, open: deals.filter((d) => !d.outcome).length, won: deals.filter((d) => d.outcome === "won").length, value: deals.filter((d) => d.outcome !== "lost").reduce((t, d) => t + (d.value || 0), 0) }
     });

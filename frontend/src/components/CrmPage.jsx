@@ -19,6 +19,7 @@ import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
 import CrmCliente from "./CrmCliente.jsx";
 import CrmActivities from "./CrmActivities.jsx";
+import CrmEmpresas, { ClientsSidePanel } from "./CrmEmpresas.jsx";
 import CrmReportSheet from "./CrmReportSheet.jsx";
 
 const COLORS = ["#0a84ff", "#5ac8fa", "#bf5af2", "#ff375f", "#ff9f0a", "#ffcc00", "#30d158", "#64d2ff", "#8e8e93", "#ac8e68"];
@@ -135,6 +136,8 @@ function FunnelView({ ctx }) {
   const [open, setOpen] = useState(null); // lead | {new:true, stage}
   const [dragId, setDragId] = useState(null);
   const [clientId, setClientId] = useState(null);
+  const [sidePanel, setSidePanelS] = useState(() => { try { return localStorage.getItem("helora_crm_side") === "1"; } catch { return false; } });
+  const setSidePanel = (v) => { setSidePanelS(v); try { localStorage.setItem("helora_crm_side", v ? "1" : "0"); } catch {} };
   const [nextAct, setNextAct] = useState(new Map());
   useEffect(() => {
     crm.events({ done: "0" }).then((l) => {
@@ -197,7 +200,7 @@ function FunnelView({ ctx }) {
   };
   useEffect(() => { setLeads(null); load(); }, [pipelineId, all]);
   const loadSide = () => {
-    if (view === "board" || view === "list" || view === "activities") return setSide(null);
+    if (view === "board" || view === "list" || view === "activities" || view === "clients") return setSide(null);
     setSide(null);
     const params = { ...(all || !pipelineId ? {} : { pipelineId }), ...(view === "archived" ? { archived: "1" } : { snoozed: "1" }) };
     crm.leads(params).then(setSide).catch(() => setSide([]));
@@ -345,10 +348,11 @@ function FunnelView({ ctx }) {
           )}
         </div>
         <div className="crm-views">
-          {[["board", "Funil"], ["list", "Lista"], ["activities", "Atividades"], ["snoozed", "Reagendados"], ["archived", "Arquivados"]].map(([k, l]) => (
+          {[["board", "Funil"], ["list", "Lista"], ["activities", "Atividades"], ["clients", "Empresas"], ["snoozed", "Reagendados"], ["archived", "Arquivados"]].map(([k, l]) => (
             <button key={k} type="button" className={view === k ? "on" : ""} onClick={() => setView(k)}>{l}</button>
           ))}
         </div>
+        {view === "board" && !sidePanel && <button type="button" className="crm-side-btn" onClick={() => setSidePanel(true)} title="Lista de clientes ao lado do funil"><Users size={15} /> Clientes</button>}
         <div style={{ flex: 1 }} />
         {(() => {
           const autoN = pipeline?.automations?.filter((r) => r.active !== false).length || 0;
@@ -384,7 +388,8 @@ function FunnelView({ ctx }) {
 
       {view === "list" && <LeadTable leads={leads} pipeById={pipeById} team={ctx.team || []} onOpen={(l) => setOpen(l)} />}
       {view === "activities" && <CrmActivities ctx={ctx} onOpenLead={(id) => window.dispatchEvent(new CustomEvent("helora:open-lead", { detail: id }))} />}
-      {view !== "board" && view !== "list" && view !== "activities" && (
+      {view === "clients" && <CrmEmpresas ctx={ctx} />}
+      {view !== "board" && view !== "list" && view !== "activities" && view !== "clients" && (
         <div className="crm-side-list">
           {side === null && <div className="cv-muted" style={{ padding: 16 }}>Carregando…</div>}
           {side && !side.length && <div className="ap-empty">{view === "archived" ? "Nenhum card arquivado." : "Nenhum card reagendado."}</div>}
@@ -412,6 +417,8 @@ function FunnelView({ ctx }) {
           })}
         </div>
       )}
+      <div className={`crm-bw ${sidePanel && view === "board" ? "with-side" : ""}`}>
+      {sidePanel && view === "board" && <ClientsSidePanel onClose={() => setSidePanel(false)} />}
       <div className="crm-board" style={view !== "board" ? { display: "none" } : undefined}>
         {stages.map((st) => {
           const items = filtered.filter((l) => colOf(l) === st.id);
@@ -505,6 +512,7 @@ function FunnelView({ ctx }) {
             </div>
           );
         })}
+      </div>
       </div>
 
       {open && (open.isNew
