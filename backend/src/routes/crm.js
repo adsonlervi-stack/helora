@@ -1312,12 +1312,53 @@ router.get("/events", async (req, res) => {
     if (!isManager(req)) q = q.or(`owner_id.eq.${req.userId},notify->owners.cs.["${req.userId}"]`);
     const { data, error } = await q;
     if (error) throw error;
-    res.json(data.map((e) => ({
+    // Tarefas antigas ligadas ao card (aba Tarefas) entram aqui como atividades do tipo "Tarefa"
+    let tasks = [];
+    try {
+      let tq = supabase.from("tasks").select("id, title, description, assignee_id, due_at, created_at, status, lead_id, crm_leads(name, phone, company, pipeline_id), assignee:profiles!tasks_assignee_id_fkey(name)")
+        .eq("account_id", req.accountId).not("lead_id", "is", null).limit(2000);
+      if (req.query.leadId) tq = tq.eq("lead_id", req.query.leadId);
+      if (req.query.done === "1") tq = tq.eq("status", "done");
+      if (req.query.done === "0") tq = tq.eq("status", "open");
+      if (req.query.from) tq = tq.gte("due_at", req.query.from);
+      if (req.query.to) tq = tq.lte("due_at", req.query.to);
+      const ownerF = !isManager(req) ? req.userId : req.query.ownerId && /^[0-9a-f-]{36}$/.test(req.query.ownerId) ? req.query.ownerId : null;
+      if (ownerF) tq = tq.eq("assignee_id", ownerF);
+      const { data: tl0 } = await tq;
+      let tl = tl0 || [];
+      // Tarefas antigas sem vínculo: liga pelo "Lead do CRM: <nome>" da descrição (só leitura, nada é alterado)
+      let oq = supabase.from("tasks").select("id, title, description, assignee_id, due_at, created_at, status, lead_id, assignee:profiles!tasks_assignee_id_fkey(name)")
+        .eq("account_id", req.accountId).is("lead_id", null).ilike("description", "%Lead do CRM:%").limit(2000);
+      if (req.query.done === "1") oq = oq.eq("status", "done");
+      if (req.query.done === "0") oq = oq.eq("status", "open");
+      if (ownerF) oq = oq.eq("assignee_id", ownerF);
+      const { data: old } = await oq;
+      if (old?.length) {
+        const nameOf = (t) => (String(t.description).match(/Lead do CRM:\s*(.+)/) || [])[1]?.trim();
+        const names = [...new Set(old.map(nameOf).filter(Boolean))];
+        const { data: ls } = names.length ? await supabase.from("crm_leads").select("id, name, phone, company, pipeline_id").eq("account_id", req.accountId).in("name", names.slice(0, 500)) : { data: [] };
+        const byName = new Map();
+        for (const l of ls || []) byName.set(l.name, byName.has(l.name) ? null : l);
+        for (const t of old) {
+          const l = byName.get(nameOf(t));
+          if (!l) continue;
+          if (req.query.leadId && l.id !== req.query.leadId) continue;
+          tl.push({ ...t, lead_id: l.id, crm_leads: l });
+        }
+      }
+      tasks = tl.map((t) => ({
+        id: `task:${t.id}`, source: "task", title: t.title, kind: "tarefa", startsAt: t.due_at || t.created_at, endsAt: null, done: t.status === "done",
+        notes: [t.title, (t.description || "").split("\nLead do CRM:")[0].trim()].filter(Boolean).join("\n"), owners: [t.assignee_id].filter(Boolean), files: [],
+        leadId: t.lead_id, leadName: t.crm_leads?.name || null, leadCompany: t.crm_leads?.company || null, pipelineId: t.crm_leads?.pipeline_id || null, createdAt: t.created_at,
+        leadPhone: t.crm_leads?.phone || null, ownerId: t.assignee_id, ownerName: t.assignee?.name || null, meetLink: null, googleEventId: null
+      }));
+    } catch {}
+    res.json([...tasks, ...data.map((e) => ({
       owners: [e.owner_id, ...((e.notify?.owners || []).filter((x) => x !== e.owner_id))].filter(Boolean), files: e.notify?.files || [],
       id: e.id, title: e.title, kind: e.kind, startsAt: e.starts_at, endsAt: e.ends_at, done: e.done, notes: e.notes,
       leadId: e.lead_id, leadName: e.crm_leads?.name || null, leadCompany: e.crm_leads?.company || null, pipelineId: e.crm_leads?.pipeline_id || null, createdAt: e.created_at, leadPhone: e.crm_leads?.phone || null, ownerId: e.owner_id, ownerName: e.owner?.name || null,
       meetLink: e.meet_link || null, googleEventId: e.google_event_id || null
-    })));
+    }))].sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt)));
   } catch (err) { fail(res, err); }
 });
 // Tipos de atividade criados pela equipe (os que já foram usados em alguma atividade)
@@ -1382,6 +1423,18 @@ router.post("/events/:id/notify", async (req, res) => {
 router.patch("/events/:id", async (req, res) => {
   try {
     const b = req.body || {};
+    if (req.params.id.startsWith("task:")) {
+      const patch = {};
+      if (b.done !== undefined) { patch.status = b.done ? "done" : "open"; patch.done_at = b.done ? new Date().toISOString() : null; patch.stage = b.done ? "done" : "todo"; }
+      if (b.title !== undefined) patch.title = String(b.title).slice(0, 200);
+      if (b.notes !== undefined) patch.description = b.notes;
+      if (b.startsAt !== undefined) patch.due_at = b.startsAt;
+      if (Array.isArray(b.owners) && b.owners[0]) patch.assignee_id = b.owners[0];
+      let { data, error } = await supabase.from("tasks").update(patch).eq("account_id", req.accountId).eq("id", req.params.id.slice(5)).select().single();
+      if (error && /stage/.test(error.message)) { delete patch.stage; ({ data, error } = await supabase.from("tasks").update(patch).eq("account_id", req.accountId).eq("id", req.params.id.slice(5)).select().single()); }
+      if (error) throw error;
+      return res.json(data);
+    }
     const patch = {};
     for (const [k, col] of [["title", "title"], ["kind", "kind"], ["startsAt", "starts_at"], ["endsAt", "ends_at"], ["notes", "notes"], ["done", "done"]]) if (b[k] !== undefined) patch[col] = b[k];
     if (Array.isArray(b.owners) || Array.isArray(b.files)) {
@@ -1398,6 +1451,11 @@ router.patch("/events/:id", async (req, res) => {
 });
 router.delete("/events/:id", async (req, res) => {
   try {
+    if (req.params.id.startsWith("task:")) {
+      const { error } = await supabase.from("tasks").delete().eq("account_id", req.accountId).eq("id", req.params.id.slice(5));
+      if (error) throw error;
+      return res.sendStatus(204);
+    }
     const { data: ev } = await supabase.from("crm_events").select("google_event_id, owner_id").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
     if (ev?.google_event_id) deleteGoogleEvent(ev.owner_id || req.userId, ev.google_event_id);
     const { error } = await supabase.from("crm_events").delete().eq("account_id", req.accountId).eq("id", req.params.id);
