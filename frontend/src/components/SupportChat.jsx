@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { X, Send, LifeBuoy, Bot, Clock } from "lucide-react";
+import { X, Send, LifeBuoy, Bot, Clock, Search, ChevronLeft, MessageCircle, BookOpen } from "lucide-react";
+import { HELP } from "../helpContent.js";
 import { useTyping } from "./useTyping.js";
 import { getSupportChat, sendSupportMessage } from "../api.js";
 
@@ -12,6 +13,7 @@ export default function SupportChat({ onClose }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [mode, setMode] = useState("help");
   const listRef = useRef(null);
 
   const load = () =>
@@ -49,6 +51,7 @@ export default function SupportChat({ onClose }) {
     setSending(false);
   };
 
+  if (mode === "help") return <HelpCenter onClose={onClose} onChat={() => setMode("chat")} />;
   return (
     <div className="support-chat lg-panel">
       <div className="support-head">
@@ -63,6 +66,7 @@ export default function SupportChat({ onClose }) {
                 : "Respondemos por aqui mesmo"}
           </small>
         </div>
+        <button className="cv-icon-btn" onClick={() => setMode("help")} aria-label="Dúvidas" title="Dúvidas"><BookOpen size={16} /></button>
         <button className="cv-icon-btn" onClick={onClose} aria-label="Fechar"><X size={16} /></button>
       </div>
       {thread?.status === "waiting" && (
@@ -107,6 +111,47 @@ export default function SupportChat({ onClose }) {
         />
         <button className="composer-send" disabled={sending || !text.trim()}><Send size={16} /></button>
       </form>
+    </div>
+  );
+}
+
+const norm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+/** Central de Dúvidas: trilhas por aba, com busca. */
+function HelpCenter({ onClose, onChat }) {
+  const [cat, setCat] = useState(null);
+  const [lesson, setLesson] = useState(null);
+  const [q, setQ] = useState("");
+  const found = q.trim() ? HELP.flatMap((c) => c.lessons.filter((l) => norm(l.t + " " + l.steps.join(" ")).includes(norm(q))).map((l) => ({ c, l }))) : null;
+  const back = () => (lesson ? setLesson(null) : setCat(null));
+  return (
+    <div className="support-chat lg-panel help-c">
+      <div className="support-head">
+        {(cat || lesson) ? <button className="cv-icon-btn" onClick={back} aria-label="Voltar"><ChevronLeft size={16} /></button> : <span className="support-icon"><BookOpen size={18} /></span>}
+        <div><strong>{lesson?.t || cat?.title || "Dúvidas"}</strong><small>{lesson ? cat?.title : "Aprenda a usar o Helora"}</small></div>
+        <button className="cv-icon-btn" onClick={onClose} aria-label="Fechar"><X size={16} /></button>
+      </div>
+      <div className="help-body">
+        {lesson ? (
+          <>
+            <ol className="help-steps">{lesson.steps.map((s, i) => <li key={i}><span>{i + 1}</span>{s}</li>)}</ol>
+            {lesson.tip && <div className="help-tip">💡 {lesson.tip}</div>}
+          </>
+        ) : cat ? (
+          cat.lessons.map((l, i) => <button key={l.t} className="help-row" onClick={() => setLesson(l)}><span className="help-n">{i + 1}</span>{l.t}</button>)
+        ) : (
+          <>
+            <label className="help-search"><Search size={15} /><input placeholder="Buscar dúvida" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+            {found ? (
+              found.length ? found.map(({ c, l }) => <button key={c.id + l.t} className="help-row" onClick={() => { setCat(c); setLesson(l); setQ(""); }}><span className="help-n">{c.icon}</span><span>{l.t}<small>{c.title}</small></span></button>)
+                : <div className="support-empty">Nada encontrado. Fale com o suporte abaixo.</div>
+            ) : (
+              <div className="help-grid">{HELP.map((c) => <button key={c.id} onClick={() => setCat(c)}><span>{c.icon}</span><strong>{c.title}</strong><small>{c.lessons.length} aulas</small></button>)}</div>
+            )}
+          </>
+        )}
+      </div>
+      <button className="help-chat" onClick={onChat}><MessageCircle size={16} /> Falar com o suporte</button>
     </div>
   );
 }

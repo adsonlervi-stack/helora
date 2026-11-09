@@ -145,7 +145,26 @@ router.post("/accounts/:id/plan", async (req, res) => {
 });
 
 router.get("/accounts", async (req, res) => {
-  res.json(await listAccountsWithStats());
+  const list = await listAccountsWithStats();
+  try {
+    const { AI_PLANS, monthKey } = await import("../aiQuota.js");
+    const { supabase } = await import("../config/db.js");
+    const m = monthKey();
+    const [{ data: plans }, { data: uses }] = await Promise.all([
+      supabase.from("account_integrations").select("account_id, config").eq("provider", "ai_plan"),
+      supabase.from("account_integrations").select("account_id").like("provider", `ai_at_${m}_%`).limit(100000)
+    ]);
+    const used = {};
+    for (const u of uses || []) used[u.account_id] = (used[u.account_id] || 0) + 1;
+    const planOf = new Map((plans || []).map((p) => [p.account_id, p.config || {}]));
+    for (const a of list) {
+      const c = planOf.get(a.id) || {};
+      const base = AI_PLANS[c.plan];
+      const limit = base ? (c.plan === "personalizado" ? Number(c.limit) || null : base.limit) : null;
+      a.aiPlan = { plan: base ? c.plan : null, name: base?.name || null, used: used[a.id] || 0, limit: limit == null ? null : limit + (Number(c.extra) || 0) };
+    }
+  } catch (e) { console.warn("[admin] plano IA na lista:", e.message); }
+  res.json(list);
 });
 
 router.get("/users", async (req, res) => {

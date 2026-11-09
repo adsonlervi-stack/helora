@@ -136,6 +136,11 @@ function AccountsTab() {
                 {a.plan_name || "Personalizado"} · {brl(a.monthly_price)}/mês · vence dia {a.due_day ?? 10} · {a.usersCount}/{a.max_users ?? "–"} usuários · desde {formatDate(a.created_at)}
               </span>
             </div>
+            <span className={`ap-ai ${a.aiPlan?.plan ? "" : "off"}`} title="Plano da Helora IA e atendimentos usados no mês">
+              <small>Helora IA</small>
+              {a.aiPlan?.plan ? <>{a.aiPlan.name}<b>{a.aiPlan.used}{a.aiPlan.limit ? ` / ${a.aiPlan.limit}` : ""}</b>
+                {a.aiPlan.limit ? <i style={{ "--p": `${Math.min(100, (a.aiPlan.used / a.aiPlan.limit) * 100)}%` }} className={a.aiPlan.used >= a.aiPlan.limit ? "full" : a.aiPlan.used >= a.aiPlan.limit * 0.8 ? "warn" : ""} /> : null}</> : "Sem plano"}
+            </span>
             <span className={`ap-pill ${a.status}`}>{STATUS_LABEL[a.status] || a.status}</span>
             <div className="ap-list-actions">
               <Button onClick={() => enterAccount(a)}><LogIn size={14} /> Entrar</Button>
