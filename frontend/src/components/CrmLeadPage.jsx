@@ -254,7 +254,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
       </div>
     )}
     {h.type === "whats" && <div className="lp-note whats"><p>{h.text}</p></div>}
-    {h.type === "event" && <div className="lp-tl-text lp-ag-click" onClick={() => setEditEv(h.ev)}><strong>{EV_KIND[h.ev.kind] || h.ev.kind}{h.ev.done ? " ✓ feita" : " · pendente"}</strong>{h.ev.ownerName ? ` · ${h.ev.ownerName}` : ""}<div className="lp-ag-note">{h.ev.notes || h.ev.title}</div>{h.ev.files?.length ? <div className="lp-ag-files">{h.ev.files.map((x, i) => <a key={i} href={x.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}><Paperclip size={12} /> {x.name}</a>)}</div> : null}</div>}
+    {h.type === "event" && <div className="lp-ev lp-ag-click" onClick={() => setEditEv(h.ev)}><div className="lp-ev-h"><span className={`lp-ev-k ${h.ev.done ? "done" : ""}`}>{EV_KIND[h.ev.kind] || h.ev.kind}{h.ev.done ? " · feita" : " · pendente"}</span>{h.ev.ownerName && <small>{h.ev.ownerName}</small>}</div><div className="lp-ag-note">{h.ev.notes || h.ev.title}</div>{h.ev.files?.length ? <div className="lp-ag-files">{h.ev.files.map((x, i) => <a key={i} href={x.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}><Paperclip size={12} /> {x.name}</a>)}</div> : null}</div>}
     {h.type === "stage" && <div className="lp-tl-text">Etapa: {stageName(h.fromPipeline, h.from)} <ArrowRight size={12} /> <strong>{stageName(h.toPipeline, h.to)}</strong></div>}
     {h.type === "owner" && <div className="lp-tl-text">Responsável: <strong>{memberName(h.to)}</strong></div>}
     {h.type === "value" && <div className="lp-tl-text">Valor: {brl(h.from)} <ArrowRight size={12} /> <strong>{brl(h.to)}</strong></div>}

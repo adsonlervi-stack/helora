@@ -14,12 +14,15 @@ const TRIGGERS = [
   ["lost", "Um card é perdido"],
   ["field", "Um campo é alterado…"],
   ["idle", "Um card fica parado…"],
-  ["date", "Chega uma data do card…"]
+  ["date", "Chega uma data do card…"],
+  ["client", "Uma empresa ou pessoa é adicionada"]
 ];
+const ACT_KINDS = [["call", "Ligação"], ["whatsapp", "WhatsApp"], ["email", "E-mail"], ["visita", "Visita"], ["reuniao", "Reunião"], ["proposta", "Proposta"], ["tarefa", "Tarefa"]];
 const ACTIONS = [
   ["message", "Enviar mensagem no WhatsApp"],
   ["move", "Mover para a etapa"],
-  ["task", "Criar tarefa"],
+  ["task", "Agendar atividade"],
+  ["email", "Enviar e-mail"],
   ["followup", "Agendar follow-up"],
   ["owner", "Trocar o responsável"],
   ["tag", "Adicionar tag"],
@@ -52,6 +55,9 @@ function presets(pipe) {
       { type: "message", text: "Obrigado pela confiança, {nome}! 🙏 Se conhecer alguém que precise, é só indicar." },
       { type: "followup", title: "Pós-venda {nome}", days: 30 }
     ] },
+    { name: "Empresa nova: agendar primeira ligação", trigger: { type: "client" }, conditions: [], actions: [{ type: "task", kind: "call", title: "Primeira ligação para {nome_completo}", days: 0 }] },
+    { name: "Ganhou: e-mail de boas-vindas", trigger: { type: "won" }, conditions: [], actions: [{ type: "email", title: "Bem-vindo(a), {nome}!", text: "Olá, {nome}!\n\nObrigado pela confiança. A partir de agora estamos à disposição para o que precisar." }] },
+    { name: "Parado na etapa: agendar ligação", trigger: { type: "idle", stageId: second, days: 5 }, conditions: [], actions: [{ type: "task", kind: "call", title: "Retomar {nome_completo} (parado há 5 dias)", days: 0 }] },
     ...(lost ? [{ name: "Perdeu: tentar de novo em 90 dias", trigger: { type: "lost" }, conditions: [], actions: [{ type: "snooze", days: 90 }] }] : [])
   ];
 }
@@ -122,6 +128,13 @@ export default function AutomationsSheet({ pipeline, pipelines, tags, team, depa
                           {fields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
                         </select>
                         <input value={r.trigger.value || ""} onChange={(e) => updT(r, { value: e.target.value })} placeholder="para o valor (opcional)" />
+                      </>
+                    )}
+                    {r.trigger.type === "client" && (
+                      <>
+                        <select value={r.trigger.value || ""} onChange={(e) => updT(r, { value: e.target.value || undefined })}><option value="">empresa ou pessoa</option><option value="empresa">só empresa</option><option value="pessoa">só pessoa</option></select>
+                        <span className="au-days">cria o negócio em</span>
+                        <select value={r.trigger.stageId || ""} onChange={(e) => updT(r, { stageId: e.target.value || undefined })}><option value="">1ª etapa</option>{stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
                       </>
                     )}
                     {r.trigger.type === "date" && (
@@ -222,9 +235,18 @@ export default function AutomationsSheet({ pipeline, pipelines, tags, team, depa
                           )}
                         </>
                       )}
+                      {a.type === "email" && (
+                        <>
+                          <input value={a.title || ""} onChange={(e) => updA(r, i, { title: e.target.value })} placeholder="Assunto (ex.: Bem-vindo, {nome}!)" />
+                          <textarea rows={4} value={a.text || ""} onChange={(e) => updA(r, i, { text: e.target.value })} placeholder="Mensagem do e-mail (use {nome}, {empresa} e os campos do card). Sai pelo e-mail da empresa conectado em Conexões." />
+                        </>
+                      )}
                       {(a.type === "task" || a.type === "followup") && (
                         <div className="au-row">
                           <input value={a.title || ""} onChange={(e) => updA(r, i, { title: e.target.value })} placeholder={a.type === "task" ? "Falar com {nome_completo}" : "Follow-up {nome}"} />
+                          {a.type === "task" && (
+                            <select value={a.kind || "tarefa"} onChange={(e) => updA(r, i, { kind: e.target.value })}>{ACT_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                          )}
                           {a.type === "task" && (
                             <select value={a.ownerId || ""} onChange={(e) => updA(r, i, { ownerId: e.target.value || undefined })}>
                               <option value="">Para o responsável do card</option>{team.map((m) => <option key={m.id} value={m.id}>Para {m.name || m.email}</option>)}
@@ -234,7 +256,7 @@ export default function AutomationsSheet({ pipeline, pipelines, tags, team, depa
                       )}
                     </div>
                   ))}
-                  <button type="button" className="au-add" onClick={() => upd(r.id, { actions: [...r.actions, { type: "task", title: "", days: 1 }] })}><Plus size={13} /> Ação</button>
+                  <button type="button" className="au-add" onClick={() => upd(r.id, { actions: [...r.actions, { type: "task", kind: "call", title: "", days: 1 }] })}><Plus size={13} /> Ação</button>
                 </div>
 
                 <div className="au-foot">

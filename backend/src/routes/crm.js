@@ -111,11 +111,8 @@ export async function runStageAutomations(accountId, lead, byName, opts = {}) {
           const conv = await leadConversation(accountId, lead, { departmentId: a.departmentId, agentId: lead.owner_id });
           await sendTextToConversation(accountId, conv, fill(a.text, lead), { senderName: byName || null, sign: false });
         } else if (a.type === "task") {
-          await createTask(accountId, {
-            title: fill(a.title || `Falar com {nome_completo}`, lead), description: `Lead do CRM: ${lead.name}${lead.phone ? ` · ${lead.phone}` : ""}`,
-            assigneeId: lead.owner_id || null, dueAt: new Date(Date.now() + (a.days ?? 1) * 86400000).toISOString(), kind: "manual",
-            conversationId: lead.conversation_id || null
-          });
+          await supabase.from("crm_events").insert({ account_id: accountId, lead_id: lead.id, kind: "tarefa", title: fill(a.title || `Falar com {nome_completo}`, lead).slice(0, 120),
+            starts_at: new Date(Date.now() + (a.days ?? 1) * 86400000).toISOString(), owner_id: lead.owner_id || null });
         } else if (a.type === "followup") {
           const at = new Date(Date.now() + (a.days ?? 2) * 86400000);
           at.setHours(10, 0, 0, 0);
@@ -133,8 +130,8 @@ export async function runStageAutomations(accountId, lead, byName, opts = {}) {
 
 // ---------------------------------------------------------------- Automações de processo (estilo Pipefy)
 // Regra: { id, name, active, trigger:{ type, stageId?, fieldId?, value?, days? }, conditions:[{ fieldId, op, value }], actions:[...] }
-const RULE_TRIGGERS = ["created", "moved", "won", "lost", "field", "idle", "date"];
-const RULE_ACTIONS = ["move", "message", "task", "followup", "owner", "tag", "field", "archive", "snooze", "copy"];
+const RULE_TRIGGERS = ["created", "moved", "won", "lost", "field", "idle", "date", "client"];
+const RULE_ACTIONS = ["move", "message", "task", "followup", "owner", "tag", "field", "archive", "snooze", "copy", "email"];
 export function cleanRules(list) {
   if (!Array.isArray(list)) return [];
   const str = (v, n = 200) => (v == null || v === "" ? undefined : String(v).slice(0, n));
@@ -146,7 +143,7 @@ export function cleanRules(list) {
     actions: (Array.isArray(r.actions) ? r.actions : []).slice(0, 8).filter((a) => RULE_ACTIONS.includes(a?.type)).map((a) => ({
       type: a.type, stageId: str(a.stageId, 40), text: str(a.text, 2000), title: str(a.title, 160), days: num(a.days, 0, 730),
       ownerId: str(a.ownerId, 40), tagId: str(a.tagId, 40), fieldId: str(a.fieldId, 40), value: str(a.value, 500),
-      departmentId: str(a.departmentId, 40), pipelineId: str(a.pipelineId, 40)
+      departmentId: str(a.departmentId, 40), pipelineId: str(a.pipelineId, 40), kind: str(a.kind, 20)
     }))
   }));
 }
@@ -185,11 +182,15 @@ async function runRuleActions(accountId, pipe, rule, lead, byName, depth) {
         await sendTextToConversation(accountId, conv, fill(a.text, lead), { senderName: null, sign: false });
         await pushHistory(lead.id, [{ type: "whats", text: fill(a.text, lead), by: `Automação: ${rule.name}` }]);
       } else if (a.type === "task") {
-        await createTask(accountId, {
-          title: fill(a.title || "Falar com {nome_completo}", lead), description: `Lead do CRM: ${lead.name}${lead.phone ? ` · ${lead.phone}` : ""}\nAutomação: ${rule.name}`,
-          assigneeId: (a.ownerId && a.ownerId !== "owner" ? a.ownerId : lead.owner_id) || null, dueAt: new Date(Date.now() + (a.days ?? 1) * 86400000).toISOString(), kind: "manual",
-          conversationId: lead.conversation_id || null
-        });
+        // "Agendar atividade": cai nas Atividades do CRM (Ligação, WhatsApp, Visita…)
+        const at = new Date(Date.now() + (a.days ?? 1) * 86400000); if ((a.days ?? 1) > 0) at.setHours(9, 0, 0, 0);
+        await supabase.from("crm_events").insert({ account_id: accountId, lead_id: lead.id, kind: a.kind || "tarefa", title: fill(a.title || "Falar com {nome_completo}", lead).slice(0, 120),
+          starts_at: at.toISOString(), owner_id: (a.ownerId && a.ownerId !== "owner" ? a.ownerId : lead.owner_id) || null, notes: `Automação: ${rule.name}` });
+      } else if (a.type === "email") {
+        if (!lead.email) { await pushHistory(lead.id, [{ type: "note", text: `✉️ E-mail automático não enviado: o card não tem e-mail. (${rule.name})` }]); continue; }
+        const { sendCompanyMail } = await import("../integrations/mail.js");
+        await sendCompanyMail(accountId, { to: lead.email, subject: fill(a.title || "Olá, {nome}", lead), text: fill(a.text || "", lead) });
+        await pushHistory(lead.id, [{ type: "note", text: `✉️ E-mail enviado para ${lead.email}: ${fill(a.title || "", lead)}`, by: `Automação: ${rule.name}` }]);
       } else if (a.type === "followup") {
         const at = new Date(Date.now() + (a.days ?? 2) * 86400000); at.setHours(10, 0, 0, 0);
         await supabase.from("crm_events").insert({ account_id: accountId, lead_id: lead.id, title: fill(a.title || "Follow-up {nome}", lead), kind: "followup", starts_at: at.toISOString(), owner_id: lead.owner_id || null });
@@ -225,6 +226,21 @@ async function runRuleActions(accountId, pipe, rule, lead, byName, depth) {
       }
     } catch (e) {
       console.warn(`[CRM] regra "${rule.name}" ação ${a.type} falhou:`, e.message);
+    }
+  }
+}
+/** Empresa/pessoa adicionada: cada funil com a regra "client" cria o negócio e roda as ações nele. */
+async function runClientAutomations(accountId, client, byName) {
+  const { data: pipes } = await supabase.from("crm_pipelines").select("id, stages, automations").eq("account_id", accountId);
+  for (const pipe of pipes || []) {
+    for (const rule of (pipe.automations || []).filter((r) => r.active !== false && r.trigger?.type === "client")) {
+      if (rule.trigger.value && rule.trigger.value !== client.kind) continue;
+      const stageId = (pipe.stages || []).some((s) => s.id === rule.trigger.stageId) ? rule.trigger.stageId : pipe.stages?.[0]?.id;
+      const { data: lead } = await supabase.from("crm_leads").insert({
+        account_id: accountId, pipeline_id: pipe.id, stage: stageId, name: client.name, phone: client.phone, email: client.email, company: client.kind === "empresa" ? client.name : client.legal_name,
+        owner_id: client.owner_id, source: client.source || `Automação: ${rule.name}`, stage_changed_at: new Date().toISOString()
+      }).select("*").single();
+      if (lead) await runRuleActions(accountId, pipe, rule, lead, byName, 1);
     }
   }
 }
@@ -569,6 +585,7 @@ router.post("/companies", async (req, res) => {
     if (!rows.length) return res.status(400).json({ error: "Informe o nome." });
     const { data, error } = await supabase.from("crm_clients").insert(rows.slice(0, 2000)).select();
     if (error) throw error;
+    if (data.length <= 20) for (const c of data) runClientAutomations(req.accountId, c, req.userName).catch((e) => console.warn("[CRM] cliente:", e.message));
     res.status(201).json(Array.isArray(req.body?.items) ? { created: data.length } : data[0]);
   } catch (err) { fail(res, err); }
 });
@@ -1351,7 +1368,7 @@ router.get("/events", async (req, res) => {
       }
       tasks = tl.map((t) => ({
         id: `task:${t.id}`, source: "task", title: t.title, kind: "tarefa", startsAt: t.due_at || t.created_at, endsAt: null, done: t.status === "done",
-        notes: [t.title, (t.description || "").split("\nLead do CRM:")[0].trim()].filter(Boolean).join("\n"), owners: [t.assignee_id].filter(Boolean), files: [],
+        notes: (() => { const d = String(t.description || "").split(/\r?\n/).filter((l) => !/^\s*(Lead do CRM|Funil|WhatsApp|Conversa):/i.test(l)).join("\n").trim(); return d && d !== t.title ? `${t.title}\n${d}` : t.title; })(), owners: [t.assignee_id].filter(Boolean), files: [],
         leadId: t.lead_id, leadName: t.crm_leads?.name || null, leadCompany: t.crm_leads?.company || null, pipelineId: t.crm_leads?.pipeline_id || null, createdAt: t.created_at,
         leadPhone: t.crm_leads?.phone || null, ownerId: t.assignee_id, ownerName: t.assignee?.name || null, meetLink: null, googleEventId: null
       }));
