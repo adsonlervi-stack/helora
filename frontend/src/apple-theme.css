@@ -3298,3 +3298,17 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .ac-empty>span{width:56px;height:56px;border-radius:16px;background:#e8f8ee;color:#1f9d4a;display:grid;place-items:center}
 .ac-empty strong{font-size:17px}.ac-empty p{margin:0;color:#6e6e73;font-size:14px;max-width:420px}
 @media (max-width:900px){.ac-kpis{grid-template-columns:1fr 1fr}.ac-bar{flex-wrap:wrap !important}}
+
+/* Página do cliente: tela mais aberta */
+.cl{width:min(1440px,97vw) !important;height:94vh !important}
+.cl-split{grid-template-columns:1fr 380px !important}
+.cl-body{padding:20px 28px !important}
+.cl-comp .lp-tabs.ag{flex-wrap:nowrap !important;overflow-x:auto;gap:2px}
+.cl-comp .lp-tabs.ag button{padding:10px 12px;white-space:nowrap;flex:none}
+.cl-side .lp-actions button{white-space:nowrap;font-size:13px;padding:11px 8px}
+.cl-side .lp-actions{padding:20px 20px 6px}
+.cl-data{margin:12px 20px !important}
+.cl-data div{grid-template-columns:120px 1fr !important}
+.cl-hist{gap:12px}
+.cl-h{padding:14px 18px !important}
+@media (max-width:900px){.cl{width:100vw !important;height:100vh !important;border-radius:0}.cl-split{grid-template-columns:1fr !important}}
