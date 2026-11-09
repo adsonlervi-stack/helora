@@ -3405,3 +3405,5 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .pl-t{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;background:linear-gradient(90deg,#0050b0,#3d8bf0);-webkit-background-clip:text;background-clip:text;color:transparent}
 @keyframes plSpin{to{transform:rotate(360deg)}}
 @keyframes plIn{from{opacity:0}to{opacity:1}}
+.pl-bar{position:fixed;top:0;left:0;height:3px;z-index:3000;background:linear-gradient(90deg,#0050b0,#0071e3,#3d8bf0);box-shadow:0 0 10px rgba(0,113,227,.6);border-radius:0 3px 3px 0;transition:width .25s ease,opacity .25s ease .1s;pointer-events:none}
+.pl-wrap{display:none !important}

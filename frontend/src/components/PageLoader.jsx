@@ -1,39 +1,29 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /**
- * "Carregando" ao trocar de aba: tela embaçada com o círculo no degradê do Helora.
- * Aparece só se a nova aba demorar mais de 250 ms para buscar os dados, e some sozinho (máx. 10 s).
+ * Barra de progresso fina no topo (degradê do Helora), estilo Safari/YouTube.
+ * Começa no clique da aba, avança sozinha e completa quando os dados chegam. Não bloqueia a tela.
  */
 export default function PageLoader({ section }) {
-  const [show, setShow] = useState(false);
-  const watching = useRef(false);
-  const timers = useRef([]);
+  const [p, setP] = useState(0);
+  const [on, setOn] = useState(false);
+  const first = useRef(true);
+  const t = useRef([]);
+  const clear = () => { t.current.forEach(clearTimeout); t.current = []; };
+  const finish = () => { clear(); setP(100); t.current.push(setTimeout(() => { setOn(false); setP(0); }, 260)); };
   useEffect(() => {
-    watching.current = true;
-    timers.current.forEach(clearTimeout);
-    const start = setTimeout(() => { if (watching.current && window.__heloraNet > 0) setShow(true); }, 250);
-    const stop = setTimeout(() => { watching.current = false; setShow(false); }, 10000);
-    const quiet = setTimeout(() => { if (!window.__heloraNet) { watching.current = false; setShow(false); } }, 400);
-    timers.current = [start, stop, quiet];
-    return () => timers.current.forEach(clearTimeout);
+    if (first.current) { first.current = false; return; }
+    clear(); setOn(true); setP(12);
+    [[60, 35], [200, 55], [500, 70], [1000, 82], [1800, 90]].forEach(([ms, v]) => t.current.push(setTimeout(() => setP((x) => Math.max(x, v)), ms)));
+    t.current.push(setTimeout(() => { if (!window.__heloraNet) finish(); }, 180));
+    t.current.push(setTimeout(finish, 4000));
+    return clear;
   }, [section]);
   useEffect(() => {
-    const on = (e) => {
-      window.__heloraNet = e.detail;
-      if (!watching.current) return;
-      if (e.detail > 0) { /* ainda carregando */ }
-      else { const t = setTimeout(() => { if (!window.__heloraNet) { watching.current = false; setShow(false); } }, 120); timers.current.push(t); }
-    };
-    window.addEventListener("helora:net", on);
-    return () => window.removeEventListener("helora:net", on);
+    const on2 = (e) => { window.__heloraNet = e.detail; if (e.detail === 0) setTimeout(() => { if (!window.__heloraNet) setOn((v) => { if (v) finish(); return v; }); }, 80); };
+    window.addEventListener("helora:net", on2);
+    return () => window.removeEventListener("helora:net", on2);
   }, []);
-  if (!show) return null;
-  return (
-    <div className="pl-wrap" aria-live="polite">
-      <div className="pl-box">
-        <span className="pl-ring" />
-        <span className="pl-t">Carregando</span>
-      </div>
-    </div>
-  );
+  if (!on) return null;
+  return <div className="pl-bar" style={{ width: `${p}%`, opacity: p >= 100 ? 0 : 1 }} />;
 }
