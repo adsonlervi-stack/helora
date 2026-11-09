@@ -383,6 +383,8 @@ export const crm = {
   saveAgenda: (id, d) => api.put(`/crm/agendas/${id}`, d).then((r) => r.data),
   agendaSlots: (id, params) => api.get(`/crm/agendas/${id}/slots`, { params }).then((r) => r.data),
   carteira: (params) => api.get("/crm/carteira", { params }).then((r) => r.data),
+  report: (params) => api.get("/crm/report", { params, timeout: 0 }).then((r) => r.data),
+  client: (leadId) => api.get(`/crm/client/${leadId}`).then((r) => r.data),
   createLead: (d) => api.post("/crm/leads", d).then((r) => r.data),
   updateLead: (id, d) => api.patch(`/crm/leads/${id}`, d).then((r) => r.data),
   deleteLead: (id) => api.delete(`/crm/leads/${id}`),

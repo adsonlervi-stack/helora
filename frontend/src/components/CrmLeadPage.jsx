@@ -275,6 +275,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
           </div>
           <div className="lp-head-right">
             <span className="lp-saving">{saving}</span>
+            {lead.id && <button className="lp-btn" title="Todos os negócios, histórico e pessoas deste cliente" onClick={() => { const id = lead.id; close(); setTimeout(() => window.dispatchEvent(new CustomEvent("helora:client", { detail: id })), 50); }}><Building2 size={15} /> Ver cliente</button>}
             <label className="lp-owner" title="Responsável">
               <span className="lp-av">{initials(memberName(f.ownerId) === "ninguém" ? "?" : memberName(f.ownerId))}</span>
               <span><strong>{f.ownerId ? memberName(f.ownerId) : "Sem responsável"}</strong><small>Responsável</small></span>
