@@ -19,7 +19,8 @@ export async function sendMetaMessage(accessToken, recipientId, text) {
     return;
   }
 
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/me/messages`;
+  // Token do "Login do Instagram" (começa com IG) usa o graph.instagram.com
+  const url = String(accessToken).startsWith("IG") ? `https://graph.instagram.com/${GRAPH_VERSION === "v19.0" ? "v21.0" : GRAPH_VERSION}/me/messages` : `https://graph.facebook.com/${GRAPH_VERSION}/me/messages`;
 
   await axios.post(
     url,

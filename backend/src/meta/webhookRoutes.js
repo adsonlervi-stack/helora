@@ -12,6 +12,7 @@ import { cloudSendText, cloudMarkRead, cloudDownloadMedia } from "./cloudClient.
 import { uploadMedia } from "../storage.js";
 import { handleIncoming } from "../bot/engine.js";
 import { sendMetaMessage } from "./metaClient.js";
+import { igProfile } from "./instagram.js";
 
 const router = Router();
 const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || "changeme";
@@ -74,28 +75,47 @@ router.post("/webhook/meta", async (req, res) => {
 
     for (const event of events) {
       const senderId = event.sender?.id;
-      const text = event.message?.text;
+      const att = (event.message?.attachments || [])[0];
+      const text = event.message?.text || (att ? "" : null);
 
-      if (!senderId || !text) continue;
+      if (!senderId || text == null) continue;
       if (event.message?.is_echo) continue; // ignora eco de mensagens enviadas por nós mesmos
+      if (senderId === pageId) continue;
 
+      const prof = await igProfile(accessToken, senderId);
       const conversation = await findOrCreateConversation({
         accountId,
         platform,
         externalId: senderId,
-        name: senderId,
+        name: prof?.name || senderId,
         channelId
       });
+      if (prof?.name && (conversation.name === senderId || !conversation.name)) await updateConversation(accountId, conversation.id, { name: prof.name }).catch(() => {});
+
+      // Foto, áudio, vídeo ou arquivo enviados pelo Instagram/Messenger
+      let mediaUrl = null, mediaType = null;
+      if (att?.payload?.url) {
+        try {
+          const r = await fetch(att.payload.url);
+          const buf = Buffer.from(await r.arrayBuffer());
+          const ct = r.headers.get("content-type") || "";
+          const kind = att.type === "image" ? "image" : att.type === "video" ? "video" : att.type === "audio" ? "audio" : "document";
+          const ext = (ct.split("/")[1] || (kind === "image" ? "jpg" : kind === "audio" ? "mp4" : "bin")).split(";")[0];
+          mediaUrl = await uploadMedia({ accountId, buffer: buf, extension: ext, contentType: ct || undefined });
+          mediaType = kind;
+        } catch (e) { console.warn("[Meta] mídia:", e.message); }
+      }
 
       await addMessage({
         accountId,
         conversationId: conversation.id,
         direction: "in",
         author: "user",
-        text
+        text: text || (att ? ({ image: "📷 Foto", video: "🎥 Vídeo", audio: "🎤 Áudio", share: "🔗 Publicação compartilhada", story_mention: "📣 Mencionou você no story" }[att.type] || "📎 Anexo") : ""),
+        mediaUrl, mediaType
       });
 
-      const reply = await handleIncoming(accountId, conversation, text);
+      const reply = text ? await handleIncoming(accountId, conversation, text) : null;
 
       if (conversation.isNew) {
         await updateConversation(accountId, conversation.id, { isNew: false });

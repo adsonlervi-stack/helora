@@ -1,3 +1,4 @@
+import { igRouter, igCallbackRouter, refreshInstagramTokens } from "./meta/instagram.js";
 import { metaRouter, metaCallbackRouter } from "./meta/oauth.js";
 import "dotenv/config";
 import express from "express";
@@ -86,6 +87,8 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/integrations", integrationsRoutes);
 app.use("/api/google", googleRouter);
 app.use("/api/meta", metaRouter);
+app.use("/api/instagram", igRouter);
+app.use("/", igCallbackRouter);
 app.use("/", metaCallbackRouter);
 app.use("/api/push", pushRouter);
 app.use("/", googleCallbackRouter);
@@ -131,6 +134,7 @@ for (const key of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) {
 }
 
 startSupportWatcher();
+setTimeout(refreshInstagramTokens, 120000); setInterval(refreshInstagramTokens, 24 * 60 * 60 * 1000);
 import("./routes/crm.js").then(({ runPolicyJobs }) => { setTimeout(runPolicyJobs, 90 * 1000); setInterval(runPolicyJobs, 6 * 60 * 60 * 1000); }).catch(() => {});
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`[Backend] Rodando em http://localhost:${PORT}`);

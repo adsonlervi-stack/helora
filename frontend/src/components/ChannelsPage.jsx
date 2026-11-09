@@ -18,7 +18,8 @@ import {
   API_BASE
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
-import { meta as metaApi } from "../api.js";
+import { meta as metaApi, instagramApi } from "../api.js";
+import { notify } from "../dialogs.js";
 import { Sheet, Group, Row, Button } from "./ui.jsx";
 
 const PLATFORM_LABELS = { whatsapp: "WhatsApp", messenger: "Messenger", instagram: "Instagram" };
@@ -183,6 +184,17 @@ export default function ChannelsPage() {
   const [metaOpen, setMetaOpen] = useState(() => new URLSearchParams(window.location.search).get("meta") || null);
   const [metaOn, setMetaOn] = useState(false);
   useEffect(() => { metaApi.status().then((s) => setMetaOn(!!s.configured)); }, []);
+  const [igOn, setIgOn] = useState(false);
+  useEffect(() => {
+    instagramApi.status().then((s) => setIgOn(!!s.configured));
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("ig")) {
+      if (q.get("ig") === "ok") notify("Instagram conectado! As mensagens do Direct já chegam em Conversas.", "success");
+      else notify(q.get("msg") || "Não foi possível conectar o Instagram.", "error");
+      q.delete("ig"); q.delete("msg"); window.history.replaceState(null, "", `${window.location.pathname}?${q}`);
+    }
+  }, []);
+  const connectIg = async () => { try { window.location.href = await instagramApi.authUrl(); } catch (e) { notify(e?.response?.data?.error || e.message, "error"); } };
   const [qrChannel, setQrChannel] = useState(null);
   const [permChannel, setPermChannel] = useState(null);
   const [editChannel, setEditChannel] = useState(null);
@@ -232,7 +244,7 @@ export default function ChannelsPage() {
   const ADD = [
     { k: "wa", icon: QrCode, color: "#25D366", title: "WhatsApp (QR Code)", sub: "Conecte lendo o QR Code no celular", preset: { platform: "whatsapp", provider: "baileys" } },
     { k: "cloud", icon: MessageCircle, color: "#128C7E", title: "WhatsApp Cloud API", sub: "API oficial da Meta", preset: { platform: "whatsapp", provider: "cloud" } },
-    { k: "ig", icon: Instagram, color: "#C13584", title: "Instagram Direct", sub: "Mensagens do Instagram", preset: { platform: "instagram" } },
+    { k: "ig", icon: Instagram, color: "#C13584", title: "Instagram Direct", sub: "Entre com a conta Profissional do Instagram", preset: { platform: "instagram" } },
     { k: "fb", icon: Facebook, color: "#1877F2", title: "Facebook Page", sub: "Messenger da sua página", preset: { platform: "messenger" } },
     { k: "mail", icon: Mail, color: "#EA4335", title: "E-mail", sub: "Gmail, Outlook ou e-mail próprio", go: "connections" }
   ];
@@ -262,7 +274,7 @@ export default function ChannelsPage() {
             <div className="ch2-menu" onMouseLeave={() => setMenu(false)}>
               <div className="ch2-menu-t">Adicionar novo canal</div>
               {ADD.map((o) => (
-                <button key={o.k} onClick={() => { setMenu(false); if (o.go) { window.history.replaceState(null, "", `${window.location.pathname}?aba=${o.go}`); window.location.reload(); } else if ((o.k === "ig" || o.k === "fb") && metaOn) setMetaOpen("start"); else setShowNew(o.preset); }}>
+                <button key={o.k} onClick={() => { setMenu(false); if (o.go) { window.history.replaceState(null, "", `${window.location.pathname}?aba=${o.go}`); window.location.reload(); } else if (o.k === "ig" && igOn) connectIg(); else if ((o.k === "ig" || o.k === "fb") && metaOn) setMetaOpen("start"); else setShowNew(o.preset); }}>
                   <span className="ch2-mi" style={{ background: o.color }}><o.icon size={18} /></span>
                   <span><strong>{o.title}</strong><small>{o.sub}</small></span>
                   <ChevronRight size={16} />
