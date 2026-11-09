@@ -450,7 +450,8 @@ async function allLeadsFor(req, select, extra = (q) => q) {
 }
 const docOfLead = (l, fields) => {
   const c = l.custom || {};
-  const f = (fields || []).find((x) => x.type === "document" && onlyDigits(c[x.id]).length >= 11);
+  const ok = (x) => [11, 14].includes(onlyDigits(c[x.id]).length);
+  const f = (fields || []).find((x) => x.type === "document" && ok(x)) || (fields || []).find((x) => /cpf|cnpj|documento/i.test(x.label || "") && ok(x));
   return f ? onlyDigits(c[f.id]) : "";
 };
 const clientKeyOf = (l, fields) => docOfLead(l, fields) || `n:${String(l.name || "").trim().toLowerCase()}|${onlyDigits(l.phone)}`;
