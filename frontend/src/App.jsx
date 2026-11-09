@@ -1,3 +1,4 @@
+import PageLoader from "./components/PageLoader.jsx";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { loadMuted, isMuted } from "./muted.js";
 import IconRail from "./components/IconRail.jsx";
@@ -376,6 +377,7 @@ export default function App() {
         {!["home", "channels", "campaigns", "agents", "connections", "ia", "conversations", "settings"].includes(activeSection) && <TopBar section={activeSection} hideNotifications={isHeloraPanel} />}
 
         <div className="shell-content">
+          <PageLoader section={activeSection} />
           {activeSection === "home" && (
             <HomePage profile={profile} conversations={conversations} onNavigate={setSection} onOpenConversation={openConversation} />
           )}

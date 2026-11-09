@@ -9,6 +9,11 @@ export const api = axios.create({
 
 // Toda chamada leva o token de sessão do Supabase Auth — é assim que o
 // backend sabe quem está logado e de qual conta (multi-tenant).
+// Contador de chamadas em andamento (para o "Carregando" ao trocar de aba)
+export const netBusy = { n: 0, emit() { window.dispatchEvent(new CustomEvent("helora:net", { detail: this.n })); } };
+api.interceptors.request.use((config) => { netBusy.n++; netBusy.emit(); config.__counted = true; return config; });
+api.interceptors.response.use((r) => { if (r.config?.__counted) { netBusy.n = Math.max(0, netBusy.n - 1); netBusy.emit(); } return r; },
+  (e) => { if (e.config?.__counted) { netBusy.n = Math.max(0, netBusy.n - 1); netBusy.emit(); } return Promise.reject(e); });
 api.interceptors.request.use(async (config) => {
   const { data } = await supabase.auth.getSession();
   if (data.session) {

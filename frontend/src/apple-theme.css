@@ -3396,3 +3396,12 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .lp-ev-k.done{color:#1f9d4a;background:#e8f8ee}
 .lp-ev-h small{color:#8e8e93;font-size:12px}
 .lp-ev .lp-ag-note{font-size:14px;color:#1d1d1f}
+
+/* ---------- Carregando (troca de aba) ---------- */
+.shell-content{position:relative}
+.pl-wrap{position:absolute;inset:0;z-index:60;display:grid;place-items:center;background:rgba(245,247,251,.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);animation:plIn .18s ease;min-height:60vh}
+.pl-box{display:flex;flex-direction:column;align-items:center;gap:14px;position:sticky;top:40vh}
+.pl-ring{width:54px;height:54px;border-radius:50%;background:conic-gradient(from 0deg,rgba(0,113,227,0) 0deg,#3d8bf0 140deg,#0071e3 260deg,#0050b0 360deg);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 6px),#000 calc(100% - 5px));mask:radial-gradient(farthest-side,transparent calc(100% - 6px),#000 calc(100% - 5px));animation:plSpin .8s linear infinite;filter:drop-shadow(0 6px 14px rgba(0,113,227,.35))}
+.pl-t{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;background:linear-gradient(90deg,#0050b0,#3d8bf0);-webkit-background-clip:text;background-clip:text;color:transparent}
+@keyframes plSpin{to{transform:rotate(360deg)}}
+@keyframes plIn{from{opacity:0}to{opacity:1}}
