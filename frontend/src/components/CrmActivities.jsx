@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Clock, Building2, List, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Clock, Building2, List, CalendarDays, ChevronLeft, ChevronRight, User, CalendarCheck } from "lucide-react";
 import { crm } from "../api.js";
 import { notify } from "../dialogs.js";
 import { EV_KIND, agIcon, EditActivity } from "./CrmLeadPage.jsx";
@@ -49,37 +49,60 @@ export default function CrmActivities({ ctx, onOpenLead }) {
     try { await crm.updateEvent(e.id, { done }); setList((l) => (status ? l.filter((x) => x.id !== e.id) : l.map((x) => (x.id === e.id ? { ...x, done } : x)))); notify(done ? "Atividade finalizada." : "Atividade reaberta.", "success"); }
     catch (err) { notify(err?.response?.data?.error || err.message, "error"); }
   };
+  const [pendAll, setPendAll] = useState([]);
+  useEffect(() => { crm.events({ done: "0", ownerId: owner || undefined }).then((l) => setPendAll(l || [])).catch(() => {}); }, [owner, list]);
+  const counts = useMemo(() => {
+    const pend = pendAll.filter((e) => !e.done && (!owner || (e.owners || [e.ownerId]).includes(owner)));
+    const now = new Date(), t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    const t1 = new Date(t0); t1.setDate(t1.getDate() + 1);
+    const t7 = new Date(t0); t7.setDate(t7.getDate() + 7);
+    return { late: pend.filter((e) => new Date(e.startsAt) < now).length, today: pend.filter((e) => { const d = new Date(e.startsAt); return d >= t0 && d < t1; }).length, week: pend.filter((e) => { const d = new Date(e.startsAt); return d >= t0 && d < t7; }).length, all: pend.length };
+  }, [pendAll, owner]);
   const late = rows.filter((e) => !e.done && new Date(e.startsAt) < new Date()).length;
 
   return (
     <div className="ac">
+      <div className="ac-kpis">
+        {[["atrasadas", "Atrasadas", counts.late, "late"], ["hoje", "Para hoje", counts.today, "today"], ["semana", "Próximos 7 dias", counts.week, ""], ["", "Pendentes no total", counts.all, "all"]].map(([k, l, n, c]) => (
+          <button key={l} className={`ac-kpi ${c} ${period === k && status !== "1" ? "on" : ""}`} onClick={() => { setStatus("0"); setPeriod(k); }}>
+            <b>{n}</b><span>{l}</span>
+          </button>
+        ))}
+      </div>
       <div className="ac-bar">
         <div className="ac-kinds">
           {KINDS.map((k) => (
-            <button key={k} title={EV_KIND[k]} className={kinds.includes(k) ? "on" : ""} onClick={() => setKinds((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))}>{agIcon(k, 17)}</button>
+            <button key={k} title={EV_KIND[k]} className={kinds.includes(k) ? "on" : ""} onClick={() => setKinds((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))}>{agIcon(k, 16)}<span>{EV_KIND[k]}</span></button>
           ))}
         </div>
+        <span className="ac-div" />
         <div className="ac-seg">
           {[["", "Todas"], ["0", "Pendentes"], ["1", "Finalizadas"]].map(([k, l]) => <button key={k} className={status === k ? "on" : ""} onClick={() => setStatus(k)}>{l}</button>)}
         </div>
         <span style={{ flex: 1 }} />
-        <div className="ac-seg">
+        <label className="ac-sel"><CalendarDays size={14} /><select value={period} onChange={(e) => setPeriod(e.target.value)}>{PERIODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+        <label className="ac-sel"><User size={14} /><select value={owner} onChange={(e) => setOwner(e.target.value)}>
+          <option value="">Todos os responsáveis</option>
+          {(ctx.team || []).map((m) => <option key={m.id} value={m.id}>{m.id === me ? `Eu (${(m.name || "").split(" ")[0]})` : m.name || m.email}</option>)}
+        </select></label>
+      </div>
+      <div className="ac-info">
+        <span>{status === "1" ? "Mais recentes primeiro" : "Mais urgentes primeiro"} · <b>{rows.length} {rows.length === 1 ? "atividade" : "atividades"}</b></span>
+        <span style={{ flex: 1 }} />
+        <div className="ac-seg sm">
           <button className={mode === "list" ? "on" : ""} onClick={() => setMode("list")}><List size={14} /> Listagem</button>
           <button className={mode === "cal" ? "on" : ""} onClick={() => setMode("cal")}><CalendarDays size={14} /> Calendário</button>
         </div>
-        <select value={period} onChange={(e) => setPeriod(e.target.value)}>{PERIODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-        <select value={owner} onChange={(e) => setOwner(e.target.value)}>
-          <option value="">Todos os responsáveis</option>
-          {(ctx.team || []).map((m) => <option key={m.id} value={m.id}>{m.id === me ? `Eu (${(m.name || "").split(" ")[0]})` : m.name || m.email}</option>)}
-        </select>
-      </div>
-      <div className="ac-info">
-        {status === "1" ? "mais recentes primeiro" : "mais urgentes primeiro"} · <b>{rows.length} atividades</b>{late && status !== "1" ? <> · <span className="late">{late} atrasadas</span></> : null}
-        <span style={{ flex: 1 }} />
-        <span className="ac-tip"><Plus size={13} /> Para criar, abra o negócio e use Ligação, WhatsApp, Visita…</span>
       </div>
       {!list && <div className="ap-empty">Carregando…</div>}
-      {list && !rows.length && <div className="ap-empty">Nenhuma atividade com esses filtros.</div>}
+      {list && !rows.length && mode === "list" && (
+        <div className="ac-empty">
+          <span><CalendarCheck size={26} /></span>
+          <strong>{status === "1" ? "Nenhuma atividade finalizada" : "Tudo em dia por aqui"}</strong>
+          <p>{kinds.length || period || owner ? "Nenhuma atividade com esses filtros." : "Nenhuma atividade pendente."} Para criar, abra um negócio e clique em Ligação, WhatsApp, Visita ou Reunião.</p>
+          {(kinds.length || period) ? <button className="lp-btn" onClick={() => { setKinds([]); setPeriod(""); }}>Limpar filtros</button> : null}
+        </div>
+      )}
       {edit && <EditActivity ev={edit} team={ctx.team || []} me={ctx.profile} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
       {mode === "cal" && list && <MonthCal rows={rows} onPick={setEdit} />}
       {mode === "list" && rows.map((e) => {
