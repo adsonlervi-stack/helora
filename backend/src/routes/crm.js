@@ -463,40 +463,44 @@ const fmtField = (f, v) => {
   return String(v);
 };
 
-/** Relatório em planilha: uma linha por negócio, com todos os campos do funil. */
+/** Relatório em planilha: uma linha por negócio, com todos os dados e campos do funil. Os filtros finos ficam na tela. */
 router.get("/report", async (req, res) => {
   try {
-    const { data: pipes } = await supabase.from("crm_pipelines").select("id, name, stages, fields").eq("account_id", req.accountId).order("created_at");
+    const [{ data: pipes }, { data: tags }] = await Promise.all([
+      supabase.from("crm_pipelines").select("id, name, stages, fields").eq("account_id", req.accountId).order("created_at"),
+      supabase.from("crm_tags").select("id, name").eq("account_id", req.accountId).then((r) => r, () => ({ data: [] }))
+    ]);
     const pipeById = new Map((pipes || []).map((p) => [p.id, p]));
-    const { pipelineId, outcome, from, to, archived } = req.query;
-    const rows = await allLeadsFor(req, "id, name, phone, email, company, source, custom, pipeline_id, stage, value, outcome, lost_reason, owner_id, created_at, updated_at, archived_at, owner:profiles!crm_leads_owner_id_fkey(name), crm_lead_products(qty, price, crm_products(name))", (q) => {
-      if (pipelineId) q = q.eq("pipeline_id", pipelineId);
-      if (from) q = q.gte("created_at", `${from}T00:00:00`);
-      if (to) q = q.lte("created_at", `${to}T23:59:59`);
-      return q;
-    });
-    const list = rows.filter((l) => archived === "1" || !l.archived_at).filter((l) => {
-      if (!outcome) return true;
-      if (outcome === "open") return !l.outcome;
-      return l.outcome === outcome;
-    });
-    const out = list.map((l) => {
+    const tagById = new Map((tags || []).map((t) => [t.id, t.name]));
+    const { pipelineId } = req.query;
+    const rows = await allLeadsFor(req, "id, name, phone, email, company, source, notes, custom, tag_ids, pipeline_id, stage, value, outcome, outcome_at, lost_reason, expected_close, owner_id, created_at, stage_changed_at, last_interaction_at, archived_at, history, owner:profiles!crm_leads_owner_id_fkey(name), crm_lead_products(qty, price, crm_products(name))", (q) => (pipelineId ? q.eq("pipeline_id", pipelineId) : q));
+    const fmtDocTxt = (d) => (d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4"));
+    const out = rows.map((l) => {
       const p = pipeById.get(l.pipeline_id) || {};
       const fields = p.fields || [];
       const c = l.custom || {};
       const doc = docOfLead(l, fields);
+      const notes = (l.history || []).filter((h) => h.type === "note");
+      const st = (p.stages || []).find((x) => x.id === l.stage);
       return {
-        id: l.id, pipelineId: l.pipeline_id, pipeline: p.name || "", stage: (p.stages || []).find((st) => st.id === l.stage)?.name || "",
-        situacao: l.outcome === "won" ? "Ganho" : l.outcome === "lost" ? "Perdido" : "Em andamento", motivoPerda: l.lost_reason || "",
-        cliente: l.name || "", documento: doc ? (doc.length === 14 ? doc.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : doc.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4")) : "",
+        id: l.id, pipelineId: l.pipeline_id, pipeline: p.name || "", stageId: l.stage, stage: st?.name || "", stageOrder: (p.stages || []).indexOf(st),
+        outcome: l.outcome || "open", situacao: l.outcome === "won" ? "Ganho" : l.outcome === "lost" ? "Perdido" : "Em andamento", motivoPerda: l.lost_reason || "",
+        cliente: l.name || "", documento: doc ? fmtDocTxt(doc) : "", tipoDoc: doc.length === 14 ? "CNPJ" : doc ? "CPF" : "",
         empresa: l.company || "", telefone: l.phone || "", email: l.email || "", origem: l.source || "",
-        responsavel: l.owner?.name || "", valor: l.value != null ? Number(l.value) : null,
+        ownerId: l.owner_id || "", responsavel: l.owner?.name || "", valor: l.value != null ? Number(l.value) : null,
         produtos: (l.crm_lead_products || []).map((x) => `${x.crm_products?.name || "Produto"}${Number(x.qty) > 1 ? ` x${Number(x.qty)}` : ""}`).join(", "),
-        criadoEm: l.created_at, atualizadoEm: l.updated_at, arquivado: l.archived_at ? "Sim" : "",
-        campos: Object.fromEntries(fields.filter((f) => f.type !== "document" || !doc).map((f) => [f.label, fmtField(f, c[f.id])]))
+        etiquetas: (l.tag_ids || []).map((id) => tagById.get(id)).filter(Boolean).join(", "), tagIds: l.tag_ids || [],
+        observacoes: l.notes || "", anotacoes: notes.length, ultimaAnotacao: notes.sort((a, b) => new Date(b.at) - new Date(a.at))[0]?.text || "",
+        criadoEm: l.created_at, fechadoEm: l.outcome_at || null, previsao: l.expected_close || null, mudouEtapaEm: l.stage_changed_at || null, ultimaInteracao: l.last_interaction_at || null,
+        arquivado: !!l.archived_at,
+        campos: Object.fromEntries(fields.filter((f) => f.type !== "document" || !doc).map((f) => [f.label, fmtField(f, c[f.id])])),
+        datas: Object.fromEntries(fields.filter((f) => f.type === "date" && c[f.id]).map((f) => [f.label, String(c[f.id]).slice(0, 10)]))
       };
     });
-    res.json({ pipelines: (pipes || []).map((p) => ({ id: p.id, name: p.name, fields: (p.fields || []).map((f) => ({ label: f.label, type: f.type })) })), rows: out });
+    res.json({
+      pipelines: (pipes || []).map((p) => ({ id: p.id, name: p.name, stages: (p.stages || []).map((x) => ({ id: x.id, name: x.name })), fields: (p.fields || []).map((f) => ({ label: f.label, type: f.type })) })),
+      tags: (tags || []).map((t) => ({ id: t.id, name: t.name })), rows: out
+    });
   } catch (err) { fail(res, err); }
 });
 

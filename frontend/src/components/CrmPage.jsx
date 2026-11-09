@@ -17,7 +17,7 @@ import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjDat
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
 import CrmCliente from "./CrmCliente.jsx";
-import * as XLSX from "xlsx";
+import CrmReportSheet from "./CrmReportSheet.jsx";
 
 const COLORS = ["#0a84ff", "#5ac8fa", "#bf5af2", "#ff375f", "#ff9f0a", "#ffcc00", "#30d158", "#64d2ff", "#8e8e93", "#ac8e68"];
 const brl = (v) => (v == null ? "R$ 0" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }));
@@ -506,7 +506,7 @@ function FunnelView({ ctx }) {
       {cadOpen && pipeline && <CadenceSheet pipeline={pipeline} onClose={() => setCadOpen(false)} onSave={async (st) => { await saveStages(st); setCadOpen(false); }} />}
       {autoOpen && pipeline && <AutomationsSheet pipeline={pipeline} pipelines={pipelines} tags={tags} team={ctx.team || []} departments={ctx.departments || []} onClose={() => setAutoOpen(false)} onSaved={() => { setAutoOpen(false); loadPipelines(); }} />}
       {clientId && <CrmCliente leadId={clientId} ctx={ctx} onClose={() => { setClientId(null); load(); }} />}
-      {reporting && <ReportSheet pipelines={pipelines} pipelineId={all ? "" : pipelineId} onClose={() => setReporting(false)} />}
+      {reporting && <CrmReportSheet pipelineId={all ? "" : pipelineId} team={ctx.team || []} onClose={() => setReporting(false)} />}
       {exporting && <ExportSheet pipelines={pipelines} pipelineId={all ? "" : pipelineId} onClose={() => setExporting(false)} />}
       {editFields && <FieldsSheet pipeline={pipeline} onClose={() => setEditFields(false)} onSaved={() => { setEditFields(false); loadPipelines(); }} />}
       {newPipe && <NewPipelineSheet onClose={() => setNewPipe(false)} onCreated={(p) => { setNewPipe(false); loadPipelines().then(() => setPipelineId(p.id)); }} />}
@@ -1561,49 +1561,3 @@ function LeadTable({ leads, pipeById, team, onOpen }) {
   );
 }
 
-/** Relatório em planilha: aba "Todos" + uma aba por funil com os campos personalizados. */
-function ReportSheet({ pipelines, pipelineId, onClose }) {
-  const [pid, setPid] = useState(pipelineId || "");
-  const [outcome, setOutcome] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [archived, setArchived] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const go = async () => {
-    setBusy(true);
-    try {
-      const r = await crm.report({ pipelineId: pid || undefined, outcome: outcome || undefined, from: from || undefined, to: to || undefined, archived: archived ? "1" : undefined });
-      if (!r.rows.length) { notify("Nenhum negócio com esses filtros.", "error"); setBusy(false); return; }
-      const base = (x) => ({ Cliente: x.cliente, "CPF/CNPJ": x.documento, Empresa: x.empresa, Telefone: x.telefone, "E-mail": x.email, "Funil (tipo de seguro)": x.pipeline, Etapa: x.stage, "Situação": x.situacao, "Motivo da perda": x.motivoPerda, "Responsável": x.responsavel, Valor: x.valor ?? "", Produtos: x.produtos, Origem: x.origem, "Criado em": x.criadoEm, "Atualizado em": x.atualizadoEm, Arquivado: x.arquivado });
-      const wb = XLSX.utils.book_new();
-      const allLabels = [...new Set(r.pipelines.flatMap((p) => p.fields.map((f) => f.label)))];
-      const put = (name, rows, labels) => {
-        const data = rows.map((x) => { const o = base(x); for (const l of labels) o[l] = x.campos?.[l] ?? ""; return o; });
-        const ws = XLSX.utils.json_to_sheet(data);
-        ws["!cols"] = Object.keys(data[0] || {}).map((k) => ({ wch: Math.min(40, Math.max(10, k.length + 2, ...data.map((d) => String(d[k] ?? "").length))) }));
-        ws["!autofilter"] = { ref: ws["!ref"] };
-        let n = name.replace(/[\\/?*\[\]:]/g, " ").slice(0, 31) || "Funil", i = 2;
-        while (wb.SheetNames.includes(n)) n = `${name.slice(0, 28)} ${i++}`;
-        XLSX.utils.book_append_sheet(wb, ws, n);
-      };
-      if (r.pipelines.length > 1) put("Todos", r.rows, allLabels);
-      for (const p of r.pipelines) { const rows = r.rows.filter((x) => x.pipelineId === p.id); if (rows.length) put(p.name, rows, p.fields.map((f) => f.label)); }
-      XLSX.writeFile(wb, `Relatório CRM ${new Date().toLocaleDateString("pt-BR").replace(/\//g, "-")}.xlsx`);
-      notify("Relatório baixado.", "success");
-      onClose();
-    } catch (e) { notify(errText(e), "error"); }
-    setBusy(false);
-  };
-  return (
-    <Sheet title="Relatório em planilha" subtitle="Todos os dados do CRM: cliente, tipo de seguro, apólice, valores e campos personalizados." onClose={onClose} width={560}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancelar</Button><Button disabled={busy} onClick={go}><Download size={15} /> {busy ? "Gerando…" : "Baixar Excel"}</Button></>}>
-      <Group>
-        <Row label="Funil"><select value={pid} onChange={(e) => setPid(e.target.value)}><option value="">Todos os funis</option>{pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Row>
-        <Row label="Situação"><select value={outcome} onChange={(e) => setOutcome(e.target.value)}><option value="">Todas</option><option value="open">Em andamento</option><option value="won">Ganhos</option><option value="lost">Perdidos</option></select></Row>
-        <Row label="Criados de"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Row>
-        <Row label="Até"><input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Row>
-        <Row label="Incluir arquivados"><Switch checked={archived} onChange={setArchived} /></Row>
-      </Group>
-    </Sheet>
-  );
-}
