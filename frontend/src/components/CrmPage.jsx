@@ -5,7 +5,7 @@ import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
   Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown, MoreHorizontal, Mail
-  , AlertTriangle as AlertTriangleIc, CalendarCheck
+  , AlertTriangle as AlertTriangleIc, CalendarCheck, ChevronDown
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
@@ -101,15 +101,15 @@ export default function CrmPage({ profile, onOpenConversation }) {
     getDepartments().then(setDepartments).catch(() => {});
   }, []);
   const pipeline = pipelines.find((p) => p.id === pipelineId);
-  const ctx = { profile, isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, allMode, setAllMode, loadPipelines, loadTags, loadProducts, setPipelines };
+  const ctx = { setCrmTab: setTab, profile, isManager, pipelines, pipeline, pipelineId, setPipelineId, tags, products, team, departments, onOpenConversation, allMode, setAllMode, loadPipelines, loadTags, loadProducts, setPipelines };
 
   return (
     <div className="page crm-page">
-      <div className="crm-tabs">
+      {tab !== "funnel" && <div className="crm-tabs">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}><Icon size={15} /> {label}</button>
         ))}
-      </div>
+      </div>}
       {error && <div className="admin-feedback error">{error}</div>}
       {tab === "funnel" && <FunnelView ctx={ctx} />}
       {tab === "contacts" && <ContactsView ctx={ctx} />}
@@ -135,6 +135,7 @@ function FunnelView({ ctx }) {
   const [open, setOpen] = useState(null); // lead | {new:true, stage}
   const [dragId, setDragId] = useState(null);
   const [clientId, setClientId] = useState(null);
+  const [moreNav, setMoreNav] = useState(false);
   const [sidePanel, setSidePanelS] = useState(() => { try { return localStorage.getItem("helora_crm_side") === "1"; } catch { return false; } });
   const setSidePanel = (v) => { setSidePanelS(v); try { localStorage.setItem("helora_crm_side", v ? "1" : "0"); } catch {} };
   const [nextAct, setNextAct] = useState(new Map());
@@ -347,9 +348,22 @@ function FunnelView({ ctx }) {
           )}
         </div>
         <div className="crm-views">
-          {[["board", "Funil"], ["list", "Lista"], ["activities", "Atividades"], ["clients", "Empresas"], ["snoozed", "Reagendados"], ["archived", "Arquivados"]].map(([k, l]) => (
+          {[["board", "Funil"], ["list", "Lista"], ["activities", "Atividades"], ["clients", "Empresas"]].map(([k, l]) => (
             <button key={k} type="button" className={view === k ? "on" : ""} onClick={() => setView(k)}>{l}</button>
           ))}
+          <span className="crm-more">
+            <button type="button" className={view === "snoozed" || view === "archived" ? "on" : ""} onClick={() => setMoreNav((v) => !v)}>{view === "snoozed" ? "Reagendados" : view === "archived" ? "Arquivados" : "Mais"} <ChevronDown size={13} /></button>
+            {moreNav && (
+              <span className="crm-more-menu" onMouseLeave={() => setMoreNav(false)}>
+                <button onClick={() => { setView("snoozed"); setMoreNav(false); }}>Reagendados</button>
+                <button onClick={() => { setView("archived"); setMoreNav(false); }}>Arquivados</button>
+                <hr />
+                <button onClick={() => ctx.setCrmTab("contacts")}>Contatos</button>
+                <button onClick={() => ctx.setCrmTab("products")}>Produtos</button>
+                <button onClick={() => ctx.setCrmTab("tags")}>Tags</button>
+              </span>
+            )}
+          </span>
         </div>
         {view === "board" && !sidePanel && <button type="button" className="crm-side-btn" onClick={() => setSidePanel(true)} title="Lista de clientes ao lado do funil"><Users size={15} /> Clientes</button>}
         <div style={{ flex: 1 }} />

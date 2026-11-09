@@ -62,7 +62,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
   const [mailTo, setMailTo] = useState(null);
   const [histFilter, setHistFilter] = useState("all");
   const [saving, setSaving] = useState("");
-  const [open, setOpen] = useState({ resumo: true, produtos: true, detalhes: true, contato: true });
+  const [open, setOpen] = useState({ resumo: true, produtos: false, detalhes: true, contato: false });
   const [menu, setMenu] = useState(false);
   const fileRef = useRef(null);
   const dirty = useRef(false);
