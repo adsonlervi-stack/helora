@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Building2, History, Briefcase, Users, Plus, X, Phone, Mail, MessageCircle, Trophy, ThumbsDown } from "lucide-react";
+import { FileText, Building2, History, Briefcase, Users, Plus, X, Phone, Mail, MessageCircle, Trophy, ThumbsDown } from "lucide-react";
 import { crm, integrations } from "../api.js";
 import { AgActivity, NoteBox, AG_TABS, EV_KIND, agIcon, EditActivity } from "./CrmLeadPage.jsx";
 import MailBox from "./MailBox.jsx";
 import { ClientForm } from "./CrmEmpresas.jsx";
+import { TIPOS } from "./CrmPolicies.jsx";
 import { notify } from "../dialogs.js";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -26,6 +27,8 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
   const [edit, setEdit] = useState(null);
   const [mail, setMail] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [pols, setPols] = useState(null);
+  useEffect(() => { if (tab === "policies" && data) crm.policies({ leadIds: data.deals.map((d) => d.id).join(",") }).then((r) => setPols(r.policies || [])).catch(() => setPols([])); }, [tab, data]);
   const loadEvents = (ids) => crm.events({}).then((l) => setEvents((l || []).filter((e) => ids.includes(e.leadId)))).catch(() => {});
   const load = () => crm.client(leadId).then((d) => { setData(d); loadEvents(d.deals.map((x) => x.id)); if (!d.deals.some((x) => x.id === dealId)) setDealId(d.deals[0]?.id); }).catch((e) => { notify(errText(e), "error"); onClose(); });
   useEffect(() => { setData(null); load(); }, [leadId]);
@@ -52,7 +55,7 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
           <button className="lp-icon" onClick={onClose} title="Fechar"><X size={18} /></button>
         </header>
         <nav className="cl-tabs">
-          {[["history", History, "Ver histórico"], ["deals", Briefcase, "Ver negócios"], ["people", Users, "Ver pessoas"]].map(([k, I, l]) => (
+          {[["history", History, "Ver histórico"], ["deals", Briefcase, "Ver negócios"], ["policies", FileText, "Apólices"], ["people", Users, "Ver pessoas"]].map(([k, I, l]) => (
             <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}><I size={15} /> {l}</button>
           ))}
           <span style={{ flex: 1 }} />
@@ -113,6 +116,23 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
               {!data.history.length && !events.length && <div className="ap-empty">Nada registrado ainda.</div>}
               <p className="cl-hint">Para registrar uma ligação, WhatsApp ou visita, abra o negócio acima.</p>
             </div>
+          )}
+          {data && tab === "policies" && (
+            <table className="cl-table">
+              <thead><tr><th>Produto</th><th>Seguradora</th><th>Nº</th><th>Vigência</th><th>Pagamento</th><th>Status</th></tr></thead>
+              <tbody>
+                {(pols || []).map((p) => (
+                  <tr key={p.id} onClick={() => { onClose(); openLead(p.leadId); }}>
+                    <td><strong>{p.product || "Seguro"}</strong><small>{TIPOS[p.tipo]}</small></td><td>{p.insurer || "—"}</td><td>{p.number || "—"}</td>
+                    <td>{p.tipo === "recorrente" ? `desde ${new Date(p.start + "T12:00:00").toLocaleDateString("pt-BR")}` : `${p.start ? new Date(p.start + "T12:00:00").toLocaleDateString("pt-BR") : ""} → ${p.end ? new Date(p.end + "T12:00:00").toLocaleDateString("pt-BR") : ""}`}</td>
+                    <td>{p.payment === "parcelado" ? `${p.installments}x` : p.payment === "mensal" ? "Mensal" : "À vista"}{p.amount ? ` · ${brl(p.amount)}` : ""}<small>{p.parcels.filter((i) => i.paidAt).length}/{p.parcels.length} pagas</small></td>
+                    <td><span className={`pol-st ${p.status}`}>{p.status}</span></td>
+                  </tr>
+                ))}
+                {pols && !pols.length && <tr><td colSpan={6} className="cv-muted">Nenhuma apólice registrada. Ao marcar um negócio como Ganho, o Helora pergunta os dados da apólice.</td></tr>}
+                {!pols && <tr><td colSpan={6} className="cv-muted">Carregando…</td></tr>}
+              </tbody>
+            </table>
           )}
           {data && tab === "people" && (
             <div className="cl-people">

@@ -131,6 +131,7 @@ for (const key of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) {
 }
 
 startSupportWatcher();
+import("./routes/crm.js").then(({ runPolicyJobs }) => { setTimeout(runPolicyJobs, 90 * 1000); setInterval(runPolicyJobs, 6 * 60 * 60 * 1000); }).catch(() => {});
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`[Backend] Rodando em http://localhost:${PORT}`);
 });

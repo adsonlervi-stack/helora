@@ -1479,7 +1479,7 @@ function ProductsView({ ctx }) {
   const [openIds, setOpenIds] = useState({});
   const save = async () => {
     try {
-      const body = { ...edit, parentId: edit.parentId || null };
+      const body = { ...edit, parentId: edit.parentId || null, vigenciaTipo: edit.vigenciaTipo ?? edit.vigencia_tipo ?? "anual", vigenciaMeses: edit.vigenciaMeses ?? edit.vigencia_meses ?? 12 };
       if (edit.id) await crm.updateProduct(edit.id, body); else await crm.createProduct(body);
       setEdit(null);
       loadProducts();
@@ -1543,7 +1543,11 @@ function ProductsView({ ctx }) {
               </select>
             </Row>
             <Row label="Preço (R$)"><input value={edit.price} onChange={(e) => setEdit((c) => ({ ...c, price: e.target.value }))} inputMode="decimal" placeholder="0,00" /></Row>
-            <Row label="Recorrente (mensal)"><Switch checked={edit.recurring} onChange={(v) => setEdit((c) => ({ ...c, recurring: v }))} /></Row>
+            <Row label="Recorrente (mensal)"><Switch checked={edit.recurring} onChange={(v) => setEdit((c) => ({ ...c, recurring: v, ...(v ? { vigenciaTipo: "recorrente" } : {}) }))} /></Row>
+            <Row label="Vigência"><select value={edit.vigenciaTipo ?? edit.vigencia_tipo ?? "anual"} onChange={(e) => setEdit((c) => ({ ...c, vigenciaTipo: e.target.value }))}>
+              <option value="anual">Anual (renova todo ano)</option><option value="prazo">Prazo fixo em meses (renova no fim)</option><option value="recorrente">Recorrente, sem fim (saúde, vida…)</option><option value="pontual">Avulso / pontual (não renova)</option>
+            </select></Row>
+            {(edit.vigenciaTipo ?? edit.vigencia_tipo) === "prazo" && <Row label="Prazo (meses)"><input type="number" min="1" value={edit.vigenciaMeses ?? edit.vigencia_meses ?? 12} onChange={(e) => setEdit((c) => ({ ...c, vigenciaMeses: e.target.value }))} /></Row>}
             <Row label="Ativo"><Switch checked={edit.active} onChange={(v) => setEdit((c) => ({ ...c, active: v }))} /></Row>
             <Row label="Descrição" stack><textarea rows={2} value={edit.description || ""} onChange={(e) => setEdit((c) => ({ ...c, description: e.target.value }))} /></Row>
           </Group>

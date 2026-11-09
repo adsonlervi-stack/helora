@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Download, Users, Trophy, ThumbsDown, Percent, Wallet } from "lucide-react";
 import { crm } from "../api.js";
+import { PoliciesReport } from "./CrmPolicies.jsx";
 
 const iso = (d) => d.toISOString().slice(0, 10);
 const daysAgo = (n) => iso(new Date(Date.now() - n * 86400000));
@@ -134,6 +135,7 @@ export default function CrmReports() {
       </div>
       {err && <div className="admin-feedback error">{err}</div>}
       {leads && <SalesPanel leads={leads} f={f} outcome={outcome} />}
+      <PoliciesReport />
 
       <div className="kpi-grid">
         {[

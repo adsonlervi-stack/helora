@@ -5,10 +5,11 @@ import SlotPicker from "./SlotPicker.jsx";
 import { loadQuickReplies } from "./QuickReplies.jsx";
 import {
   X, ListTodo, MessageCircle, CalendarDays, Paperclip, Phone, FileText, CheckSquare, StickyNote, Trash2, MoreHorizontal, Plus, Check,
-  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin, Pencil, Users, MapPin
+  Building2, User, Tag, Flag, Package, Mail, ChevronDown, ChevronUp, ExternalLink, Trophy, ThumbsDown, RotateCcw, ArrowRight, Clock, Send, Archive, Pin, Pencil, Users, MapPin, Receipt
 } from "lucide-react";
 import { crm, createTaskApi, integrations } from "../api.js";
 import MailBox from "./MailBox.jsx";
+import { PolicyForm, PoliciesSection, BillingSend } from "./CrmPolicies.jsx";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
@@ -44,7 +45,7 @@ const toLocalInput = (d) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 const daysUntil = (d) => { if (!d) return null; return Math.round((new Date(`${String(d).slice(0, 10)}T12:00:00`) - new Date()) / 86400000); };
-export const EV_KIND = { reuniao: "Reunião", call: "Ligação", followup: "Follow-up", tarefa: "Tarefa", email: "E-mail", whatsapp: "WhatsApp", proposta: "Proposta", visita: "Visita", cad_call: "Ligação", cad_whats: "WhatsApp", cad_email: "E-mail", cad_task: "Tarefa", cad_meeting: "Reunião" };
+export const EV_KIND = { reuniao: "Reunião", call: "Ligação", followup: "Follow-up", tarefa: "Tarefa", email: "E-mail", whatsapp: "WhatsApp", proposta: "Proposta", visita: "Visita", cobranca: "Cobrança", cad_call: "Ligação", cad_whats: "WhatsApp", cad_email: "E-mail", cad_task: "Tarefa", cad_meeting: "Reunião" };
 const WON_RE = /fechad|ganh|vendid|conclu|indeniz/i;
 const LOST_RE = /perdid|cancel|desist|negad|n[aã]o fechou/i;
 
@@ -60,6 +61,9 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
   const [tab, setTab] = useState("note");
   const [editEv, setEditEv] = useState(null);
   const [mailTo, setMailTo] = useState(null);
+  const [policyForm, setPolicyForm] = useState(false);
+  const [polKey, setPolKey] = useState(0);
+  const [billEv, setBillEv] = useState(null);
   const [histFilter, setHistFilter] = useState("all");
   const [saving, setSaving] = useState("");
   const [open, setOpen] = useState({ resumo: true, produtos: false, detalhes: true, contato: false });
@@ -160,6 +164,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
     if (target) setF((c) => ({ ...c, stage: target.id }));
     const s = await persist(patch);
     if (s) notify(o === "won" ? "Negócio ganho! 🎉" : o === "lost" ? "Marcado como perdido." : "Negócio reaberto.", o === "won" ? "success" : undefined);
+    if (s && o === "won") setPolicyForm(true);
     if (s && o) await afterClose(s, o);
   };
   const remove = async () => {
@@ -386,6 +391,9 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
               )}
             </Section>
 
+            <Section title="Apólices" open={open.apolices ?? !!outcome} onToggle={() => setOpen((o) => ({ ...o, apolices: !(o.apolices ?? !!outcome) }))}>
+              <PoliciesSection lead={{ ...lead, name: f.name, value: f.value, custom }} ctx={ctx} pipe={pipe} refreshKey={polKey} onChanged={loadEvents} />
+            </Section>
             <Section title={`Produtos${items.length ? ` · ${items.length}` : ""}`} open={open.produtos} onToggle={() => setOpen((o) => ({ ...o, produtos: !o.produtos }))}>
               {items.map((it, i) => (
                 <div key={i} className="lp-prod">
@@ -518,6 +526,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                         <strong>{ev.title}</strong>
                         <span className={`lp-ag-due ${late ? "late" : ""}`}><Clock size={12} /> Prazo: {when(ev.startsAt)}</span>
                       </div>
+                      {ev.kind === "cobranca" && ev.billing && <button className="lp-primary sm" onClick={() => setBillEv(ev)}><Send size={13} /> Enviar cobrança</button>}
                       <label className="lp-fin"><input type="checkbox" onChange={async () => { await crm.updateEvent(ev.id, { done: true }); loadEvents(); notify("Atividade finalizada.", "success"); }} /> Finalizar</label>
                     </div>
                   );
@@ -566,6 +575,8 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
             </div>
           </main>
         </div>
+        {policyForm && <PolicyForm lead={{ ...lead, name: f.name, value: f.value, custom }} ctx={ctx} pipe={pipe} onClose={() => setPolicyForm(false)} onSaved={() => { setPolicyForm(false); setPolKey((k) => k + 1); loadEvents(); }} />}
+        {billEv && <BillingSend ev={billEv} lead={{ name: f.name }} onClose={() => setBillEv(null)} onDone={() => { setBillEv(null); loadEvents(); setPolKey((k) => k + 1); }} />}
         {mailTo && <MailBox compose={mailTo} onClose={() => setMailTo(null)} />}
         {editEv && <EditActivity ev={editEv} team={team} me={ctx.profile} onClose={() => setEditEv(null)} onSaved={() => { setEditEv(null); loadEvents(); }} />}
       </div>
@@ -604,7 +615,7 @@ export function NoteBox({ onSave }) {
 }
 
 export const AG_TABS = [["note", StickyNote, "Nota"], ["email", Mail, "E-mail"], ["call", Phone, "Ligação"], ["whatsapp", MessageCircle, "WhatsApp"], ["proposta", FileText, "Proposta"], ["reuniao", Users, "Reunião"], ["visita", MapPin, "Visita"], ["tarefa", CheckSquare, "Tarefa"]];
-export const agIcon = (k, size = 15) => { const I = { email: Mail, call: Phone, cad_call: Phone, whatsapp: MessageCircle, cad_whats: MessageCircle, proposta: FileText, reuniao: Users, cad_meeting: Users, visita: MapPin, tarefa: CheckSquare, cad_task: CheckSquare, cad_email: Mail }[k] || CalendarDays; return <I size={size} />; };
+export const agIcon = (k, size = 15) => { const I = { cobranca: Receipt, email: Mail, call: Phone, cad_call: Phone, whatsapp: MessageCircle, cad_whats: MessageCircle, proposta: FileText, reuniao: Users, cad_meeting: Users, visita: MapPin, tarefa: CheckSquare, cad_task: CheckSquare, cad_email: Mail }[k] || CalendarDays; return <I size={size} />; };
 
 /** Registro rápido de atividade, igual ao Agendor: o que foi feito / próximo passo, responsável, prazo e horário. */
 export function AgActivity({ kind, team, me, defaultOwner, onSave, onCancel, uploadFile }) {

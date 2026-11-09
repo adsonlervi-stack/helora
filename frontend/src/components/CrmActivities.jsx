@@ -3,8 +3,9 @@ import { Plus, Clock, Building2, List, CalendarDays, ChevronLeft, ChevronRight, 
 import { crm } from "../api.js";
 import { notify } from "../dialogs.js";
 import { EV_KIND, agIcon, EditActivity } from "./CrmLeadPage.jsx";
+import { BillingSend } from "./CrmPolicies.jsx";
 
-const KINDS = ["email", "call", "whatsapp", "proposta", "visita", "reuniao", "tarefa"];
+const KINDS = ["email", "call", "whatsapp", "proposta", "visita", "reuniao", "tarefa", "cobranca"];
 const fmt = (d) => {
   const x = new Date(d), t = new Date(); t.setHours(0, 0, 0, 0);
   const day = Math.round((new Date(x).setHours(0, 0, 0, 0) - t) / 86400000);
@@ -19,10 +20,12 @@ export default function CrmActivities({ ctx, onOpenLead }) {
   const [list, setList] = useState(null);
   const [kinds, setKinds] = useState([]);
   const [status, setStatus] = useState("0");
-  const [owner, setOwner] = useState(me || "");
+  const [owner, setOwner] = useState("");
+  useEffect(() => { if (me && (ctx.team || []).some((m) => m.id === me)) setOwner((o) => o || me); }, [ctx.team]);
   const [period, setPeriod] = useState("");
   const [mode, setMode] = useState("list");
   const [edit, setEdit] = useState(null);
+  const [bill, setBill] = useState(null);
   const load = () => crm.events({ done: status || undefined, ownerId: owner || undefined }).then(setList).catch((e) => { notify(e?.response?.data?.error || e.message, "error"); setList([]); });
   useEffect(() => { setList(null); load(); }, [status, owner]);
 
@@ -103,6 +106,7 @@ export default function CrmActivities({ ctx, onOpenLead }) {
           {(kinds.length || period) ? <button className="lp-btn" onClick={() => { setKinds([]); setPeriod(""); }}>Limpar filtros</button> : null}
         </div>
       )}
+      {bill && <BillingSend ev={bill} onClose={() => setBill(null)} onDone={() => { setBill(null); load(); }} />}
       {edit && <EditActivity ev={edit} team={ctx.team || []} me={ctx.profile} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
       {mode === "cal" && list && <MonthCal rows={rows} onPick={setEdit} />}
       {mode === "list" && rows.map((e) => {
@@ -122,6 +126,7 @@ export default function CrmActivities({ ctx, onOpenLead }) {
                 <small>{e.ownerName ? `Responsável: ${e.ownerName}` : ""}</small>
               </div>
               <span className={`ac-due ${e.done ? "ok" : isLate ? "late" : today ? "today" : ""}`}><Clock size={12} /> {e.done ? "Feita" : "Prazo"}: {fmt(e.startsAt)}</span>
+              {e.kind === "cobranca" && e.billing && !e.done && <button className="lp-primary sm" onClick={() => setBill(e)}>Enviar cobrança</button>}
               <label className="lp-fin"><input type="checkbox" checked={!!e.done} onChange={(x) => finish(e, x.target.checked)} /> Finalizar</label>
             </div>
             <div className="ac-text lp-ag-click" onClick={() => setEdit(e)}>{e.notes || e.title}{e.files?.length ? <div className="lp-ag-files">{e.files.map((x, i) => <a key={i} href={x.url} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>📎 {x.name}</a>)}</div> : null}</div>

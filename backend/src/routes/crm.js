@@ -1242,7 +1242,8 @@ router.post("/products", async (req, res) => {
     const { data, error } = await supabase.from("crm_products").insert({
       account_id: req.accountId, name: String(b.name).trim().slice(0, 120), description: b.description || null,
       price: money(b.price), recurring: !!b.recurring, active: b.active !== false,
-      ...(b.parentId ? { parent_id: b.parentId } : {})
+      ...(b.parentId ? { parent_id: b.parentId } : {}),
+      ...(b.vigenciaTipo ? { vigencia_tipo: b.vigenciaTipo, vigencia_meses: Math.max(1, parseInt(b.vigenciaMeses, 10) || 12) } : {})
     }).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -1286,7 +1287,9 @@ router.patch("/products/:id", async (req, res) => {
     if (b.recurring !== undefined) patch.recurring = !!b.recurring;
     if (b.active !== undefined) patch.active = !!b.active;
     if (b.parentId !== undefined) patch.parent_id = b.parentId && b.parentId !== req.params.id ? b.parentId : null;
-    const { data, error } = await supabase.from("crm_products").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
+    if (b.vigenciaTipo !== undefined) patch.vigencia_tipo = ["anual", "recorrente", "prazo", "pontual"].includes(b.vigenciaTipo) ? b.vigenciaTipo : "anual";
+    if (b.vigenciaMeses !== undefined) patch.vigencia_meses = Math.max(1, Math.min(600, parseInt(b.vigenciaMeses, 10) || 12));
+    let { data, error } = await supabase.from("crm_products").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
     if (error) throw error;
     res.json(data);
   } catch (err) { fail(res, err); }
@@ -1354,7 +1357,7 @@ router.get("/events", async (req, res) => {
       }));
     } catch {}
     res.json([...tasks, ...data.map((e) => ({
-      owners: [e.owner_id, ...((e.notify?.owners || []).filter((x) => x !== e.owner_id))].filter(Boolean), files: e.notify?.files || [],
+      owners: [e.owner_id, ...((e.notify?.owners || []).filter((x) => x !== e.owner_id))].filter(Boolean), files: e.notify?.files || [], billing: e.notify?.billing || null,
       id: e.id, title: e.title, kind: e.kind, startsAt: e.starts_at, endsAt: e.ends_at, done: e.done, notes: e.notes,
       leadId: e.lead_id, leadName: e.crm_leads?.name || null, leadCompany: e.crm_leads?.company || null, pipelineId: e.crm_leads?.pipeline_id || null, createdAt: e.created_at, leadPhone: e.crm_leads?.phone || null, ownerId: e.owner_id, ownerName: e.owner?.name || null,
       meetLink: e.meet_link || null, googleEventId: e.google_event_id || null
@@ -1362,7 +1365,7 @@ router.get("/events", async (req, res) => {
   } catch (err) { fail(res, err); }
 });
 // Tipos de atividade criados pela equipe (os que já foram usados em alguma atividade)
-const BASE_KINDS = ["reuniao", "call", "followup", "tarefa", "email", "whatsapp", "proposta", "visita"];
+const BASE_KINDS = ["reuniao", "call", "followup", "tarefa", "email", "whatsapp", "proposta", "visita", "cobranca"];
 router.get("/activity-kinds", async (req, res) => {
   try {
     const { data, error } = await supabase.from("crm_events").select("kind").eq("account_id", req.accountId).order("created_at", { ascending: false }).limit(3000);
@@ -1463,5 +1466,183 @@ router.delete("/events/:id", async (req, res) => {
     res.sendStatus(204);
   } catch (err) { fail(res, err); }
 });
+
+
+/* ---------------------------------------------------------------- Apólices (vigência e cobrança) */
+const addMonths = (ymd, n) => { const [y, m, d] = String(ymd).slice(0, 10).split("-").map(Number); const t = new Date(Date.UTC(y, m - 1 + n, 1)); const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate(); t.setUTCDate(Math.min(d, last)); return t.toISOString().slice(0, 10); };
+const withDay = (ymd, day) => { if (!day) return ymd; const [y, m] = ymd.split("-").map(Number); const last = new Date(Date.UTC(y, m, 0)).getUTCDate(); return `${y}-${String(m).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`; };
+const mapPolicy = (p, inst = []) => ({
+  id: p.id, leadId: p.lead_id, productId: p.product_id, product: p.product_name || "", insurer: p.insurer || "", number: p.number || "", tipo: p.tipo,
+  start: p.start_date, end: p.end_date, payment: p.payment, installments: p.installments, amount: p.amount != null ? Number(p.amount) : null, premium: p.premium != null ? Number(p.premium) : null,
+  dueDay: p.due_day, commission: p.commission_pct != null ? Number(p.commission_pct) : null, billing: p.billing || {}, renewalDays: p.renewal_days, renewalLeadId: p.renewal_lead_id,
+  status: p.status, notes: p.notes || "", createdAt: p.created_at,
+  parcels: inst.filter((i) => i.policy_id === p.id).sort((a, b) => a.n - b.n).map((i) => ({ id: i.id, n: i.n, total: i.total, due: i.due_date, amount: i.amount != null ? Number(i.amount) : null, paidAt: i.paid_at, eventId: i.event_id }))
+});
+
+/** Cria as parcelas (e as atividades de cobrança, se pedidas) de uma apólice. Recorrente: gera 12 meses à frente. */
+async function buildInstallments(pol, lead, ownerId, fromN = 1) {
+  const recurrent = pol.payment === "mensal" || pol.tipo === "recorrente";
+  const total = recurrent ? null : pol.payment === "parcelado" ? Math.max(1, pol.installments || 1) : 1;
+  const count = recurrent ? 12 : total - fromN + 1;
+  if (count <= 0) return;
+  const first = withDay(pol.start_date || new Date().toISOString().slice(0, 10), pol.due_day);
+  const rows = [];
+  for (let i = 0; i < count; i++) {
+    const n = fromN + i;
+    rows.push({ account_id: pol.account_id, policy_id: pol.id, lead_id: pol.lead_id, n, total, due_date: withDay(addMonths(first, n - 1), pol.due_day), amount: pol.amount });
+  }
+  const { data: ins, error } = await supabase.from("crm_installments").insert(rows).select();
+  if (error) throw error;
+  const b = pol.billing || {};
+  if (!b.enabled || !pol.lead_id) return;
+  const before = Math.max(0, parseInt(b.daysBefore, 10) || 0);
+  for (const i of ins) {
+    const d = new Date(`${i.due_date}T09:00:00-03:00`); d.setDate(d.getDate() - before);
+    const valor = i.amount != null ? Number(i.amount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
+    const { data: ev } = await supabase.from("crm_events").insert({
+      account_id: pol.account_id, lead_id: pol.lead_id, kind: "cobranca", owner_id: ownerId || null, starts_at: d.toISOString(),
+      title: `Cobrança ${i.total ? `parcela ${i.n}/${i.total}` : `mensalidade ${String(i.due_date).slice(5, 7)}/${String(i.due_date).slice(0, 4)}`}${valor ? ` · ${valor}` : ""}`.slice(0, 120),
+      notes: `${pol.product_name || "Seguro"}${pol.insurer ? ` · ${pol.insurer}` : ""} · vence ${String(i.due_date).split("-").reverse().join("/")}`,
+      notify: { billing: { policyId: pol.id, installmentId: i.id, due: i.due_date, amount: i.amount, n: i.n, total: i.total, template: b.template || null, needsAttachment: !!b.needsAttachment } }
+    }).select("id").single();
+    if (ev) await supabase.from("crm_installments").update({ event_id: ev.id }).eq("id", i.id);
+  }
+}
+
+router.get("/policies", async (req, res) => {
+  try {
+    let q = supabase.from("crm_policies").select("*").eq("account_id", req.accountId).order("end_date", { ascending: true, nullsFirst: false }).limit(5000);
+    if (req.query.leadId) q = q.eq("lead_id", req.query.leadId);
+    if (req.query.leadIds) q = q.in("lead_id", String(req.query.leadIds).split(",").filter(Boolean).slice(0, 200));
+    const { data, error } = await q;
+    if (error) return res.status(error.code === "42P01" || /crm_policies/.test(error.message) ? 200 : 500).json(error.code === "42P01" || /crm_policies/.test(error.message) ? { missing: true, policies: [] } : { error: error.message });
+    const ids = (data || []).map((p) => p.id);
+    let inst = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data: x } = await supabase.from("crm_installments").select("*").in("policy_id", ids.slice(i, i + 200));
+      inst = inst.concat(x || []);
+    }
+    let pols = (data || []).map((p) => mapPolicy(p, inst));
+    if (req.query.summary) {
+      const leadIds = [...new Set(pols.map((p) => p.leadId).filter(Boolean))];
+      const names = new Map();
+      for (let i = 0; i < leadIds.length; i += 300) {
+        const { data: ls } = await supabase.from("crm_leads").select("id, name, owner_id, pipeline_id, owner:profiles!crm_leads_owner_id_fkey(name)").in("id", leadIds.slice(i, i + 300));
+        for (const l of ls || []) names.set(l.id, l);
+      }
+      if (!isManager(req)) pols = pols.filter((p) => names.get(p.leadId)?.owner_id === req.userId);
+      pols = pols.map((p) => ({ ...p, leadName: names.get(p.leadId)?.name || "", ownerName: names.get(p.leadId)?.owner?.name || "", pipelineId: names.get(p.leadId)?.pipeline_id || null }));
+    }
+    res.json({ policies: pols });
+  } catch (err) { fail(res, err); }
+});
+router.post("/policies", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const { data: lead } = await supabase.from("crm_leads").select("id, owner_id").eq("account_id", req.accountId).eq("id", b.leadId).maybeSingle();
+    if (!lead) return res.status(404).json({ error: "Negócio não encontrado." });
+    const tipo = ["anual", "recorrente", "prazo", "pontual"].includes(b.tipo) ? b.tipo : "anual";
+    const row = {
+      account_id: req.accountId, lead_id: lead.id, product_id: b.productId || null, product_name: String(b.product || "").slice(0, 160) || null, insurer: String(b.insurer || "").slice(0, 120) || null,
+      number: String(b.number || "").slice(0, 80) || null, tipo, start_date: b.start || null, end_date: tipo === "recorrente" ? null : b.end || null,
+      payment: ["avista", "parcelado", "mensal"].includes(b.payment) ? b.payment : "avista", installments: Math.max(1, Math.min(120, parseInt(b.installments, 10) || 1)),
+      amount: b.amount !== "" && b.amount != null ? money(b.amount) : null, premium: b.premium !== "" && b.premium != null ? money(b.premium) : null,
+      due_day: b.dueDay ? Math.max(1, Math.min(31, parseInt(b.dueDay, 10))) : null, commission_pct: b.commission !== "" && b.commission != null ? Number(String(b.commission).replace(",", ".")) || null : null,
+      billing: b.billing && b.billing.enabled ? { enabled: true, daysBefore: Math.max(0, parseInt(b.billing.daysBefore, 10) || 0), template: b.billing.template || null, needsAttachment: !!b.billing.needsAttachment } : { enabled: false },
+      renewal_days: tipo === "anual" || tipo === "prazo" ? (b.renewalDays === 0 || b.renewalDays === "0" ? 0 : Math.max(1, parseInt(b.renewalDays, 10) || 60)) : 0, notes: b.notes || null, created_by: req.userId
+    };
+    const { data: pol, error } = await supabase.from("crm_policies").insert(row).select().single();
+    if (error) throw /crm_policies|42P01/.test(error.message + error.code) ? new Error("Rode a migration 043 (apólices) no Supabase.") : error;
+    await buildInstallments(pol, lead, b.billingOwnerId || lead.owner_id || req.userId);
+    await pushHistory(lead.id, [{ type: "note", text: `📄 Apólice registrada: ${row.product_name || "Seguro"}${row.insurer ? ` · ${row.insurer}` : ""}${row.number ? ` · nº ${row.number}` : ""}${row.end_date ? ` · vigência até ${row.end_date.split("-").reverse().join("/")}` : row.tipo === "recorrente" ? " · recorrente" : ""}`, by: req.userName || null, byId: req.userId }]);
+    res.status(201).json(mapPolicy(pol));
+  } catch (err) { fail(res, err); }
+});
+router.patch("/policies/:id", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const patch = { updated_at: new Date().toISOString() };
+    for (const [k, col] of [["insurer", "insurer"], ["number", "number"], ["start", "start_date"], ["end", "end_date"], ["notes", "notes"], ["product", "product_name"]]) if (b[k] !== undefined) patch[col] = b[k] || null;
+    if (b.commission !== undefined) patch.commission_pct = b.commission === "" || b.commission == null ? null : Number(String(b.commission).replace(",", ".")) || null;
+    if (b.renewalDays !== undefined) patch.renewal_days = Math.max(0, parseInt(b.renewalDays, 10) || 0);
+    if (b.status && ["ativa", "cancelada", "renovada", "encerrada"].includes(b.status)) patch.status = b.status;
+    const { data, error } = await supabase.from("crm_policies").update(patch).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
+    if (error) throw error;
+    if (patch.status === "cancelada" || patch.status === "encerrada") {
+      // cancela as cobranças futuras ainda não pagas
+      const { data: open } = await supabase.from("crm_installments").select("id, event_id").eq("policy_id", data.id).is("paid_at", null).gte("due_date", new Date().toISOString().slice(0, 10));
+      const evIds = (open || []).map((i) => i.event_id).filter(Boolean);
+      if (evIds.length) await supabase.from("crm_events").delete().in("id", evIds).eq("done", false);
+      if (open?.length) await supabase.from("crm_installments").delete().in("id", open.map((i) => i.id));
+    }
+    res.json(mapPolicy(data));
+  } catch (err) { fail(res, err); }
+});
+router.delete("/policies/:id", async (req, res) => {
+  try {
+    const { data: inst } = await supabase.from("crm_installments").select("event_id").eq("policy_id", req.params.id);
+    const evIds = (inst || []).map((i) => i.event_id).filter(Boolean);
+    if (evIds.length) await supabase.from("crm_events").delete().in("id", evIds).eq("account_id", req.accountId);
+    const { error } = await supabase.from("crm_policies").delete().eq("account_id", req.accountId).eq("id", req.params.id);
+    if (error) throw error;
+    res.sendStatus(204);
+  } catch (err) { fail(res, err); }
+});
+router.patch("/installments/:id", async (req, res) => {
+  try {
+    const paid = !!req.body?.paid;
+    const { data, error } = await supabase.from("crm_installments").update({ paid_at: paid ? new Date().toISOString() : null }).eq("account_id", req.accountId).eq("id", req.params.id).select().single();
+    if (error) throw error;
+    if (paid && data.event_id) await supabase.from("crm_events").update({ done: true }).eq("id", data.event_id);
+    res.json(data);
+  } catch (err) { fail(res, err); }
+});
+
+/** Rotina diária: abre a renovação X dias antes do fim e mantém 12 meses de mensalidades nas apólices recorrentes. */
+export async function runPolicyJobs() {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: pols, error } = await supabase.from("crm_policies").select("*").eq("status", "ativa").limit(5000);
+    if (error) return;
+    for (const p of pols || []) {
+      try {
+        if (p.end_date && !p.renewal_lead_id && p.lead_id && (p.tipo === "anual" || p.tipo === "prazo") && p.renewal_days > 0) {
+          const limit = new Date(`${p.end_date}T12:00:00Z`); limit.setUTCDate(limit.getUTCDate() - (p.renewal_days ?? 60));
+          if (limit.toISOString().slice(0, 10) <= today) {
+            const { data: l } = await supabase.from("crm_leads").select("*").eq("id", p.lead_id).maybeSingle();
+            if (l) {
+              const { data: pipe } = await supabase.from("crm_pipelines").select("stages, fields").eq("id", l.pipeline_id).maybeSingle();
+              const custom = { ...(l.custom || {}) };
+              const kindF = (pipe?.fields || []).find((f) => f.kind || /tipo de neg/i.test(f.label || ""));
+              if (kindF) custom[kindF.id] = (kindF.options || []).find((o) => /renova/i.test(o)) || "Renovação";
+              const endBr = p.end_date.split("-").reverse().join("/");
+              const { data: nl } = await supabase.from("crm_leads").insert({
+                account_id: l.account_id, pipeline_id: l.pipeline_id, stage: pipe?.stages?.[0]?.id || l.stage, name: l.name, phone: l.phone, email: l.email, company: l.company,
+                value: p.premium ?? l.value, owner_id: l.owner_id, tag_ids: l.tag_ids || [], source: "Renovação", conversation_id: l.conversation_id, custom,
+                notes: `Renovação da apólice ${p.number || ""} (${p.product_name || "seguro"}${p.insurer ? ` · ${p.insurer}` : ""}), vigência até ${endBr}.`
+              }).select("id").single();
+              if (nl) {
+                await supabase.from("crm_policies").update({ renewal_lead_id: nl.id }).eq("id", p.id);
+                await supabase.from("crm_events").insert({ account_id: l.account_id, lead_id: nl.id, kind: "call", owner_id: l.owner_id, starts_at: new Date().toISOString(), title: `Renovar: ${p.product_name || "seguro"} vence em ${endBr}`.slice(0, 120) });
+                await pushHistory(l.id, [{ type: "note", text: `🔁 Renovação aberta automaticamente (vence ${endBr}).` }]);
+              }
+            }
+          }
+        }
+        if (p.end_date && p.end_date < today && p.renewal_lead_id) {
+          // mantém ativa até a renovação ser ganha/perdida; nada a fazer aqui
+        }
+        if (p.payment === "mensal" || p.tipo === "recorrente") {
+          const { data: last } = await supabase.from("crm_installments").select("n, due_date").eq("policy_id", p.id).order("n", { ascending: false }).limit(1).maybeSingle();
+          const horizon = new Date(); horizon.setMonth(horizon.getMonth() + 6);
+          if (last && last.due_date < horizon.toISOString().slice(0, 10)) {
+            const { data: l } = await supabase.from("crm_leads").select("owner_id").eq("id", p.lead_id).maybeSingle();
+            await buildInstallments(p, null, l?.owner_id, last.n + 1);
+          }
+        }
+      } catch (e) { console.warn("[apólices]", p.id, e.message); }
+    }
+  } catch (e) { console.warn("[apólices] rotina:", e.message); }
+}
 
 export default router;
