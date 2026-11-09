@@ -299,14 +299,6 @@ function FunnelView({ ctx }) {
   return (
     <>
       <div className="crm-toolbar">
-        <label className="crm-select">
-          <span>Funil</span>
-          <select value={all ? "__all" : pipelineId || ""} onChange={(e) => { const v = e.target.value; if (v === "__new") return setNewPipe(true); if (v === "__all") return ctx.setAllMode(true); ctx.setAllMode(false); setPipelineId(v); }}>
-            {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            {pipelines.length > 1 && <option value="__all">Todos os funis</option>}
-            {isManager && <option value="__new">+ Novo funil…</option>}
-          </select>
-        </label>
         <div className="crm-flt-wrap">
           <div className="crm-search with-flt"><Search size={15} /><input placeholder="Buscar negócio, cliente ou telefone" value={search} onChange={(e) => setSearch(e.target.value)} />
             <button type="button" className={`crm-flt-in ${fltCount ? "on" : ""}`} title="Filtros" onClick={() => setFltOpen((v) => !v)}>
@@ -368,6 +360,14 @@ function FunnelView({ ctx }) {
             )}
           </span>
         </div>
+        {view !== "activities" && view !== "clients" && <label className="crm-select">
+          <span>Funil</span>
+          <select value={all ? "__all" : pipelineId || ""} onChange={(e) => { const v = e.target.value; if (v === "__new") return setNewPipe(true); if (v === "__all") return ctx.setAllMode(true); ctx.setAllMode(false); setPipelineId(v); }}>
+            {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {pipelines.length > 1 && <option value="__all">Todos os funis</option>}
+            {isManager && <option value="__new">+ Novo funil…</option>}
+          </select>
+        </label>}
         {view === "board" && !sidePanel && <button type="button" className="crm-side-btn" onClick={() => setSidePanel(true)} title="Lista de clientes ao lado do funil"><Users size={15} /> Clientes</button>}
         <div style={{ flex: 1 }} />
         {(() => {
