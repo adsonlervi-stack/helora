@@ -582,7 +582,7 @@ function Section({ title, open, onToggle, children }) {
   );
 }
 
-function NoteBox({ onSave }) {
+export function NoteBox({ onSave }) {
   const [t, setT] = useState("");
   const [busy, setBusy] = useState(false);
   const go = async () => { if (!t.trim()) return; setBusy(true); if (await onSave(t.trim())) setT(""); setBusy(false); };
@@ -594,11 +594,11 @@ function NoteBox({ onSave }) {
   );
 }
 
-const AG_TABS = [["note", StickyNote, "Nota"], ["email", Mail, "E-mail"], ["call", Phone, "Ligação"], ["whatsapp", MessageCircle, "WhatsApp"], ["proposta", FileText, "Proposta"], ["reuniao", Users, "Reunião"], ["visita", MapPin, "Visita"], ["tarefa", CheckSquare, "Tarefa"]];
+export const AG_TABS = [["note", StickyNote, "Nota"], ["email", Mail, "E-mail"], ["call", Phone, "Ligação"], ["whatsapp", MessageCircle, "WhatsApp"], ["proposta", FileText, "Proposta"], ["reuniao", Users, "Reunião"], ["visita", MapPin, "Visita"], ["tarefa", CheckSquare, "Tarefa"]];
 export const agIcon = (k, size = 15) => { const I = { email: Mail, call: Phone, cad_call: Phone, whatsapp: MessageCircle, cad_whats: MessageCircle, proposta: FileText, reuniao: Users, cad_meeting: Users, visita: MapPin, tarefa: CheckSquare, cad_task: CheckSquare, cad_email: Mail }[k] || CalendarDays; return <I size={size} />; };
 
 /** Registro rápido de atividade, igual ao Agendor: o que foi feito / próximo passo, responsável, prazo e horário. */
-function AgActivity({ kind, team, me, defaultOwner, onSave, onCancel, uploadFile }) {
+export function AgActivity({ kind, team, me, defaultOwner, onSave, onCancel, uploadFile }) {
   const now = new Date();
   const [text, setText] = useState("");
   const [owners, setOwners] = useState([defaultOwner || me?.id].filter(Boolean));

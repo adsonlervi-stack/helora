@@ -5,6 +5,7 @@ import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
   Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown, MoreHorizontal, Mail
+  , AlertTriangle as AlertTriangleIc, CalendarCheck
 } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
@@ -134,6 +135,14 @@ function FunnelView({ ctx }) {
   const [open, setOpen] = useState(null); // lead | {new:true, stage}
   const [dragId, setDragId] = useState(null);
   const [clientId, setClientId] = useState(null);
+  const [nextAct, setNextAct] = useState(new Map());
+  useEffect(() => {
+    crm.events({ done: "0" }).then((l) => {
+      const m = new Map();
+      for (const e of l || []) if (e.leadId && (!m.has(e.leadId) || new Date(e.startsAt) < new Date(m.get(e.leadId).startsAt))) m.set(e.leadId, e);
+      setNextAct(m);
+    }).catch(() => {});
+  }, [leads]);
   const [reporting, setReporting] = useState(false);
   useEffect(() => {
     const oc = (e) => setClientId(e.detail);
@@ -453,6 +462,11 @@ function FunnelView({ ctx }) {
                               )}
                               <strong className="cc2-name" title={l.name}>{l.name}</strong>
                             </div>
+                            {!l.outcome && (() => {
+                              const na = nextAct.get(l.id);
+                              const late = na && new Date(na.startsAt) < new Date();
+                              return <span className={`cc-act ${na ? (late ? "late" : "ok") : "none"}`} title={na ? `${late ? "Atividade atrasada" : "Próxima atividade"}: ${na.title} · ${new Date(na.startsAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "Nenhuma atividade agendada"}>{na ? (late ? <AlertTriangleIc size={14} /> : <CalendarCheck size={14} />) : <AlertTriangleIc size={14} />}</span>;
+                            })()}
                             <Avatar name={l.name} url={l.avatarUrl} size={30} />
                           </div>
                           {chipsF.length > 0 && (

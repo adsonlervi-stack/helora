@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Building2, History, Briefcase, Users, Plus, X, Phone, Mail, MessageCircle, Trophy, ThumbsDown } from "lucide-react";
-import { crm } from "../api.js";
+import { crm, integrations } from "../api.js";
+import { AgActivity, NoteBox, AG_TABS, EV_KIND, agIcon, EditActivity } from "./CrmLeadPage.jsx";
+import MailBox from "./MailBox.jsx";
 import { notify } from "../dialogs.js";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -15,9 +17,15 @@ export const openLead = (leadId) => window.dispatchEvent(new CustomEvent("helora
 /** Página do cliente (estilo Agendor): histórico unido, negócios e pessoas, com "Novo negócio". */
 export default function CrmCliente({ leadId, ctx, onClose }) {
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState("deals");
+  const [tab, setTab] = useState("history");
   const [adding, setAdding] = useState(false);
-  const load = () => crm.client(leadId).then(setData).catch((e) => { notify(errText(e), "error"); onClose(); });
+  const [events, setEvents] = useState([]);
+  const [act, setAct] = useState("note");
+  const [dealId, setDealId] = useState(leadId);
+  const [edit, setEdit] = useState(null);
+  const [mail, setMail] = useState(null);
+  const loadEvents = (ids) => crm.events({}).then((l) => setEvents((l || []).filter((e) => ids.includes(e.leadId)))).catch(() => {});
+  const load = () => crm.client(leadId).then((d) => { setData(d); loadEvents(d.deals.map((x) => x.id)); if (!d.deals.some((x) => x.id === dealId)) setDealId(d.deals[0]?.id); }).catch((e) => { notify(errText(e), "error"); onClose(); });
   useEffect(() => { setData(null); load(); }, [leadId]);
 
   const c = data?.client;
@@ -47,7 +55,28 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
           <span style={{ flex: 1 }} />
           <button className="cl-add" onClick={() => setAdding(true)} disabled={!data}><Plus size={15} /> Adicionar negócio</button>
         </nav>
+        <div className="cl-split">
         <div className="cl-body">
+          {data && tab === "history" && data.deals.length > 0 && (
+            <div className="lp-composer cl-comp">
+              <div className="lp-tabs ag">
+                {AG_TABS.map(([k, Ic, l]) => <button key={k} className={act === k ? "on" : ""} onClick={() => setAct(k)}><Ic size={15} /> {l}</button>)}
+              </div>
+              <div className="lp-tab-body">
+                <label className="cl-deal-pick">Negócio
+                  <select value={dealId} onChange={(e) => setDealId(e.target.value)}>
+                    {data.deals.map((d) => <option key={d.id} value={d.id}>{d.pipeline} · {d.name}{d.outcome === "won" ? " (ganho)" : d.outcome === "lost" ? " (perdido)" : ""}</option>)}
+                  </select>
+                </label>
+                {act === "note"
+                  ? <NoteBox onSave={async (t) => { try { await crm.addLeadNote(dealId, t); load(); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />
+                  : <AgActivity key={act} kind={act} team={ctx?.team || []} me={ctx?.profile} defaultOwner={ctx?.profile?.id}
+                      uploadFile={async (file) => { const l = await crm.uploadLeadFile(dealId, file); const a = (l.attachments || []).slice(-1)[0]; return a ? { name: a.name, url: a.url } : null; }}
+                      onCancel={() => setAct("note")}
+                      onSave={async (a) => { try { await crm.createEvent({ ...a, leadId: dealId }); notify(a.done ? "Atividade registrada." : "Atividade agendada.", "success"); setAct("note"); load(); return true; } catch (e) { notify(errText(e), "error"); return false; } }} />}
+              </div>
+            </div>
+          )}
           {!data && <div className="ap-empty">Carregando…</div>}
           {data && tab === "deals" && (
             <table className="cl-table">
@@ -68,14 +97,25 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
           )}
           {data && tab === "history" && (
             <div className="cl-hist">
-              {data.history.map((h) => (
+              {events.filter((e) => !e.done).length > 0 && <div className="cl-pend">
+                <strong>Atividades pendentes</strong>
+                {events.filter((e) => !e.done).sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt)).map((e) => (
+                  <div key={e.id} className="lp-focus-item">
+                    <span className="lp-ag-ic">{agIcon(e.kind)}</span>
+                    <div className="lp-ag-click" onClick={() => setEdit(e)}><small className="lp-ag-k">{EV_KIND[e.kind] || e.kind} · {e.leadName}</small><strong>{e.title}</strong>
+                      <span className={`lp-ag-due ${new Date(e.startsAt) < new Date() ? "late" : ""}`}>Prazo: {when(e.startsAt)}{e.ownerName ? ` · ${e.ownerName}` : ""}</span></div>
+                    <label className="lp-fin"><input type="checkbox" onChange={async () => { await crm.updateEvent(e.id, { done: true }); load(); }} /> Finalizar</label>
+                  </div>
+                ))}
+              </div>}
+              {[...data.history, ...events.filter((e) => e.done).map((e) => ({ id: `ev-${e.id}`, at: e.startsAt, type: "event", ev: e, dealName: e.leadName, by: e.ownerName }))].sort((a, b) => new Date(b.at) - new Date(a.at)).map((h) => (
                 <div key={h.id || h.at} className="cl-h">
                   <small className="cl-h-deal">{h.dealName}</small>
-                  <div className="cl-h-text">{histText(h)}</div>
+                  <div className={`cl-h-text ${h.ev ? "lp-ag-click" : ""}`} onClick={() => h.ev && setEdit(h.ev)}>{h.ev ? <>{agIcon(h.ev.kind, 13)} <strong>{EV_KIND[h.ev.kind] || h.ev.kind} ✓</strong> {h.ev.notes || h.ev.title}</> : histText(h)}</div>
                   <small>{when(h.at)}{h.by ? ` · ${h.by}` : ""}</small>
                 </div>
               ))}
-              {!data.history.length && <div className="ap-empty">Nada registrado ainda.</div>}
+              {!data.history.length && !events.length && <div className="ap-empty">Nada registrado ainda.</div>}
             </div>
           )}
           {data && tab === "people" && (
@@ -94,6 +134,28 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
             </div>
           )}
         </div>
+        {data && (
+          <aside className="cl-side">
+            <div className="lp-actions">
+              <h4>Ações</h4>
+              <div>
+                <button onClick={() => (c.email ? integrations.myEmail().then((m) => (m.connected ? setMail({ to: c.email }) : (window.location.href = `mailto:${c.email}`))).catch(() => (window.location.href = `mailto:${c.email}`)) : notify("Este cliente não tem e-mail cadastrado.", "error"))}><Mail size={15} /> Enviar e-mail</button>
+                <button onClick={() => (c.phone ? (window.location.href = `tel:+${String(c.phone).replace(/\D/g, "")}`) : notify("Este cliente não tem telefone.", "error"))}><Phone size={15} /> Fazer ligação</button>
+                <button onClick={() => { const conv = data.people.find((p) => p.conversationId); if (conv && ctx?.onOpenConversation) { onClose(); ctx.onOpenConversation(conv.conversationId); } else if (c.phone) window.open(`https://wa.me/${String(c.phone).replace(/\D/g, "")}`, "_blank"); }}><MessageCircle size={15} /> Enviar WhatsApp</button>
+                <button onClick={() => setAdding(true)}><Plus size={15} /> Novo negócio</button>
+              </div>
+            </div>
+            <div className="cl-data">
+              <h4>Dados do cliente</h4>
+              {[[c.docType || "CPF/CNPJ", c.doc ? fmtDoc(c.doc) : ""], ["Empresa", c.company], ["Telefone", c.phone ? fmtPhone(c.phone) : ""], ["E-mail", c.email], ["Origem", data.origin], ["Responsável", data.deals.find((d) => d.owner)?.owner], ["Cliente desde", data.deals.length ? new Date(data.deals.reduce((m, d) => (d.createdAt < m ? d.createdAt : m), data.deals[0].createdAt)).toLocaleDateString("pt-BR") : ""]].map(([k, v]) => (
+                <div key={k}><span>{k}</span><strong>{v || "—"}</strong></div>
+              ))}
+            </div>
+          </aside>
+        )}
+        </div>
+        {edit && <EditActivity ev={edit} team={ctx?.team || []} me={ctx?.profile} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
+        {mail && <MailBox compose={mail} onClose={() => setMail(null)} />}
         {adding && data && <NewDeal ctx={ctx} client={data.client} onClose={() => setAdding(false)} onDone={() => { setAdding(false); setTab("deals"); load(); }} />}
       </div>
     </div>,

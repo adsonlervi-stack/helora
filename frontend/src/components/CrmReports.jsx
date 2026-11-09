@@ -133,6 +133,7 @@ export default function CrmReports() {
         </div>
       </div>
       {err && <div className="admin-feedback error">{err}</div>}
+      {leads && <SalesPanel leads={leads} f={f} outcome={outcome} />}
 
       <div className="kpi-grid">
         {[
@@ -177,6 +178,58 @@ export default function CrmReports() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Painel de vendas (como o do Agendor): ganhos, iniciados e perdidos no período, comparado com o período anterior. */
+function SalesPanel({ leads, f, outcome }) {
+  const from = new Date(`${f.from}T00:00:00`), to = new Date(`${f.to}T23:59:59`);
+  const span = to - from;
+  const pFrom = new Date(from - span - 1000), pTo = new Date(from - 1000);
+  const own = (l) => !f.owner || (l.ownerName || "Sem responsável") === f.owner;
+  const closedAt = (l) => new Date(l.outcomeAt || l.stageChangedAt || l.createdAt);
+  const calc = (a, b) => {
+    const inR = (d) => d >= a && d <= b;
+    const pool = leads.filter(own);
+    const won = pool.filter((l) => outcome(l) === "won" && inR(closedAt(l)));
+    const lost = pool.filter((l) => outcome(l) === "lost" && inR(closedAt(l)));
+    const started = pool.filter((l) => inR(new Date(l.createdAt)));
+    const sum = (x) => x.reduce((t, l) => t + (Number(l.value) || 0), 0);
+    const cycle = won.length ? Math.round(won.reduce((t, l) => t + (closedAt(l) - new Date(l.createdAt)) / 86400000, 0) / won.length) : 0;
+    return { won, lost, started, wonV: sum(won), lostV: sum(lost), startV: sum(started), cycle, ticket: won.length ? sum(won) / won.length : 0,
+      rate: won.length + lost.length ? won.length / (won.length + lost.length) : 0, rateV: sum(won) + sum(lost) ? sum(won) / (sum(won) + sum(lost)) : 0 };
+  };
+  const c = calc(from, to), p = calc(pFrom, pTo);
+  const money = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const delta = (a, b, fmt = (x) => x) => { const d = a - b; return <small className={`sp-d ${d > 0 ? "up" : d < 0 ? "down" : ""}`}>({d > 0 ? "+" : d < 0 ? "−" : "+"}{fmt(Math.abs(d))})</small>; };
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  // vendas por dia no período
+  const days = Math.min(92, Math.max(1, Math.round(span / 86400000) + 1));
+  const byDay = Array.from({ length: days }, (_, i) => { const d = new Date(from); d.setDate(d.getDate() + i); return { d, v: 0 }; });
+  for (const l of c.won) { const i = Math.floor((closedAt(l) - from) / 86400000); if (byDay[i]) byDay[i].v += Number(l.value) || 0; }
+  const max = Math.max(1, ...byDay.map((x) => x.v));
+  return (
+    <div className="sp">
+      <div className="sp-card big">
+        <h4>Negócios ganhos</h4>
+        <div className="sp-grid">
+          <div><b className="sp-n">{c.won.length}</b>{delta(c.won.length, p.won.length)}</div>
+          <div><span>Valor em vendas</span><b>{money(c.wonV)}</b>{delta(c.wonV, p.wonV, money)}</div>
+          <div><span>Ciclo médio de vendas</span><b>{c.cycle} {c.cycle === 1 ? "dia" : "dias"}</b>{delta(c.cycle, p.cycle)}</div>
+          <div><span>Ticket médio</span><b>{money(c.ticket)}</b>{delta(c.ticket, p.ticket, money)}</div>
+        </div>
+        <div className="sp-bars">{byDay.map((x, i) => <i key={i} title={`${x.d.toLocaleDateString("pt-BR")}: ${money(x.v)}`} style={{ height: `${(x.v / max) * 100}%` }} />)}</div>
+      </div>
+      <div className="sp-col">
+        <div className="sp-card"><h4>Negócios iniciados</h4><b className="sp-n">{c.started.length}</b>{delta(c.started.length, p.started.length)}<b>{money(c.startV)}</b>{delta(c.startV, p.startV, money)}</div>
+        <div className="sp-card"><h4>Taxa ganhos x perdidos</h4><b className="sp-n">{pct(c.rate)}</b>{delta(Math.round(c.rate * 100), Math.round(p.rate * 100), (x) => `${x} p.p.`)}</div>
+      </div>
+      <div className="sp-col">
+        <div className="sp-card"><h4>Negócios perdidos</h4><b className="sp-n">{c.lost.length}</b>{delta(c.lost.length, p.lost.length)}<b>{money(c.lostV)}</b>{delta(c.lostV, p.lostV, money)}</div>
+        <div className="sp-card"><h4>Ganhos x perdidos (valor)</h4><b className="sp-n">{pct(c.rateV)}</b>{delta(Math.round(c.rateV * 100), Math.round(p.rateV * 100), (x) => `${x} p.p.`)}</div>
+      </div>
+      <p className="sp-foot">Comparação com o período anterior de mesmo tamanho. Ganhos e perdidos contam pela data em que o negócio foi fechado.</p>
     </div>
   );
 }

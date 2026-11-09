@@ -533,7 +533,7 @@ router.get("/client/:leadId", async (req, res) => {
     }
     res.json({
       client: { name: base.name, company: base.company || mine.find((l) => l.company)?.company || "", phone: base.phone || "", email: base.email || mine.find((l) => l.email)?.email || "", doc, docType: doc.length === 14 ? "CNPJ" : doc ? "CPF" : null },
-      deals, history, people: [...people.values()],
+      deals, history, people: [...people.values()], origin: mine.find((l) => l.source)?.source || "",
       totals: { deals: deals.length, open: deals.filter((d) => !d.outcome).length, won: deals.filter((d) => d.outcome === "won").length, value: deals.filter((d) => d.outcome !== "lost").reduce((t, d) => t + (d.value || 0), 0) }
     });
   } catch (err) { fail(res, err); }
