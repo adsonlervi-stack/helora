@@ -53,7 +53,7 @@ export async function sendTextToConversation(
   } else {
     const channel = await getChannelForAccount(accountId, conversation.platform);
     if (!channel) throw new Error(`Nenhum canal de ${conversation.platform} cadastrado para esta conta.`);
-    await sendMetaMessage(channel.accessToken, conversation.externalId, outgoing);
+    await sendMetaMessage(channel.accessToken, conversation.externalId, outgoing, channel.externalPageId);
   }
 
   const message = await addMessage({

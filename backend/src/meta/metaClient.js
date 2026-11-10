@@ -13,7 +13,7 @@ const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v19.0";
  * @param {string} recipientId - PSID (Messenger) ou IGSID (Instagram) do destinatário
  * @param {string} text
  */
-export async function sendMetaMessage(accessToken, recipientId, text) {
+export async function sendMetaMessage(accessToken, recipientId, text, senderId = null) {
   if (!accessToken) {
     console.warn("[Meta] Nenhum access_token disponível — mensagem não enviada.");
     return;
@@ -22,14 +22,11 @@ export async function sendMetaMessage(accessToken, recipientId, text) {
   // Token do "Login do Instagram" (começa com IG) usa o graph.instagram.com
   const url = String(accessToken).startsWith("IG") ? `https://graph.instagram.com/${GRAPH_VERSION === "v19.0" ? "v21.0" : GRAPH_VERSION}/me/messages` : `https://graph.facebook.com/${GRAPH_VERSION}/me/messages`;
 
-  await axios.post(
-    url,
-    {
-      recipient: { id: recipientId },
-      message: { text }
-    },
-    {
-      params: { access_token: accessToken }
-    }
-  );
+  const body = { recipient: { id: recipientId }, message: { text } };
+  // Login unificado (token de usuário do sistema): envia em nome da conta, /<id da conta>/messages
+  if (senderId && !String(accessToken).startsWith("IG")) {
+    try { await axios.post(`https://graph.facebook.com/v21.0/${senderId}/messages`, body, { params: { access_token: accessToken } }); return; }
+    catch (e) { if (e.response?.status !== 400 && e.response?.status !== 404) throw e; }
+  }
+  await axios.post(url, body, { params: { access_token: accessToken } });
 }

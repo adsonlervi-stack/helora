@@ -43,10 +43,25 @@ metaCallbackRouter.get("/meta/callback", async (req, res) => {
     const st = readState(req.query.state);
     if (!st || !req.query.code) return back(false, req.query.error_description || "Link expirado. Tente de novo.");
     const short = await graph("/oauth/access_token", { client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, redirect_uri: REDIRECT(), code: req.query.code });
-    const long = await graph("/oauth/access_token", { grant_type: "fb_exchange_token", client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, fb_exchange_token: short.access_token });
-    const pages = await graph("/me/accounts", { access_token: long.access_token, fields: "id,name,access_token,instagram_business_account{id,username}", limit: 100 });
-    const list = (pages.data || []).map((p) => ({ id: p.id, name: p.name, token: p.access_token, ig: p.instagram_business_account ? { id: p.instagram_business_account.id, username: p.instagram_business_account.username || "" } : null }));
-    if (!list.length) return back(false, "Nenhuma Página do Facebook encontrada nesta conta. Você precisa ser administrador da Página.");
+    let tok = short.access_token;
+    try { tok = (await graph("/oauth/access_token", { grant_type: "fb_exchange_token", client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, fb_exchange_token: short.access_token })).access_token || tok; } catch {}
+    let list = [];
+    try {
+      const pages = await graph("/me/accounts", { access_token: tok, fields: "id,name,access_token,instagram_business_account{id,username}", limit: 100 });
+      list = (pages.data || []).map((p) => ({ id: p.id, name: p.name, token: p.access_token, ig: p.instagram_business_account ? { id: p.instagram_business_account.id, username: p.instagram_business_account.username || "" } : null }));
+    } catch {}
+    // Login unificado: contas do Instagram autorizadas direto (sem Página) vêm nos escopos do token
+    try {
+      const dbg = await graph("/debug_token", { input_token: tok, access_token: `${process.env.META_APP_ID}|${process.env.META_APP_SECRET}` });
+      const igIds = new Set((dbg.data?.granular_scopes || []).filter((g) => /^instagram_/.test(g.scope)).flatMap((g) => g.target_ids || []));
+      for (const p of list) if (p.ig) igIds.delete(p.ig.id);
+      for (const id of igIds) {
+        let username = "";
+        try { username = (await graph(`/${id}`, { fields: "username", access_token: tok })).username || ""; } catch {}
+        list.push({ id: `ig-${id}`, name: username ? `@${username}` : "Instagram", token: tok, igOnly: true, ig: { id, username } });
+      }
+    } catch {}
+    if (!list.length) return back(false, "Nenhuma Página ou conta do Instagram foi autorizada. Tente de novo e marque as contas.");
     await supabase.from("account_integrations").upsert(
       { account_id: st.accountId, provider: PENDING, status: "connected", config: { pages: list, at: new Date().toISOString(), by: st.userId }, updated_at: new Date().toISOString() },
       { onConflict: "account_id,provider" }
@@ -61,7 +76,11 @@ metaRouter.get("/status", (req, res) => res.json({ configured: metaConfigured() 
 metaRouter.get("/auth-url", requireOwner, (req, res) => {
   if (!metaConfigured()) return res.status(503).json({ error: "Conexão com o Facebook ainda não configurada. Fale com o suporte Helora." });
   const u = new URL(`https://www.facebook.com/${V()}/dialog/oauth`);
-  u.search = new URLSearchParams({ client_id: process.env.META_APP_ID, redirect_uri: REDIRECT(), state: makeState(req.userId, req.accountId), scope: SCOPES, response_type: "code" });
+  // Login do Facebook para Empresas (login unificado): usa a configuração criada no app (META_LOGIN_CONFIG_ID)
+  const cfg = process.env.META_LOGIN_CONFIG_ID;
+  u.search = new URLSearchParams(cfg
+    ? { client_id: process.env.META_APP_ID, redirect_uri: REDIRECT(), state: makeState(req.userId, req.accountId), config_id: cfg, response_type: "code", override_default_response_type: "true" }
+    : { client_id: process.env.META_APP_ID, redirect_uri: REDIRECT(), state: makeState(req.userId, req.accountId), scope: SCOPES, response_type: "code" });
   res.json({ url: u.toString() });
 });
 async function pending(accountId) {
@@ -75,7 +94,7 @@ metaRouter.get("/pages", requireOwner, async (req, res) => {
   if (!pages) return res.json([]);
   const out = [];
   for (const p of pages) {
-    out.push({ id: p.id, name: p.name, platform: "messenger", connected: !!(await findChannelByPage("messenger", p.id).catch(() => null)) });
+    if (!p.igOnly) out.push({ id: p.id, name: p.name, platform: "messenger", connected: !!(await findChannelByPage("messenger", p.id).catch(() => null)) });
     if (p.ig) out.push({ id: p.ig.id, pageId: p.id, name: p.ig.username ? `@${p.ig.username}` : `Instagram de ${p.name}`, platform: "instagram", connected: !!(await findChannelByPage("instagram", p.ig.id).catch(() => null)) });
   }
   res.json(out);
@@ -91,10 +110,11 @@ metaRouter.post("/connect", requireOwner, async (req, res) => {
     const other = await findChannelByPage(platform, extId).catch(() => null);
     if (other) return res.status(409).json({ error: other.accountId === req.accountId ? "Este canal já está conectado." : "Este canal já está conectado em outra empresa do Helora." });
     await checkChannelLimit(req.accountId, platform);
-    // Assina a Página para receber as mensagens no webhook do Helora
-    await graph(`/${page.id}/subscribed_apps`, { subscribed_fields: "messages,messaging_postbacks,message_reads", access_token: page.token }, "POST");
+    // Assina a Página (ou a conta do Instagram, no login unificado) para receber as mensagens no webhook do Helora
+    if (page.igOnly) await graph(`/${page.ig.id}/subscribed_apps`, { subscribed_fields: "messages,messaging_postbacks,messaging_seen", access_token: page.token }, "POST").catch(() => {});
+    else await graph(`/${page.id}/subscribed_apps`, { subscribed_fields: "messages,messaging_postbacks,message_reads", access_token: page.token }, "POST");
     const channel = await createChannel({
-      accountId: req.accountId, platform, name: platform === "instagram" ? (page.ig.username ? `@${page.ig.username}` : `Instagram ${page.name}`) : page.name,
+      accountId: req.accountId, platform, name: platform === "instagram" ? (page.ig.username ? `@${page.ig.username}` : page.name) : page.name,
       externalPageId: extId, accessToken: page.token
     });
     res.status(201).json(channel);

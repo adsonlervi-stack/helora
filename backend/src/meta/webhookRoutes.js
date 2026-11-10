@@ -123,7 +123,7 @@ router.post("/webhook/meta", async (req, res) => {
 
       if (reply) {
         try {
-          await sendMetaMessage(accessToken, senderId, reply);
+          await sendMetaMessage(accessToken, senderId, reply, pageId);
         } catch (err) {
           console.error(
             `[Meta] Falha ao enviar resposta (${platform}, conta ${accountId}):`,

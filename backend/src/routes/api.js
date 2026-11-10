@@ -1133,7 +1133,7 @@ router.post("/conversations/:id/status", async (req, res) => {
       } else {
         const channel = await getChannelForAccount(req.accountId, conversation.platform);
         if (channel) {
-          await sendMetaMessage(channel.accessToken, conversation.externalId, CSAT_PROMPT_TEXT);
+          await sendMetaMessage(channel.accessToken, conversation.externalId, CSAT_PROMPT_TEXT, channel.externalPageId);
         }
       }
       await addMessage({
