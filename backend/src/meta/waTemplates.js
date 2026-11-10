@@ -61,7 +61,7 @@ export function sendComponents(tpl, v = {}) {
   const out = [];
   const head = tpl.components?.find((c) => c.type === "HEADER");
   if (head && MEDIA.includes(head.format)) {
-    const m = v.headerMedia || {};
+    const m = v.headerMedia?.url ? v.headerMedia : { url: head.example?.header_handle?.[0] };
     if (!m.url) throw new Error("Este template tem anexo no título. Escolha o arquivo.");
     const k = head.format.toLowerCase();
     out.push({ type: "header", parameters: [{ type: k, [k]: { link: m.url, ...(k === "document" ? { filename: m.name || "documento.pdf" } : {}) } }] });

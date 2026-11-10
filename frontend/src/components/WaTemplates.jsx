@@ -201,7 +201,7 @@ function emptyMap(t, saved) {
   const h = comp(t, "HEADER"), b = comp(t, "BODY");
   const base = {
     header: Array.from({ length: h?.format === "TEXT" ? varsCount(h.text) : 0 }, () => ({ type: "fixed", value: "" })),
-    body: Array.from({ length: varsCount(b?.text) }, (_, i) => (i === 0 ? { type: "first", value: "" } : { type: "fixed", value: "" })),
+    body: Array.from({ length: varsCount(b?.text) }, (_, i) => ({ type: "fixed", value: i === 0 ? "{primeiro_nome}" : "" })),
     buttons: {}
   };
   (comp(t, "BUTTONS")?.buttons || []).forEach((x, i) => { if ((x.type === "URL" && varsCount(x.url)) || x.type === "COPY_CODE") base.buttons[i] = { type: "fixed", value: "" }; });
@@ -218,17 +218,28 @@ export function resolveVar(m, r) {
   if (m.type === "first") return first;
   if (m.type === "name") return r?.name || "";
   if (m.type === "phone") return r?.phone || "";
-  return String(m.value || "").replace(/\{nome\}/gi, first);
+  return String(m.value || "").replace(/\{primeiro_nome\}/gi, first).replace(/\{nome_completo\}/gi, r?.name || "").replace(/\{telefone\}/gi, r?.phone || "").replace(/\{nome\}/gi, first);
 }
+export const TOKENS = [["primeiro_nome", "Primeiro nome"], ["nome_completo", "Nome completo"], ["telefone", "Telefone"]];
 
 function VarRow({ label, m, onChange, who }) {
+  const [menu, setMenu] = useState(false);
+  const ref = useRef();
+  const val = m.type === "fixed" ? m.value || "" : `{${m.type === "first" ? "primeiro_nome" : m.type === "name" ? "nome_completo" : "telefone"}}`;
+  const put = (v) => onChange({ type: "fixed", value: v });
+  const insert = (tok) => {
+    const el = ref.current, pos = el?.selectionStart ?? val.length;
+    const before = val.slice(0, pos).replace(/@$/, "");
+    put(`${before}{${tok}}${val.slice(pos)}`); setMenu(false);
+    setTimeout(() => el?.focus(), 0);
+  };
+  const shown = resolveVar({ type: "fixed", value: val }, who);
   return (
     <Row label={label}>
-      <div className="wat-inline">
-        <select value={m.type} onChange={(e) => onChange({ ...m, type: e.target.value })}>{Object.entries(SOURCES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        {m.type === "fixed"
-          ? <input value={m.value || ""} onChange={(e) => onChange({ ...m, value: e.target.value })} placeholder="Digite o valor" />
-          : who && <span className="wat-muted">{resolveVar(m, who) || "(vazio)"}</span>}
+      <div className="wat-var">
+        <input ref={ref} value={val} onChange={(e) => { put(e.target.value); setMenu(/@$/.test(e.target.value)); }} onBlur={() => setTimeout(() => setMenu(false), 150)} placeholder="Digite o texto ou @ para inserir um dado do cliente" />
+        {menu && <div className="wat-var-menu">{TOKENS.map(([k, l]) => <button key={k} type="button" onMouseDown={(e) => { e.preventDefault(); insert(k); }}>{l}</button>)}</div>}
+        {who && /\{/.test(val) && <small className="wat-muted">Vai como: {shown || "(vazio)"}</small>}
       </div>
     </Row>
   );
@@ -242,18 +253,19 @@ export function TemplateFill({ t, who, value, onChange, campaign }) {
   return (
     <>
       {MEDIA.includes(h?.format) && (
-        <Group title={`Anexo (${HEAD[h.format].toLowerCase()})`} hint={campaign ? "O mesmo arquivo vai para todos." : "Escolha o arquivo deste envio."}>
-          <Row label="Arquivo">
+        <Group title={`Anexo (${HEAD[h.format].toLowerCase()})`} hint={campaign ? "O mesmo arquivo vai para todos." : "Sem trocar, vai o arquivo padrão do template."}>
+          <label className="wat-toggle"><input type="checkbox" checked={!!value.customMedia} onChange={(e) => onChange({ ...value, customMedia: e.target.checked, headerMedia: e.target.checked ? value.headerMedia : null })} /> <span>Enviar outro arquivo<small>Só nesta mensagem. O padrão do template não muda.</small></span></label>
+          {value.customMedia && <><Row label="Arquivo">
             <div className="wat-inline">
               <FilePick accept={ACCEPT[h.format]} label={value.headerMedia?.url ? "Trocar arquivo" : "Escolher arquivo"} onDone={(r) => onChange({ ...value, headerMedia: r })} />
               {value.headerMedia?.name && <span className="wat-muted">{value.headerMedia.name}</span>}
             </div>
           </Row>
-          <Row label="ou link"><input value={value.headerMedia?.url || ""} onChange={(e) => onChange({ ...value, headerMedia: { url: e.target.value, name: e.target.value.split("/").pop() } })} placeholder="https://..." /></Row>
+          <Row label="ou link"><input value={value.headerMedia?.url || ""} onChange={(e) => onChange({ ...value, headerMedia: { url: e.target.value, name: e.target.value.split("/").pop() } })} placeholder="https://..." /></Row></>}
         </Group>
       )}
       {(map.header.length + map.body.length + Object.keys(map.buttons).length) > 0 && (
-        <Group title="Variáveis" hint="Escolha de onde vem cada parte. Fica salvo para os próximos envios.">
+        <Group title="Variáveis" hint="Digite @ para inserir nome ou telefone do cliente. Fica salvo para os próximos envios.">
           {map.header.map((m, i) => <VarRow key={`h${i}`} label={`Título {{${i + 1}}}`} m={m} who={who} onChange={(x) => setMap({ ...map, header: map.header.map((y, j) => (j === i ? x : y)) })} />)}
           {map.body.map((m, i) => <VarRow key={`b${i}`} label={`{{${i + 1}}}`} m={m} who={who} onChange={(x) => setMap({ ...map, body: map.body.map((y, j) => (j === i ? x : y)) })} />)}
           {Object.entries(map.buttons).map(([k, m]) => <VarRow key={`k${k}`} label={btns[k]?.type === "COPY_CODE" ? "Código" : `Link: ${btns[k]?.text}`} m={m} who={who} onChange={(x) => setMap({ ...map, buttons: { ...map.buttons, [k]: x } })} />)}
@@ -266,7 +278,7 @@ export const fillVars = (map, who, headerMedia) => ({
   header: map.header.map((m) => resolveVar(m, who)),
   body: map.body.map((m) => resolveVar(m, who)),
   buttons: Object.fromEntries(Object.entries(map.buttons).map(([k, m]) => [k, resolveVar(m, who)])),
-  headerMedia
+  headerMedia: headerMedia?.url ? { ...headerMedia, kind: headerMedia.kind } : undefined
 });
 
 /** Seletor de template aprovado + variáveis. onReady recebe { tpl, map, headerMedia }. */
@@ -282,28 +294,49 @@ export function useTemplatePicker(channelId) {
   return { list, maps };
 }
 
+const favKey = "helora_tpl_favs";
+const readFavs = () => { try { return JSON.parse(localStorage.getItem(favKey) || "[]"); } catch { return []; } };
+
 export function TemplateChooser({ channelId, who, value, onChange, campaign }) {
   const { list, maps } = useTemplatePicker(channelId);
+  const [q, setQ] = useState("");
+  const [tab, setTab] = useState("all");
+  const [favs, setFavs] = useState(readFavs);
+  const toggleFav = (k) => { const n = favs.includes(k) ? favs.filter((x) => x !== k) : [...favs, k]; setFavs(n); try { localStorage.setItem(favKey, JSON.stringify(n)); } catch {} };
   const sel = list?.find((t) => keyOf(t) === value?.key);
+  const choose = (t) => {
+    const head = comp(t, "HEADER");
+    onChange({ key: keyOf(t), tpl: t, map: emptyMap(t, maps[keyOf(t)]), headerMedia: null, customMedia: false, kind: MEDIA.includes(head?.format) ? head.format.toLowerCase() : null });
+  };
   if (list === null) return <div className="ch2-empty">Carregando templates...</div>;
   if (!list.length) return <div className="ch2-empty">Nenhum template aprovado neste número. Crie em Canais → Templates.</div>;
+  const shown = list.filter((t) => (tab === "all" || favs.includes(keyOf(t))) && t.name.includes(q.toLowerCase().replace(/\s+/g, "_")));
   return (
     <>
-      <Group title="Template">
-        <Row label="Escolha">
-          <select value={value?.key || ""} onChange={(e) => {
-            const t = list.find((x) => keyOf(x) === e.target.value);
-            onChange(t ? { key: keyOf(t), tpl: t, map: emptyMap(t, maps[keyOf(t)]), headerMedia: null } : null);
-          }}>
-            <option value="">Selecione...</option>
-            {list.map((t) => <option key={t.id} value={keyOf(t)}>{t.name} · {LANGS[t.language] || t.language}</option>)}
-          </select>
-        </Row>
-      </Group>
+      {!sel ? (
+        <div className="wat-pick">
+          <input className="wat-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar template" autoFocus />
+          <div className="wat-tabs">
+            <button type="button" className={tab === "all" ? "on" : ""} onClick={() => setTab("all")}>Todos <span>{list.length}</span></button>
+            <button type="button" className={tab === "fav" ? "on" : ""} onClick={() => setTab("fav")}>Favoritos <span>{favs.filter((k) => list.some((t) => keyOf(t) === k)).length}</span></button>
+          </div>
+          <div className="wat-pick-list">
+            {shown.map((t) => (
+              <div key={t.id} className="wat-pick-row" onClick={() => choose(t)}>
+                <div><b>{t.name}</b><small>{CATS[t.category] || t.category} · {LANGS[t.language] || t.language}{MEDIA.includes(comp(t, "HEADER")?.format) ? ` · ${HEAD[comp(t, "HEADER").format]}` : ""}</small><p>{comp(t, "BODY")?.text}</p></div>
+                <button type="button" className={`wat-star ${favs.includes(keyOf(t)) ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleFav(keyOf(t)); }}>★</button>
+              </div>
+            ))}
+            {!shown.length && <div className="ch2-empty">{tab === "fav" ? "Marque a estrela dos templates que você mais usa." : "Nenhum template encontrado."}</div>}
+          </div>
+        </div>
+      ) : (
+        <div className="wat-chosen"><b>{sel.name}</b><span>{CATS[sel.category]}</span><button type="button" className="ch2-btn ghost" onClick={() => onChange(null)}>Trocar</button></div>
+      )}
       {sel && value && <TemplateFill t={sel} who={who} value={value} onChange={onChange} campaign={campaign} />}
       {sel && value && (
         <div className="wat-preview"><div className="wat-side-t">Prévia</div>
-          <Bubble f={{ ...toForm(sel), mediaUrl: value.headerMedia?.url, mediaName: value.headerMedia?.name }} fill={fillVars(value.map, who || { name: "Maria Silva", phone: "5561999999999" })} />
+          <Bubble f={{ ...toForm(sel), mediaUrl: value.headerMedia?.url || comp(sel, "HEADER")?.example?.header_handle?.[0], mediaName: value.headerMedia?.name }} fill={fillVars(value.map, who || { name: "Maria Silva", phone: "5561999999999" })} />
         </div>
       )}
     </>
@@ -318,7 +351,7 @@ export function SendTemplateSheet({ conversation, channelId, onClose, onSent }) 
   const send = async () => {
     setBusy(true);
     try {
-      await waTemplates.send(conversation.id, { name: v.tpl.name, language: v.tpl.language, vars: fillVars(v.map, who, v.headerMedia) });
+      await waTemplates.send(conversation.id, { name: v.tpl.name, language: v.tpl.language, vars: fillVars(v.map, who, v.headerMedia && { ...v.headerMedia, kind: v.kind }) });
       waTemplates.saveMap(v.key, v.map).catch(() => {});
       notify("Template enviado.", "success"); onSent?.(); onClose();
     } catch (e) { notify(err(e), "error"); }

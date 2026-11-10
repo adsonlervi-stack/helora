@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { supabase } from "../supabaseClient.js";
 import { forgotPasswordApi } from "../api.js";
+import LoginArt from "./LoginArt.jsx";
 
 export default function LoginPage() {
   const [mode, setMode] = useState("login"); // login | forgot
@@ -86,37 +87,7 @@ export default function LoginPage() {
         </form>
       </section>
 
-      <section className="login2-right" aria-hidden="true">
-        <div className="login2-glow g1" />
-        <div className="login2-glow g2" />
-        <div className="login2-hero">
-          <span className="login2-pill">WhatsApp · Instagram · Messenger</span>
-          <h2>Todo o atendimento da sua empresa em um só lugar.</h2>
-          <p>Bot que responde 24h, equipe organizada por setores, pipeline de vendas e campanhas, tudo conectado ao seu WhatsApp.</p>
-
-          <div className="login2-chat">
-            <div className="lc-head">
-              <span className="lc-avatar">M</span>
-              <div>
-                <strong>Maria Souza</strong>
-                <small>digitando…</small>
-              </div>
-              <span className="lc-tag">Comercial</span>
-            </div>
-            <div className="lc-msg in">Oi! Queria uma cotação do seguro do meu carro 🚗</div>
-            <div className="lc-msg out bot"><b>Bot Helora</b>Olá, Maria! Já te passo para um especialista. 😊</div>
-            <div className="lc-msg out"><b>Ana:</b> Oi Maria, me envia a placa que eu faço agora mesmo!</div>
-            <div className="lc-ticks">✓✓ lido</div>
-          </div>
-
-          <ul className="login2-feats">
-            <li><span>🤖</span> Fluxos de bot sem código</li>
-            <li><span>👥</span> Vários atendentes no mesmo número</li>
-            <li><span>📈</span> Pipeline e campanhas</li>
-            <li><span>📱</span> Funciona no celular como app</li>
-          </ul>
-        </div>
-      </section>
+      <LoginArt />
     </div>
   );
 }

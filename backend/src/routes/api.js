@@ -753,8 +753,13 @@ router.post("/conversations/start", async (req, res) => {
   const phone = onlyDigits(req.body?.phone);
   const text = String(req.body?.text || "").trim();
   if (phone.length < 10) return res.status(400).json({ error: "Telefone inválido. Use DDI + DDD + número." });
-  const channelId = await getPrimaryWhatsAppChannel(req.accountId);
+  let channelId = req.body?.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
   if (!channelId) return res.status(400).json({ error: "Nenhum WhatsApp cadastrado nesta empresa." });
+  const tplReq = req.body?.template;
+  const cloudRow = await whDb.from("channels").select("id, provider, waba_id, phone_number_id, access_token").eq("account_id", req.accountId).eq("id", channelId).maybeSingle().then((r) => r.data);
+  if (!cloudRow) return res.status(404).json({ error: "Canal não encontrado." });
+  const isCloudCh = cloudRow.provider === "cloud";
+  if (isCloudCh && !tplReq?.name) return res.status(400).json({ error: "No WhatsApp oficial, a conversa começa com um template aprovado." });
 
   try {
     const jid = await resolveWhatsAppNumber(channelId, phone);
@@ -777,7 +782,14 @@ router.post("/conversations/start", async (req, res) => {
     // Grava com o número oficial do WhatsApp (no Brasil às vezes sem o 9 extra).
     await upsertContacts(req.accountId, channelId, [{ phone: jid.split("@")[0], name: req.body?.name?.trim() || null }], "manual");
     fetchWhatsAppAvatar(channelId, jid).then((url) => url && setConversationAvatar(conversation.id, url));
-    if (text) await sendTextToConversation(req.accountId, conversation, text, { senderName: req.userName, sign: req.body?.sign !== false });
+    if (isCloudCh) {
+      const { fetchTemplate, sendTemplateTo, renderText } = await import("../meta/waTemplates.js");
+      const tpl = await fetchTemplate(cloudRow, tplReq.name, tplReq.language);
+      if (!tpl) throw new Error("Template não encontrado.");
+      const waId = await sendTemplateTo(cloudRow, phone, tpl, tplReq.vars || {});
+      const hm = tplReq.vars?.headerMedia;
+      await addMessage({ accountId: req.accountId, conversationId: conversation.id, direction: "out", author: "operator", text: renderText(tpl, tplReq.vars || {}), whatsappMessageId: waId, senderName: req.userName || null, status: "sent", ...(hm?.url ? { mediaUrl: hm.url, mediaType: hm.kind || "document" } : {}) });
+    } else if (text) await sendTextToConversation(req.accountId, conversation, text, { senderName: req.userName, sign: req.body?.sign !== false });
     res.status(201).json(conversation);
   } catch (err) {
     res.status(400).json({ error: err.message });

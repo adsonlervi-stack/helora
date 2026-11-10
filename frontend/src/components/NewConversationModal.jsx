@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Search, Paperclip, X, FileText } from "lucide-react";
-import { getContacts, startConversationApi, sendMediaMessage, getDepartments } from "../api.js";
+import { getContacts, startConversationApi, sendMediaMessage, getDepartments, getChannels } from "../api.js";
+import { TemplateChooser, fillVars } from "./WaTemplates.jsx";
+import { waTemplates } from "../api.js";
 import Avatar from "./Avatar.jsx";
 import { Sheet, Group, Row, Button } from "./ui.jsx";
 
@@ -31,6 +33,11 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
   const fileRef = useRef(null);
   const [departments, setDepartments] = useState([]);
   const [departmentId, setDepartmentId] = useState("");
+  const [chans, setChans] = useState([]);
+  const [channelId, setChannelId] = useState("");
+  const [tplV, setTplV] = useState(null);
+  useEffect(() => { getChannels().then((l) => { const w = l.filter((c) => c.platform === "whatsapp"); setChans(w); if (w[0]) setChannelId(w[0].id); }).catch(() => {}); }, []);
+  const isCloud = chans.find((c) => c.id === channelId)?.provider === "cloud";
   useEffect(() => { getDepartments().then((l) => { setDepartments(l); if (l.length === 1) setDepartmentId(l[0].id); }).catch(() => {}); }, []);
 
   useEffect(() => {
@@ -47,15 +54,19 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
     setBusy(true);
     setError(null);
     try {
-      const conv = await startConversationApi({ phone, name, text: text.trim(), departmentId });
-      for (const f of files) await sendMediaMessage(conv.id, f).catch((e) => setError(e.response?.data?.error || e.message));
+      const who = { name, phone };
+      const template = isCloud && tplV ? { name: tplV.tpl.name, language: tplV.tpl.language, vars: fillVars(tplV.map, who, tplV.headerMedia && { ...tplV.headerMedia, kind: tplV.kind }) } : undefined;
+      if (isCloud && !template) throw new Error("Escolha o template para iniciar a conversa.");
+      const conv = await startConversationApi({ phone, name, text: isCloud ? "" : text.trim(), departmentId, channelId: channelId || undefined, template });
+      if (template) waTemplates.saveMap(tplV.key, tplV.map).catch(() => {});
+      if (!isCloud) for (const f of files) await sendMediaMessage(conv.id, f).catch((e) => setError(e.response?.data?.error || e.message));
       onStarted(conv);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     }
     setBusy(false);
   };
-  const label = text.trim() || files.length ? "Iniciar e enviar" : "Abrir conversa";
+  const label = isCloud ? "Iniciar com template" : text.trim() || files.length ? "Iniciar e enviar" : "Abrir conversa";
 
   return (
     <Sheet
@@ -65,7 +76,7 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
       width={620}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-        <Button disabled={busy || phone.length < 12 || (departments.length > 0 && !departmentId)} onClick={submit}>{busy ? "Abrindo…" : label}</Button>
+        <Button disabled={busy || phone.length < 12 || (isCloud && !tplV) || (departments.length > 0 && !departmentId)} onClick={submit}>{busy ? "Abrindo…" : label}</Button>
       </>}
     >
       <div className="crm-search" style={{ width: "100%", boxSizing: "border-box", marginTop: 4 }}>
@@ -101,6 +112,18 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
         )}
       </Group>
 
+      {chans.length > 1 && (
+        <Group title="Número">
+          <Row label="Enviar por">
+            <select value={channelId} onChange={(e) => { setChannelId(e.target.value); setTplV(null); }}>
+              {chans.map((c) => <option key={c.id} value={c.id}>{c.name}{c.provider === "cloud" ? " · API oficial" : ""}</option>)}
+            </select>
+          </Row>
+        </Group>
+      )}
+      {isCloud ? (
+        <div style={{ marginTop: 12 }}><TemplateChooser channelId={channelId} who={{ name, phone }} value={tplV} onChange={setTplV} /></div>
+      ) : (
       <Group title="Primeira mensagem (opcional)" hint="Deixe em branco para só abrir a conversa.">
         <Row label="" stack><textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="Olá! Aqui é da ..." /></Row>
         {files.map((f, i) => (
@@ -116,6 +139,7 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
           <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={(e) => { const l = [...(e.target.files || [])]; e.target.value = ""; setFiles((c) => [...c, ...l].slice(0, 10)); }} />
         </div>
       </Group>
+      )}
       {error && <div className="admin-feedback error" style={{ marginTop: 12 }}>{error}</div>}
     </Sheet>
   );

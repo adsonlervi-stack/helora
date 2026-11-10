@@ -29,7 +29,7 @@ export function resolveVar(m, r) {
   if (m.type === "first") return first || m.fallback || "cliente";
   if (m.type === "name") return r.name || m.fallback || "cliente";
   if (m.type === "phone") return r.phone || "";
-  return personalize(m.value || "", r);
+  return personalize(String(m.value || "").replace(/\{primeiro_nome\}/gi, "{nome}").replace(/\{nome_completo\}/gi, r.name || ""), r);
 }
 const resolveVars = (t, r) => ({
   header: (t.map?.header || []).map((m) => resolveVar(m, r)),

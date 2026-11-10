@@ -894,7 +894,7 @@ export default function ChatWindow({
           <button className="chat-who" onClick={() => setPanelOpen((v) => !v)} title="Abrir / fechar dados do cliente">
           <Avatar name={conversation.name} url={conversation.avatarUrl} size={40} zoomable group={conversation.isGroup} />
           <div>
-            <div className="chat-header-name">{conversation.name}</div>
+            <div className="chat-header-name">{conversation.name}{cloudCh && !cloudCh.windowOpen && <span className="wat-out">⏳ Fora da janela de 24h</span>}</div>
             <div className="chat-header-platform">
               {clientTyping && <span className="header-typing">{clientTyping === "recording" ? "gravando áudio…" : "digitando…"} · </span>}
               {conversation.isGroup && <><Users size={12} style={{ verticalAlign: -2 }} /> Grupo · </>}
@@ -1083,12 +1083,13 @@ export default function ChatWindow({
                 )}
               </div>
             )}
-            {cloudCh && !cloudCh.windowOpen && (
-              <div className="wat-window">
-                <span>Passaram 24h sem resposta do cliente. Pela regra da Meta, agora só dá para enviar template.</span>
-                <button type="button" onClick={() => setTplOpen(true)}>Enviar template</button>
-              </div>
-            )}
+            {cloudCh && !cloudCh.windowOpen ? (
+              <button type="button" className="wat-window" onClick={() => setTplOpen(true)}>
+                <span className="wat-window-ic">💬</span>
+                <span><b>Para continuar o atendimento, envie um template.</b><small>O cliente não respondeu nas últimas 24h. Clique para escolher.</small></span>
+                <span className="wat-window-go">›</span>
+              </button>
+            ) : (
             <form className={`composer ${offline ? "disabled" : ""}`} onSubmit={handleSubmit}>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: "none" }} />
               <div className="attach-wrap">
@@ -1199,6 +1200,7 @@ export default function ChatWindow({
                 <Send size={17} />
               </button>
             </form>
+            )}
           </div>
         </div>
 
