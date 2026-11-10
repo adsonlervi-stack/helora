@@ -99,7 +99,7 @@ const done=(ok,msg)=>{try{window.opener&&window.opener.postMessage({type:"helora
 let info=null;
 window.addEventListener("message",(ev)=>{if(!/facebook\.com$/.test(new URL(ev.origin).hostname))return;try{const d=typeof ev.data==="string"?JSON.parse(ev.data):ev.data;if(d&&d.type==="WA_EMBEDDED_SIGNUP"&&d.event==="FINISH")info=d.data;}catch(e){}});
 window.fbAsyncInit=()=>FB.init({appId:APP,autoLogAppEvents:true,xfbml:false,version:VER});
-if(b) b.onclick=()=>{ if(!window.FB) return; FB.login(async(r)=>{
+async function after(r){
   const code=r.authResponse&&r.authResponse.code; if(!code) return done(false,"Conexão cancelada.");
   for(let i=0;i<20&&!info;i++) await new Promise(x=>setTimeout(x,250));
   if(!info||!info.phone_number_id) return done(false,"A Meta não informou o número escolhido. Conclua todas as etapas.");
@@ -107,7 +107,10 @@ if(b) b.onclick=()=>{ if(!window.FB) return; FB.login(async(r)=>{
   const res=await fetch("/meta/wa-signup/finish",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({state:STATE,code,wabaId:info.waba_id,phoneNumberId:info.phone_number_id})});
   const d=await res.json().catch(()=>({}));
   res.ok?done(true,'WhatsApp "'+(d.name||"")+'" conectado! Pode fechar esta janela.'):done(false,d.error||"Não foi possível conectar.");
- },{config_id:CFG,response_type:"code",override_default_response_type:true,extras:{setup:{},featureType:"",sessionInfoVersion:"3"}}); };
+}
+if(b) b.onclick=()=>{ if(!window.FB){ m.textContent="Carregando o Facebook... clique de novo em instantes."; m.className="e"; return; }
+ try{ FB.login(function(r){ after(r); },{config_id:CFG,response_type:"code",override_default_response_type:true,extras:{setup:{},featureType:"",sessionInfoVersion:"3"}}); }
+ catch(e){ m.textContent="Erro ao abrir o Facebook: "+e.message; m.className="e"; } };
 </script><script async defer crossorigin="anonymous" src="https://connect.facebook.net/pt_BR/sdk.js"></script></body></html>`);
 });
 metaCallbackRouter.post("/meta/wa-signup/finish", async (req, res) => {
