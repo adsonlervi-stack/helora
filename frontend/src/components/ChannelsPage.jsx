@@ -18,6 +18,7 @@ import {
   API_BASE
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
+import WaTemplatesSheet from "./WaTemplates.jsx";
 import { meta as metaApi, instagramApi } from "../api.js";
 import { notify } from "../dialogs.js";
 import { Sheet, Group, Row, Button } from "./ui.jsx";
@@ -79,33 +80,22 @@ function PermissionsPanel({ channel, team, onClose }) {
   );
 }
 
-// Cadastro incorporado da Meta: abre o popup oficial, a empresa escolhe/cria a conta e o número dela
-function loadFbSdk(appId, version) {
-  return new Promise((resolve) => {
-    if (window.FB) return resolve(window.FB);
-    window.fbAsyncInit = () => { window.FB.init({ appId, autoLogAppEvents: true, xfbml: false, version }); resolve(window.FB); };
-    const s = document.createElement("script");
-    s.src = "https://connect.facebook.net/en_US/sdk.js"; s.async = true; s.defer = true; s.crossOrigin = "anonymous";
-    document.body.appendChild(s);
+// Cadastro incorporado da Meta: abre um popup no domínio fixo do Helora (funciona em qualquer domínio de cliente)
+async function waEmbeddedSignup() {
+  const w = window.open("about:blank", "helora-wa", "width=620,height=760");
+  let url;
+  try { url = await metaApi.waSignupUrl(); } catch (e) { w?.close(); throw e; }
+  if (!w) { window.location.href = url; return new Promise(() => {}); }
+  w.location.href = url;
+  return new Promise((resolve, reject) => {
+    const onMsg = (ev) => {
+      if (ev.data?.type !== "helora-wa") return;
+      if (ev.data.ok) { cleanup(); resolve(ev.data); }
+    };
+    const t = setInterval(() => { if (w.closed) { cleanup(); resolve({ closed: true }); } }, 700);
+    const cleanup = () => { clearInterval(t); window.removeEventListener("message", onMsg); };
+    window.addEventListener("message", onMsg);
   });
-}
-async function waEmbeddedSignup(cfg) {
-  const FB = await loadFbSdk(cfg.appId, cfg.version || "v21.0");
-  let info = null;
-  const onMsg = (ev) => {
-    if (!/facebook\.com$/.test(new URL(ev.origin).hostname)) return;
-    try { const d = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data; if (d?.type === "WA_EMBEDDED_SIGNUP" && d.event === "FINISH") info = d.data; } catch {}
-  };
-  window.addEventListener("message", onMsg);
-  try {
-    const code = await new Promise((resolve, reject) => FB.login((r) => (r.authResponse?.code ? resolve(r.authResponse.code) : reject(new Error("cancel"))), {
-      config_id: cfg.waConfigId, response_type: "code", override_default_response_type: true,
-      extras: { setup: {}, featureType: "", sessionInfoVersion: "3" }
-    }));
-    for (let i = 0; i < 20 && !info; i++) await new Promise((r) => setTimeout(r, 250));
-    if (!info?.phone_number_id) throw new Error("A Meta não informou o número escolhido. Conclua todas as etapas do cadastro.");
-    return await metaApi.waEmbedded({ code, wabaId: info.waba_id, phoneNumberId: info.phone_number_id });
-  } finally { window.removeEventListener("message", onMsg); }
 }
 
 function NewChannelModal({ departments, flows, initial, preset, onClose, onCreate }) {
@@ -216,8 +206,8 @@ export default function ChannelsPage() {
   useEffect(() => { metaApi.status().then((s) => { setMetaOn(!!s.configured); setMetaCfg(s || {}); }); }, []);
   const connectWa = async () => {
     try {
-      const ch = await waEmbeddedSignup(metaCfg);
-      notify(`WhatsApp "${ch.name}" conectado pela API oficial!`, "success");
+      const r = await waEmbeddedSignup();
+      if (r?.ok) notify("WhatsApp conectado pela API oficial!", "success");
       load();
     } catch (e) { if (e?.message !== "cancel") notify(e?.response?.data?.error || e.message, "error"); }
   };
@@ -235,6 +225,7 @@ export default function ChannelsPage() {
   const [qrChannel, setQrChannel] = useState(null);
   const [permChannel, setPermChannel] = useState(null);
   const [editChannel, setEditChannel] = useState(null);
+  const [tplChannel, setTplChannel] = useState(null);
   const [flows, setFlows] = useState([]);
 
   const load = () => {
@@ -352,6 +343,7 @@ export default function ChannelsPage() {
                   : <button className="ch2-btn ok" onClick={() => setQrChannel(c)}><QrCode size={14} /> Conectar</button>)}
                 {wa && c.provider !== "cloud" && <button className="ch2-icon" title="Reiniciar conexão" onClick={() => restart(c)}><RotateCw size={15} /></button>}
                 {wa && c.provider !== "cloud" && <HistoryButton channel={c} onImport={() => importHistory(c)} />}
+                {wa && c.provider === "cloud" && <button className="ch2-btn ghost" onClick={() => setTplChannel(c)}>Templates</button>}
                 <button className="ch2-btn ghost" onClick={() => setPermChannel(c)}>Permissões</button>
                 <span className="ch2-sp" />
                 <button className="ch2-icon del" title="Remover canal" onClick={() => handleDelete(c.id)}><Trash2 size={15} /></button>
@@ -363,6 +355,7 @@ export default function ChannelsPage() {
       </div>
 
       {metaOpen && <MetaConnect state={metaOpen} onManual={(platform) => { setMetaOpen(null); setShowNew({ platform }); }} onClose={() => { setMetaOpen(null); const q = new URLSearchParams(window.location.search); q.delete("meta"); q.delete("msg"); window.history.replaceState(null, "", `${window.location.pathname}?${q}`); }} onDone={() => load()} />}
+      {tplChannel && <WaTemplatesSheet channel={tplChannel} onClose={() => setTplChannel(null)} />}
       {showNew && (
         <NewChannelModal departments={departments} flows={flows} preset={typeof showNew === "object" ? showNew : null} onClose={() => setShowNew(false)} onCreate={handleCreate} />
       )}

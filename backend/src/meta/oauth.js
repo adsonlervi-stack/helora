@@ -70,28 +70,61 @@ metaCallbackRouter.get("/meta/callback", async (req, res) => {
   } catch (err) { back(false, err.message); }
 });
 
+// Cadastro incorporado do WhatsApp (Helora como Provedor de Tecnologia): a empresa conecta o próprio número.
+// O popup roda sempre no domínio do backend, então funciona em qualquer domínio do Helora.
+async function connectEmbedded(accountId, { code, wabaId, phoneNumberId }) {
+  if (!code || !wabaId || !phoneNumberId) throw new Error("O cadastro na Meta não foi concluído. Tente de novo.");
+  const { data: other } = await supabase.from("channels").select("account_id").eq("phone_number_id", phoneNumberId).maybeSingle();
+  if (other) throw new Error(other.account_id === accountId ? "Este número já está conectado." : "Este número já está conectado em outra empresa do Helora.");
+  await checkChannelLimit(accountId, "whatsapp");
+  const tk = await graph("/oauth/access_token", { client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, code });
+  const token = tk.access_token;
+  await graph(`/${wabaId}/subscribed_apps`, { access_token: token }, "POST");
+  const pin = String(Math.floor(100000 + Math.random() * 900000));
+  await graph(`/${phoneNumberId}/register`, { messaging_product: "whatsapp", pin, access_token: token }, "POST").catch((e) => console.warn("[WA embedded] register:", e.message));
+  let name = "WhatsApp";
+  try { const ph = await graph(`/${phoneNumberId}`, { fields: "display_phone_number,verified_name", access_token: token }); name = ph.verified_name || ph.display_phone_number || name; } catch {}
+  return createChannel({ accountId, platform: "whatsapp", name, provider: "cloud", phoneNumberId, wabaId, accessToken: token });
+}
+const esc = (v) => JSON.stringify(v ?? null).replace(/</g, "\\u003c");
+metaCallbackRouter.get("/meta/wa-signup", (req, res) => {
+  const st = readState(req.query.state);
+  res.set("Content-Type", "text/html; charset=utf-8").send(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conectar WhatsApp · Helora</title>
+<style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#f5f6fa;color:#1d1d1f;display:grid;place-items:center;min-height:100vh}.c{background:#fff;border-radius:18px;padding:32px;max-width:380px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.08)}h1{font-size:20px;margin:0 0 8px}p{color:#6e6e73;font-size:14px;line-height:1.5}button{margin-top:16px;background:#25D366;color:#fff;border:0;border-radius:12px;padding:12px 20px;font-size:15px;font-weight:600;cursor:pointer}.e{color:#c0392b}</style></head>
+<body><div class="c"><h1>Conectar WhatsApp</h1><p id="m">${st ? "Entre com o Facebook da empresa e siga as etapas da Meta para conectar o seu número." : "Link expirado. Feche esta janela e tente de novo pelo Helora."}</p>${st ? '<button id="b">Continuar com o Facebook</button>' : ""}</div>
+<script>
+const STATE=${esc(req.query.state)}, APP=${esc(process.env.META_APP_ID)}, CFG=${esc(process.env.META_WA_CONFIG_ID)}, VER=${esc(V())};
+const m=document.getElementById("m"), b=document.getElementById("b");
+const done=(ok,msg)=>{try{window.opener&&window.opener.postMessage({type:"helora-wa",ok,msg},"*")}catch(e){} m.textContent=msg; m.className=ok?"":"e"; if(b) b.style.display=ok?"none":""; if(ok) setTimeout(()=>window.close(),1500);};
+let info=null;
+window.addEventListener("message",(ev)=>{if(!/facebook\.com$/.test(new URL(ev.origin).hostname))return;try{const d=typeof ev.data==="string"?JSON.parse(ev.data):ev.data;if(d&&d.type==="WA_EMBEDDED_SIGNUP"&&d.event==="FINISH")info=d.data;}catch(e){}});
+window.fbAsyncInit=()=>FB.init({appId:APP,autoLogAppEvents:true,xfbml:false,version:VER});
+if(b) b.onclick=()=>{ if(!window.FB) return; FB.login(async(r)=>{
+  const code=r.authResponse&&r.authResponse.code; if(!code) return done(false,"Conexão cancelada.");
+  for(let i=0;i<20&&!info;i++) await new Promise(x=>setTimeout(x,250));
+  if(!info||!info.phone_number_id) return done(false,"A Meta não informou o número escolhido. Conclua todas as etapas.");
+  m.textContent="Conectando o número...";
+  const res=await fetch("/meta/wa-signup/finish",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({state:STATE,code,wabaId:info.waba_id,phoneNumberId:info.phone_number_id})});
+  const d=await res.json().catch(()=>({}));
+  res.ok?done(true,'WhatsApp "'+(d.name||"")+'" conectado! Pode fechar esta janela.'):done(false,d.error||"Não foi possível conectar.");
+ },{config_id:CFG,response_type:"code",override_default_response_type:true,extras:{setup:{},featureType:"",sessionInfoVersion:"3"}}); };
+</script><script async defer crossorigin="anonymous" src="https://connect.facebook.net/pt_BR/sdk.js"></script></body></html>`);
+});
+metaCallbackRouter.post("/meta/wa-signup/finish", async (req, res) => {
+  try {
+    const st = readState(req.body?.state);
+    if (!st) return res.status(400).json({ error: "Link expirado. Tente de novo pelo Helora." });
+    const ch = await connectEmbedded(st.accountId, req.body);
+    res.status(201).json({ id: ch.id, name: ch.name });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 export const metaRouter = Router();
 metaRouter.use(requireAuth);
 metaRouter.get("/status", (req, res) => res.json({ configured: metaConfigured(), appId: process.env.META_APP_ID || null, waConfigId: process.env.META_WA_CONFIG_ID || null, version: V() }));
-
-// Cadastro incorporado do WhatsApp (Helora como Provedor de Tecnologia): a empresa conecta o próprio número
-metaRouter.post("/whatsapp/embedded", requireOwner, async (req, res) => {
-  try {
-    const { code, wabaId, phoneNumberId } = req.body || {};
-    if (!code || !wabaId || !phoneNumberId) return res.status(400).json({ error: "O cadastro na Meta não foi concluído. Tente de novo." });
-    const { data: other } = await supabase.from("channels").select("account_id").eq("phone_number_id", phoneNumberId).maybeSingle();
-    if (other) return res.status(409).json({ error: other.account_id === req.accountId ? "Este número já está conectado." : "Este número já está conectado em outra empresa do Helora." });
-    await checkChannelLimit(req.accountId, "whatsapp");
-    const tk = await graph("/oauth/access_token", { client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, code });
-    const token = tk.access_token;
-    await graph(`/${wabaId}/subscribed_apps`, { access_token: token }, "POST");
-    const pin = String(Math.floor(100000 + Math.random() * 900000));
-    await graph(`/${phoneNumberId}/register`, { messaging_product: "whatsapp", pin, access_token: token }, "POST").catch((e) => console.warn("[WA embedded] register:", e.message));
-    let name = "WhatsApp";
-    try { const ph = await graph(`/${phoneNumberId}`, { fields: "display_phone_number,verified_name", access_token: token }); name = ph.verified_name || ph.display_phone_number || name; } catch {}
-    const channel = await createChannel({ accountId: req.accountId, platform: "whatsapp", name, provider: "cloud", phoneNumberId, wabaId, accessToken: token });
-    res.status(201).json(channel);
-  } catch (err) { res.status(400).json({ error: err.message }); }
+metaRouter.get("/wa-signup-url", requireOwner, (req, res) => {
+  if (!metaConfigured() || !process.env.META_WA_CONFIG_ID) return res.status(503).json({ error: "API oficial do WhatsApp ainda não configurada. Fale com o suporte Helora." });
+  res.json({ url: `${BACKEND()}/meta/wa-signup?state=${encodeURIComponent(makeState(req.userId, req.accountId))}` });
 });
 metaRouter.get("/auth-url", requireOwner, (req, res) => {
   if (!metaConfigured()) return res.status(503).json({ error: "Conexão com o Facebook ainda não configurada. Fale com o suporte Helora." });

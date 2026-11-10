@@ -1,3 +1,4 @@
+import waTemplates from "./meta/waTemplates.js";
 import { igRouter, igCallbackRouter, refreshInstagramTokens } from "./meta/instagram.js";
 import { metaRouter, metaCallbackRouter } from "./meta/oauth.js";
 import "dotenv/config";
@@ -87,6 +88,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/integrations", integrationsRoutes);
 app.use("/api/google", googleRouter);
 app.use("/api/meta", metaRouter);
+app.use("/api/wa", waTemplates);
 app.use("/api/instagram", igRouter);
 app.use("/", igCallbackRouter);
 app.use("/", metaCallbackRouter);

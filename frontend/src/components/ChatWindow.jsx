@@ -9,6 +9,8 @@ import {
 import { useMuted, setMuted } from "../muted.js";
 import ExportConversationModal from "./ExportConversationModal.jsx";
 import QuickReplies from "./QuickReplies.jsx";
+import { SendTemplateSheet } from "./WaTemplates.jsx";
+import { waTemplates } from "../api.js";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
 import TransferModal from "./TransferModal.jsx";
@@ -655,6 +657,9 @@ export default function ChatWindow({
   const [replyTo, setReplyTo] = useState(null);
   const [forwarding, setForwarding] = useState(null);
   const [special, setSpecial] = useState(null); // "contact" | "location"
+  const [cloudCh, setCloudCh] = useState(null);
+  const [tplOpen, setTplOpen] = useState(false);
+  useEffect(() => { setCloudCh(null); if (conversation?.id && conversation.platform === "whatsapp") waTemplates.convChannel(conversation.id).then(setCloudCh); }, [conversation?.id]);
   const [attachOpen, setAttachOpen] = useState(false);
   const [chanStatus, setChanStatus] = useState("connected");
   const [showSchedule, setShowSchedule] = useState(false);
@@ -1109,6 +1114,7 @@ export default function ChatWindow({
                       <>
                         <button type="button" onClick={() => { setAttachOpen(false); setSpecial("contact"); }}><UserRound size={16} /> Contato</button>
                         <button type="button" onClick={() => { setAttachOpen(false); setSpecial("location"); }}><MapPin size={16} /> Localização</button>
+                        {cloudCh && <button type="button" onClick={() => { setAttachOpen(false); setTplOpen(true); }}><Forward size={16} /> Template</button>}
                         {!conversation.isGroup || true ? (
                           <button type="button" onClick={() => { setAttachOpen(false); setShowStickers(true); }}><Sticker size={16} /> Figurinha</button>
                         ) : null}
@@ -1213,6 +1219,7 @@ export default function ChatWindow({
         />
       )}
       {showSchedule && <ScheduleModal conversation={conversation} initialText={text} defaultSign={signOn} onClose={() => setShowSchedule(false)} />}
+      {tplOpen && cloudCh && <SendTemplateSheet conversation={conversation} channelId={cloudCh} onClose={() => setTplOpen(false)} />}
       {special && <SpecialModal kind={special} onClose={() => setSpecial(null)} onSend={onSendSpecial} />}
 
       {showExport && <ExportConversationModal conversation={conversation} onClose={() => setShowExport(false)} />}

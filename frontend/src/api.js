@@ -526,10 +526,18 @@ export const meta = {
   authUrl: () => api.get("/meta/auth-url").then((r) => r.data.url),
   pages: () => api.get("/meta/pages").then((r) => r.data),
   connect: (d) => api.post("/meta/connect", d).then((r) => r.data),
-  waEmbedded: (d) => api.post("/meta/whatsapp/embedded", d).then((r) => r.data)
+  waSignupUrl: () => api.get("/meta/wa-signup-url").then((r) => r.data.url)
 };
 
 export const instagramApi = {
   status: () => api.get("/instagram/status").then((r) => r.data).catch(() => ({ configured: false })),
   authUrl: () => api.get("/instagram/auth-url").then((r) => r.data.url)
+};
+
+export const waTemplates = {
+  list: (channelId) => api.get(`/wa/channels/${channelId}/templates`).then((r) => r.data),
+  create: (channelId, d) => api.post(`/wa/channels/${channelId}/templates`, d).then((r) => r.data),
+  remove: (channelId, name) => api.delete(`/wa/channels/${channelId}/templates/${encodeURIComponent(name)}`).then((r) => r.data),
+  convChannel: (convId) => api.get(`/wa/conversations/${convId}/cloud`).then((r) => r.data.channelId).catch(() => null),
+  send: (convId, d) => api.post(`/wa/conversations/${convId}/template`, d).then((r) => r.data)
 };
