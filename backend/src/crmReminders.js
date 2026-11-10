@@ -57,7 +57,7 @@ export async function runCrmReminders() {
               if (r.sendFiles) {
                 for (const a of (lead.attachments || []).slice(0, 10)) {
                   const mediaType = /^image\//.test(a.type || "") ? "image" : /^video\//.test(a.type || "") ? "video" : "document";
-                  await sendMediaUrlToConversation(pipe.account_id, conv, { url: a.url, mediaType, caption: a.name }, { fromBot: true }).catch(() => {});
+                  await sendMediaUrlToConversation(pipe.account_id, conv, { url: a.url, mediaType, caption: a.name, fileName: a.name, mimetype: a.type || undefined }, { fromBot: true }).catch(() => {});
                 }
               }
               const entry = { id: `r_${Date.now().toString(36)}`, type: "reminder", key, text, at: new Date().toISOString(), by: "Lembrete automático" };

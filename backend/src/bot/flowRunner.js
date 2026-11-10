@@ -447,7 +447,7 @@ export async function runGraph(ctx) {
             try {
               const { sendMediaUrlToConversation } = await import("../messaging.js");
               const mediaType = /^image\//.test(f.type || "") ? "image" : /^video\//.test(f.type || "") ? "video" : "document";
-              await sendMediaUrlToConversation(accountId, conversation, { url: f.url, mediaType, caption: f.name }, { sign: false, fromBot: true });
+              await sendMediaUrlToConversation(accountId, conversation, { url: f.url, mediaType, caption: f.name, fileName: f.name, mimetype: f.type || undefined }, { sign: false, fromBot: true });
             } catch (err) { console.warn("[Fluxo] anexo:", err.message); }
           }
         }
