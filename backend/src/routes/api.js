@@ -1386,11 +1386,17 @@ router.post("/messages/:id/forward", async (req, res) => {
         await sendSpecialToConversation(req.accountId, target, message.extra, { senderName: req.userName });
       } else if (message.mediaUrl) {
         const channelId = target.channelId || (await getPrimaryWhatsAppChannel(req.accountId));
-        const waId = await sendWhatsAppMediaUrl(channelId, target.externalId, {
-          url: message.mediaUrl,
-          mediaType: message.mediaType === "audio" ? "document" : message.mediaType,
-          caption: message.text || undefined
-        });
+        let waId;
+        if (message.mediaType === "audio") {
+          // áudio encaminhado vai como nota de voz, nunca como documento
+          const raw = Buffer.from(await (await fetch(message.mediaUrl)).arrayBuffer());
+          const { buffer: ogg, seconds } = await convertToOggOpusDetailed(raw);
+          waId = await sendWhatsAppMedia(channelId, target.externalId, { buffer: ogg, mediaType: "audio", seconds });
+        } else {
+          waId = await sendWhatsAppMediaUrl(channelId, target.externalId, {
+            url: message.mediaUrl, mediaType: message.mediaType, caption: message.text || undefined
+          });
+        }
         await addMessage({
           accountId: req.accountId, conversationId: target.id, direction: "out", author: "operator",
           text: message.text || "", mediaUrl: message.mediaUrl, mediaType: message.mediaType,

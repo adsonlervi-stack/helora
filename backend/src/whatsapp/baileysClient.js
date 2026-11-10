@@ -1047,6 +1047,8 @@ function parseButtons(raw) {
 
 const photoTried = new Map();
 
+const MIMES = { pdf: "application/pdf", ogg: "audio/ogg", mp3: "audio/mpeg", m4a: "audio/mp4", mp4: "video/mp4", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", csv: "text/csv", txt: "text/plain", zip: "application/zip" };
+function guessMime(name = "") { const e = String(name).split("?")[0].split(".").pop().toLowerCase(); return MIMES[e] || "application/octet-stream"; }
 export async function sendWhatsAppMediaUrl(channelId, jid, { url, mediaType, caption, fileName, mimetype }) {
   const cloud = await getCloudChannel(channelId);
   if (cloud) return cloudSendMediaLink(cloud, jid, { url, mediaType, caption });
@@ -1054,7 +1056,8 @@ export async function sendWhatsAppMediaUrl(channelId, jid, { url, mediaType, cap
   if (!conn?.sock) throw new Error("Este dispositivo de WhatsApp não está conectado.");
   const payload =
     mediaType === "video" ? { video: { url }, caption } :
-    mediaType === "document" ? { document: { url }, caption, fileName: fileName || url.split("/").pop() || "arquivo", ...(mimetype ? { mimetype } : {}) } :
+    mediaType === "audio" ? { audio: { url }, mimetype: mimetype || "audio/ogg; codecs=opus", ptt: true } :
+    mediaType === "document" ? { document: { url }, caption, fileName: fileName || url.split("/").pop().split("?")[0] || "arquivo", mimetype: mimetype || guessMime(fileName || url) } :
     { image: { url }, caption };
   const sent = await conn.sock.sendMessage(jid, payload);
   return sent?.key?.id || null;
