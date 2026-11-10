@@ -28,7 +28,7 @@ import { autoMigrateIfNeeded } from "./migrateSupabase.js";
 import { startBillingScheduler, markInvoicePaid } from "./billing.js";
 import { supabase as db } from "./config/db.js";
 import { supabase } from "./config/db.js";
-import { sendEmail, emailConfigured } from "./email.js";
+import { sendEmail, sendMail, emailConfigured } from "./email.js";
 import { startSupportWatcher } from "./governance.js";
 
 const PORT = process.env.PORT || 4000;
@@ -112,15 +112,28 @@ app.post("/auth/forgot", async (req, res) => {
   forgotHits.set(ip, [...recent, now]);
   const ok = { ok: true, message: "Se esse e-mail estiver cadastrado, enviamos um link para criar uma nova senha." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.json(ok);
-  const redirectTo = `${FRONTEND_ORIGINS[0]}/?reset=1`;
+  // Volta para o mesmo domínio em que a pessoa pediu (o Helora tem vários domínios)
+  const origin = String(req.get("origin") || "").replace(/\/$/, "");
+  const base = FRONTEND_ORIGINS.includes(origin) ? origin : FRONTEND_ORIGINS[0];
   try {
+    const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${base}/?reset=1` } });
+    if (error || !data?.properties?.hashed_token) {
+      if (error && !/not found|no user/i.test(error.message)) console.warn("[Senha] generateLink:", error.message);
+      return res.json(ok);
+    }
+    // Link direto para o Helora: o próprio app valida o token (não depende da lista de redirecionamento do Supabase)
+    const link = `${base}/?reset=1&token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=recovery`;
+    const nome = String(data.user?.user_metadata?.name || data.user?.user_metadata?.full_name || "").split(" ")[0];
     if (emailConfigured()) {
-      const { data, error } = await supabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo } });
-      if (!error && data?.properties?.action_link) {
-        await sendEmail("EMAILJS_TEMPLATE_RESET", { to_email: email, to_name: "", reset_link: data.properties.action_link });
+      try { await sendEmail("EMAILJS_TEMPLATE_RESET", { to_email: email, to_name: nome, reset_link: link }); }
+      catch (e) {
+        console.warn("[Senha] modelo recuperar_senha falhou, usando o genérico:", e.response?.data || e.message);
+        await sendMail({ to: email, name: nome, subject: "Crie sua nova senha do Helora", title: "Recuperar senha", label: "Segurança",
+          message: "Recebemos um pedido para criar uma nova senha para a sua conta. Clique no botão abaixo. O link vale por 1 hora.",
+          note: "Se não foi você, pode ignorar este e-mail. Sua senha atual continua a mesma.", buttonText: "Criar nova senha", buttonLink: link });
       }
     } else {
-      await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${base}/?reset=1` });
     }
   } catch (err) {
     console.error("[Senha] Falha ao enviar recuperação:", err.response?.data || err.message);

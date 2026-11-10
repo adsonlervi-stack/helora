@@ -114,8 +114,21 @@ export default function App() {
   const [showSupport, setShowSupport] = useState(false);
   // Veio do link "recuperar senha" do e-mail?
   const [recovery, setRecovery] = useState(
-    () => typeof window !== "undefined" && /type=recovery/.test(window.location.hash + window.location.search)
+    () => typeof window !== "undefined" && /type=recovery|reset=1/.test(window.location.hash + window.location.search)
   );
+  const [recoveryError, setRecoveryError] = useState(() => {
+    try { const h = new URLSearchParams(window.location.hash.slice(1)); return h.get("error_code") === "otp_expired" || /expired|invalid/i.test(h.get("error_description") || "") ? "expired" : null; } catch { return null; }
+  });
+  // Link do e-mail: valida o token aqui mesmo (funciona em qualquer domínio do Helora)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const th = q.get("token_hash");
+    if (!th) return;
+    supabase.auth.verifyOtp({ token_hash: th, type: "recovery" }).then(({ error }) => {
+      if (error) { setRecoveryError("expired"); setRecovery(true); }
+      window.history.replaceState(null, "", `${window.location.pathname}?reset=1`);
+    });
+  }, []);
 
   const openConversation = useCallback((conversationId) => {
     setSection("conversations");
@@ -293,8 +306,8 @@ export default function App() {
     return <LoginPage />;
   }
 
-  if (recovery && session) {
-    return <ResetPasswordPage onDone={() => setRecovery(false)} />;
+  if (recovery && (session || recoveryError)) {
+    return <ResetPasswordPage expired={!session && !!recoveryError} onDone={() => { setRecovery(false); setRecoveryError(null); window.history.replaceState(null, "", window.location.pathname); }} />;
   }
 
   if (!profile) {
