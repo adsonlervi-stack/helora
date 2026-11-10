@@ -79,6 +79,35 @@ function PermissionsPanel({ channel, team, onClose }) {
   );
 }
 
+// Cadastro incorporado da Meta: abre o popup oficial, a empresa escolhe/cria a conta e o número dela
+function loadFbSdk(appId, version) {
+  return new Promise((resolve) => {
+    if (window.FB) return resolve(window.FB);
+    window.fbAsyncInit = () => { window.FB.init({ appId, autoLogAppEvents: true, xfbml: false, version }); resolve(window.FB); };
+    const s = document.createElement("script");
+    s.src = "https://connect.facebook.net/en_US/sdk.js"; s.async = true; s.defer = true; s.crossOrigin = "anonymous";
+    document.body.appendChild(s);
+  });
+}
+async function waEmbeddedSignup(cfg) {
+  const FB = await loadFbSdk(cfg.appId, cfg.version || "v21.0");
+  let info = null;
+  const onMsg = (ev) => {
+    if (!/facebook\.com$/.test(new URL(ev.origin).hostname)) return;
+    try { const d = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data; if (d?.type === "WA_EMBEDDED_SIGNUP" && d.event === "FINISH") info = d.data; } catch {}
+  };
+  window.addEventListener("message", onMsg);
+  try {
+    const code = await new Promise((resolve, reject) => FB.login((r) => (r.authResponse?.code ? resolve(r.authResponse.code) : reject(new Error("cancel"))), {
+      config_id: cfg.waConfigId, response_type: "code", override_default_response_type: true,
+      extras: { setup: {}, featureType: "", sessionInfoVersion: "3" }
+    }));
+    for (let i = 0; i < 20 && !info; i++) await new Promise((r) => setTimeout(r, 250));
+    if (!info?.phone_number_id) throw new Error("A Meta não informou o número escolhido. Conclua todas as etapas do cadastro.");
+    return await metaApi.waEmbedded({ code, wabaId: info.waba_id, phoneNumberId: info.phone_number_id });
+  } finally { window.removeEventListener("message", onMsg); }
+}
+
 function NewChannelModal({ departments, flows, initial, preset, onClose, onCreate }) {
   const editing = !!initial;
   const [platform, setPlatform] = useState(initial?.platform || preset?.platform || "whatsapp");
@@ -183,7 +212,15 @@ export default function ChannelsPage() {
   const [showNew, setShowNew] = useState(false);
   const [metaOpen, setMetaOpen] = useState(() => new URLSearchParams(window.location.search).get("meta") || null);
   const [metaOn, setMetaOn] = useState(false);
-  useEffect(() => { metaApi.status().then((s) => setMetaOn(!!s.configured)); }, []);
+  const [metaCfg, setMetaCfg] = useState({});
+  useEffect(() => { metaApi.status().then((s) => { setMetaOn(!!s.configured); setMetaCfg(s || {}); }); }, []);
+  const connectWa = async () => {
+    try {
+      const ch = await waEmbeddedSignup(metaCfg);
+      notify(`WhatsApp "${ch.name}" conectado pela API oficial!`, "success");
+      load();
+    } catch (e) { if (e?.message !== "cancel") notify(e?.response?.data?.error || e.message, "error"); }
+  };
   const [igOn, setIgOn] = useState(false);
   useEffect(() => {
     instagramApi.status().then((s) => setIgOn(!!s.configured));
@@ -274,7 +311,7 @@ export default function ChannelsPage() {
             <div className="ch2-menu" onMouseLeave={() => setMenu(false)}>
               <div className="ch2-menu-t">Adicionar novo canal</div>
               {ADD.map((o) => (
-                <button key={o.k} onClick={() => { setMenu(false); if (o.go) { window.history.replaceState(null, "", `${window.location.pathname}?aba=${o.go}`); window.location.reload(); } else if (o.k === "ig" && igOn) connectIg(); else if ((o.k === "ig" || o.k === "fb") && metaOn) setMetaOpen("start"); else setShowNew(o.preset); }}>
+                <button key={o.k} onClick={() => { setMenu(false); if (o.go) { window.history.replaceState(null, "", `${window.location.pathname}?aba=${o.go}`); window.location.reload(); } else if (o.k === "cloud" && metaCfg.waConfigId) connectWa(); else if (o.k === "ig" && igOn) connectIg(); else if ((o.k === "ig" || o.k === "fb") && metaOn) setMetaOpen("start"); else setShowNew(o.preset); }}>
                   <span className="ch2-mi" style={{ background: o.color }}><o.icon size={18} /></span>
                   <span><strong>{o.title}</strong><small>{o.sub}</small></span>
                   <ChevronRight size={16} />

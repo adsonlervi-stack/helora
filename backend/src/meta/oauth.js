@@ -72,7 +72,27 @@ metaCallbackRouter.get("/meta/callback", async (req, res) => {
 
 export const metaRouter = Router();
 metaRouter.use(requireAuth);
-metaRouter.get("/status", (req, res) => res.json({ configured: metaConfigured() }));
+metaRouter.get("/status", (req, res) => res.json({ configured: metaConfigured(), appId: process.env.META_APP_ID || null, waConfigId: process.env.META_WA_CONFIG_ID || null, version: V() }));
+
+// Cadastro incorporado do WhatsApp (Helora como Provedor de Tecnologia): a empresa conecta o próprio número
+metaRouter.post("/whatsapp/embedded", requireOwner, async (req, res) => {
+  try {
+    const { code, wabaId, phoneNumberId } = req.body || {};
+    if (!code || !wabaId || !phoneNumberId) return res.status(400).json({ error: "O cadastro na Meta não foi concluído. Tente de novo." });
+    const { data: other } = await supabase.from("channels").select("account_id").eq("phone_number_id", phoneNumberId).maybeSingle();
+    if (other) return res.status(409).json({ error: other.account_id === req.accountId ? "Este número já está conectado." : "Este número já está conectado em outra empresa do Helora." });
+    await checkChannelLimit(req.accountId, "whatsapp");
+    const tk = await graph("/oauth/access_token", { client_id: process.env.META_APP_ID, client_secret: process.env.META_APP_SECRET, code });
+    const token = tk.access_token;
+    await graph(`/${wabaId}/subscribed_apps`, { access_token: token }, "POST");
+    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    await graph(`/${phoneNumberId}/register`, { messaging_product: "whatsapp", pin, access_token: token }, "POST").catch((e) => console.warn("[WA embedded] register:", e.message));
+    let name = "WhatsApp";
+    try { const ph = await graph(`/${phoneNumberId}`, { fields: "display_phone_number,verified_name", access_token: token }); name = ph.verified_name || ph.display_phone_number || name; } catch {}
+    const channel = await createChannel({ accountId: req.accountId, platform: "whatsapp", name, provider: "cloud", phoneNumberId, wabaId, accessToken: token });
+    res.status(201).json(channel);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
 metaRouter.get("/auth-url", requireOwner, (req, res) => {
   if (!metaConfigured()) return res.status(503).json({ error: "Conexão com o Facebook ainda não configurada. Fale com o suporte Helora." });
   const u = new URL(`https://www.facebook.com/${V()}/dialog/oauth`);
