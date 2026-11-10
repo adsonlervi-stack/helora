@@ -10,7 +10,7 @@ import { uploadCrmFile, removeCrmFile, uploadMedia } from "../storage.js";
 import { TEMPLATES, cleanFields, cleanCustom } from "../crmTemplates.js";
 import { RAMOS } from "../insuranceLists.js";
 import { createZip } from "../zip.js";
-import { getPrimaryWhatsAppChannel, findOrCreateConversation, updateConversation, createTask } from "../config/db.js";
+import { getPrimaryWhatsAppChannel, findOrCreateConversation, updateConversation, createTask, addMessage } from "../config/db.js";
 import { sendTextToConversation, sendMediaUrlToConversation } from "../messaging.js";
 import { getIntegration, saveIntegration } from "../integrations/store.js";
 import { resolveWhatsAppNumber } from "../whatsapp/baileysClient.js";
@@ -73,10 +73,10 @@ const fill = (t, lead) => String(t || "")
   .replace(/\{([a-z0-9_]+)\}/g, (m, k) => (lead.custom && lead.custom[k] != null ? fmtVal(lead.custom[k]) : m));
 
 /** Abre (ou reaproveita) a conversa de WhatsApp do lead e devolve a conversa. */
-export async function leadConversation(accountId, lead, { departmentId, agentId } = {}) {
+export async function leadConversation(accountId, lead, { departmentId, agentId, channelId: chosen } = {}) {
   const phone = onlyDigits(lead.phone);
   if (phone.length < 10) throw new Error("O lead não tem WhatsApp válido.");
-  const channelId = await getPrimaryWhatsAppChannel(accountId);
+  const channelId = chosen || (await getPrimaryWhatsAppChannel(accountId));
   if (!channelId) throw new Error("Nenhum WhatsApp conectado nesta empresa.");
   const jid = await resolveWhatsAppNumber(channelId, phone);
   let conv = await findOrCreateConversation({ accountId, platform: "whatsapp", externalId: jid, phone: jid.split("@")[0], name: lead.name || phone, channelId });
@@ -957,10 +957,26 @@ router.post("/leads/:id/message", async (req, res) => {
   try {
     const text = String(req.body?.text || "").trim().slice(0, 4000);
     const files = cleanMsgFiles(req.body?.files);
-    if (!text && !files.length) return res.status(400).json({ error: "Escreva a mensagem." });
+    const tplReq = req.body?.template;
+    if (!text && !files.length && !tplReq?.name) return res.status(400).json({ error: "Escreva a mensagem." });
     const { data: lead } = await supabase.from("crm_leads").select("*").eq("account_id", req.accountId).eq("id", req.params.id).maybeSingle();
     if (!lead) return res.status(404).json({ error: "Lead não encontrado." });
-    const conv = await leadConversation(req.accountId, lead, { agentId: req.userId });
+    const channelId = req.body?.channelId || null;
+    const conv = await leadConversation(req.accountId, lead, { agentId: req.userId, channelId });
+    if (tplReq?.name) {
+      const { cloudChannelRow, fetchTemplate, sendTemplateTo, renderText } = await import("../meta/waTemplates.js");
+      const ch = await cloudChannelRow(req.accountId, conv.channelId || channelId);
+      const tpl = await fetchTemplate(ch, tplReq.name, tplReq.language);
+      if (!tpl) throw new Error("Template não encontrado.");
+      const waId = await sendTemplateTo(ch, onlyDigits(lead.phone), tpl, tplReq.vars || {});
+      const body = renderText(tpl, tplReq.vars || {});
+      const hm = tplReq.vars?.headerMedia;
+      await addMessage({ accountId: req.accountId, conversationId: conv.id, direction: "out", author: "operator", text: body, whatsappMessageId: waId, senderName: req.userName || null, status: "sent", ...(hm?.url ? { mediaUrl: hm.url, mediaType: hm.kind || "document" } : {}) });
+      await pushHistory(lead.id, [{ type: "whats", text: `📋 Template ${tpl.name}\n${body}`, by: req.userName || null }]);
+      await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", lead.id);
+      const { data } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("id", lead.id).single();
+      return res.json({ conversationId: conv.id, lead: mapLead(data) });
+    }
     if (text) await sendTextToConversation(req.accountId, conv, text, { senderName: req.userName || null });
     for (const f of files) await sendMediaUrlToConversation(req.accountId, conv, { url: f.url, mediaType: mediaKind(f.type), fileName: f.name, mimetype: f.type || undefined }, { senderName: req.userName || null });
     await pushHistory(lead.id, [{ type: "whats", text: [text, ...files.map((f) => `📎 ${f.name}`)].filter(Boolean).join("\n"), by: req.userName || null }]);

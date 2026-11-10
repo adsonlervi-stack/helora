@@ -36,7 +36,7 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
   const [chans, setChans] = useState([]);
   const [channelId, setChannelId] = useState("");
   const [tplV, setTplV] = useState(null);
-  useEffect(() => { getChannels().then((l) => { const w = l.filter((c) => c.platform === "whatsapp"); setChans(w); if (w[0]) setChannelId(w[0].id); }).catch(() => {}); }, []);
+  useEffect(() => { getChannels().then((l) => { const w = l.filter((c) => c.platform === "whatsapp"); setChans(w); }).catch(() => {}); }, []);
   const isCloud = chans.find((c) => c.id === channelId)?.provider === "cloud";
   useEffect(() => { getDepartments().then((l) => { setDepartments(l); if (l.length === 1) setDepartmentId(l[0].id); }).catch(() => {}); }, []);
 
@@ -76,7 +76,7 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
       width={620}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-        <Button disabled={busy || phone.length < 12 || (isCloud && !tplV) || (departments.length > 0 && !departmentId)} onClick={submit}>{busy ? "Abrindo…" : label}</Button>
+        <Button disabled={busy || !channelId || phone.length < 12 || (isCloud && !tplV) || (departments.length > 0 && !departmentId)} onClick={submit}>{busy ? "Abrindo…" : label}</Button>
       </>}
     >
       <div className="crm-search" style={{ width: "100%", boxSizing: "border-box", marginTop: 4 }}>
@@ -112,11 +112,12 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
         )}
       </Group>
 
-      {chans.length > 1 && (
-        <Group title="Número">
-          <Row label="Enviar por">
+      {(
+        <Group title="Canal">
+          <Row label="Enviar por *">
             <select value={channelId} onChange={(e) => { setChannelId(e.target.value); setTplV(null); }}>
-              {chans.map((c) => <option key={c.id} value={c.id}>{c.name}{c.provider === "cloud" ? " · API oficial" : ""}</option>)}
+              <option value="">Escolha o número…</option>
+              {chans.map((c) => <option key={c.id} value={c.id}>{c.name}{c.provider === "cloud" ? " · API oficial" : " · QR Code"}</option>)}
             </select>
           </Row>
         </Group>

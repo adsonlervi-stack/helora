@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { crm, createTaskApi, integrations } from "../api.js";
 import MailBox from "./MailBox.jsx";
+import { TemplateChooser, fillVars } from "./WaTemplates.jsx";
+import { getChannels, waTemplates } from "../api.js";
 import { PolicyForm, PoliciesSection, BillingSend } from "./CrmPolicies.jsx";
 import { askConfirm, askPrompt, notify } from "../dialogs.js";
 
@@ -488,8 +490,8 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                   <MessageBox
                     ctx={ctx} pipe={pipe} lead={lead} f={f} custom={custom} value={value} stageName={stages[stageIdx]?.name || ""} ownerName={f.ownerId ? memberName(f.ownerId) : ""}
                     onOpen={openConversation}
-                    onSend={async (text, files) => {
-                      try { await flush(); const r = await crm.sendLeadMessage(lead.id, text, files); changed(r.lead); notify("Mensagem enviada pelo WhatsApp.", "success"); return true; }
+                    onSend={async (text, files, extra) => {
+                      try { await flush(); const r = await crm.sendLeadMessage(lead.id, text, files, extra); changed(r.lead); notify("Mensagem enviada pelo WhatsApp.", "success"); return true; }
                       catch (e) { notify(errText(e), "error"); return false; }
                     }}
                   />
@@ -824,15 +826,47 @@ function MessageBox({ ctx, pipe, lead, f, custom, value, stageName, ownerName, o
     .replace(/\{meu_nome\}/g, String(ctx.profile?.name || "").split(" ")[0])
     .replace(/\{([a-z0-9_]+)\}/g, (m, k) => { const fd = (pipe?.fields || []).find((x) => x.id === k); return fd ? (custom[k] ? fmt(fd, custom[k]) : m) : m; });
   const missing = (text.match(/\{[a-z0-9_]+\}/g) || []);
-  const send = async () => { setBusy(true); if (await onSend(text.trim(), files)) { setText(""); setFiles([]); } setBusy(false); };
+  const [chans, setChans] = useState([]);
+  const [channelId, setChannelId] = useState("");
+  const [tplV, setTplV] = useState(null);
+  useEffect(() => { getChannels().then((l) => setChans(l.filter((c) => c.platform === "whatsapp"))).catch(() => {}); }, []);
+  const isCloud = chans.find((c) => c.id === channelId)?.provider === "cloud";
+  const send = async () => { setBusy(true); if (await onSend(text.trim(), files, { channelId })) { setText(""); setFiles([]); } setBusy(false); };
+  const sendTpl = async () => {
+    setBusy(true);
+    const who = { name: f.name || "", phone: f.phone || "" };
+    const template = { name: tplV.tpl.name, language: tplV.tpl.language, vars: fillVars(tplV.map, who, tplV.headerMedia && { ...tplV.headerMedia, kind: tplV.kind }) };
+    if (await onSend("", [], { channelId, template })) { waTemplates.saveMap(tplV.key, tplV.map).catch(() => {}); setTplV(null); }
+    setBusy(false);
+  };
+  const chanPick = (
+    <div className="lp-chan">
+      <span>Canal</span>
+      <select value={channelId} onChange={(e) => { setChannelId(e.target.value); setTplV(null); }}>
+        <option value="">Escolha o número…</option>
+        {chans.map((c) => <option key={c.id} value={c.id}>{c.name}{c.provider === "cloud" ? " · API oficial" : " · QR Code"}</option>)}
+      </select>
+    </div>
+  );
+  if (isCloud) return (
+    <div className="lp-msgs">
+      {chanPick}
+      <TemplateChooser channelId={channelId} who={{ name: f.name || "", phone: f.phone || "" }} value={tplV} onChange={setTplV} />
+      <div className="lp-row-end">
+        <button className="lp-ghost" onClick={onOpen} disabled={!f.phone}><MessageCircle size={14} /> {lead.conversationId ? "Ver conversa" : "Abrir conversa"}</button>
+        <button className="lp-primary" disabled={!f.phone || !tplV || busy} onClick={sendTpl}><Send size={14} /> {busy ? "Enviando…" : "Enviar template"}</button>
+      </div>
+    </div>
+  );
   return (
     <div className="lp-msgs">
+      {chanPick}
       <div className="lp-msg-list">
         {list.map((m) => <button key={m.id} className="lp-msg-pill" onClick={() => { setText(fill(m.text)); setFiles(m.files || []); }} title={m.text}>{m.files?.length ? "📎 " : ""}{m.title}</button>)}
         {ctx.isManager && <button className="lp-msg-pill ghost" onClick={() => setManage(true)}>{saved.length ? "Editar respostas" : "+ Criar respostas do funil"}</button>}
       </div>
       <textarea rows={4} spellCheck lang="pt-BR" value={text} onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (f.phone && (text.trim() || files.length) && !busy && !missing.length) send(); } }}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (channelId && f.phone && (text.trim() || files.length) && !busy && !missing.length) send(); } }}
         onPaste={(e) => { const it = [...(e.clipboardData?.items || [])].find((x) => x.kind === "file"); if (it) { e.preventDefault(); const fl = it.getAsFile(); fl && addBoxFile(fl); } }}
         placeholder={f.phone ? "Escolha uma resposta pronta acima ou escreva aqui…" : "Cadastre o telefone do cliente para enviar mensagens."} />
       {files.length > 0 && <div className="lp-msg-files">{files.map((fl, i) => <span key={i} className="lp-msg-file">📎 {fl.name}<button onClick={() => setFiles((l) => l.filter((_, j) => j !== i))}><X size={11} /></button></span>)}</div>}
@@ -841,7 +875,7 @@ function MessageBox({ ctx, pipe, lead, f, custom, value, stageName, ownerName, o
       <div className="lp-row-end">
         <button className="lp-ghost" onClick={onOpen} disabled={!f.phone}><MessageCircle size={14} /> {lead.conversationId ? "Ver conversa" : "Abrir conversa"}</button>
         <button className="lp-ghost" onClick={() => boxFile.current?.click()} disabled={!f.phone || files.length >= 5}><Paperclip size={14} /> Anexo</button>
-        <button className="lp-primary" disabled={!f.phone || (!text.trim() && !files.length) || busy || missing.length > 0} onClick={send}><Send size={14} /> {busy ? "Enviando…" : "Enviar pelo WhatsApp"}</button>
+        <button className="lp-primary" disabled={!channelId || !f.phone || (!text.trim() && !files.length) || busy || missing.length > 0} onClick={send}><Send size={14} /> {busy ? "Enviando…" : "Enviar pelo WhatsApp"}</button>
       </div>
       {manage && <MessagesEditor ctx={ctx} pipe={pipe} initial={saved.length ? saved : DEFAULT_MESSAGES} vars={[...BASE_VARS, ...fieldVars]} onClose={() => setManage(false)} />}
     </div>

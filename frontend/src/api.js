@@ -427,7 +427,7 @@ export const crm = {
   lead: (id) => api.get(`/crm/leads/${id}`).then((r) => r.data),
   leadByConversation: (convId) => api.get(`/crm/by-conversation/${convId}`).then((r) => r.data),
   setConversationLead: (convId, d) => api.post(`/crm/by-conversation/${convId}`, d).then((r) => r.data),
-  sendLeadMessage: (id, text, files) => api.post(`/crm/leads/${id}/message`, { text, files }).then((r) => r.data),
+  sendLeadMessage: (id, text, files, extra = {}) => api.post(`/crm/leads/${id}/message`, { text, files, ...extra }).then((r) => r.data),
   addLeadNote: (id, text) => api.post(`/crm/leads/${id}/notes`, { text }).then((r) => r.data),
   editLeadNote: (id, noteId, text) => api.patch(`/crm/leads/${id}/notes/${noteId}`, { text }).then((r) => r.data),
   uploadMessageFile: (file) => { const fd = new FormData(); fd.append("file", file); return api.post(`/crm/message-files`, fd).then((r) => r.data); },

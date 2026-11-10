@@ -128,7 +128,16 @@ function FunnelView({ ctx }) {
   const [flt, setFlt] = useState({ owner: "", tag: "", outcome: "", fields: {} });
   const [fltOpen, setFltOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get("lead") ? "board" : "activities")); // abre em Atividades, como o Agendor
+  const [dueCount, setDueCount] = useState(0);
+  useEffect(() => {
+    const me = ctx.profile?.id;
+    const load = () => crm.events({ done: "0", ...(me ? { ownerId: me } : {}) }).then((l) => {
+      const lim = Date.now() + 24 * 3600 * 1000;
+      setDueCount((Array.isArray(l) ? l : l?.events || []).filter((e) => !e.done && e.startsAt && new Date(e.startsAt).getTime() <= lim).length);
+    }).catch(() => {});
+    load(); const t = setInterval(load, 60000); return () => clearInterval(t);
+  }, [ctx.profile?.id]);
+  const [view, setView] = useState(() => (new URLSearchParams(window.location.search).get("lead") ? "board" : "board")); // abre no Funil
   const [side, setSide] = useState(null); // leads arquivados / reagendados
   const [exporting, setExporting] = useState(false);
   const [autoOpen, setAutoOpen] = useState(false);
@@ -344,7 +353,6 @@ function FunnelView({ ctx }) {
           )}
         </div>
         <div className="crm-views">
-          <button type="button" className={view === "activities" ? "on" : ""} onClick={() => setView("activities")}>Atividades</button>
           <span className="crm-more">
             <button type="button" className={view === "board" ? "on" : ""} title="Clique de novo para trocar de funil" onClick={() => (view === "board" ? setPipeMenu((v) => !v) : setView("board"))}>
               {all ? "Todos os funis" : pipeline?.name || "Funil"} <ChevronDown size={13} />
@@ -358,6 +366,7 @@ function FunnelView({ ctx }) {
               </span>
             )}
           </span>
+          <button type="button" className={`crm-act-btn ${view === "activities" ? "on" : ""}`} onClick={() => setView("activities")} title={dueCount ? `${dueCount} atividade(s) vencendo ou atrasada(s)` : ""}>Atividades{dueCount > 0 && <span className="crm-due">{dueCount > 99 ? "99+" : dueCount}</span>}</button>
           {[["list", "Lista"], ["clients", "Empresas"]].map(([k, l]) => (
             <button key={k} type="button" className={view === k ? "on" : ""} onClick={() => setView(k)}>{l}</button>
           ))}
