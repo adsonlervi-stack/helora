@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Megaphone, Plus, Play, Pause, XCircle, Trash2, Coins, X, Search, ArrowLeft, AlertTriangle } from "lucide-react";
+import { TemplateChooser } from "./WaTemplates.jsx";
 import { getCampaigns, getCampaignApi, createCampaignApi, campaignActionApi, deleteCampaignApi, getCredits, getContacts, getLabels, getChannels } from "../api.js";
 
 const STATUS = {
@@ -35,6 +36,8 @@ function NewCampaign({ balance, onClose, onCreated }) {
   const [variants, setVariants] = useState(["", ""]);
   const [channels, setChannels] = useState([]);
   const [channelId, setChannelId] = useState("");
+  const [tplV, setTplV] = useState(null);
+  const cloudSel = channels.find((c) => c.id === channelId)?.provider === "cloud";
   const [labels, setLabels] = useState([]);
   const [pickedLabels, setPickedLabels] = useState(new Set());
   const [busy, setBusy] = useState(false);
@@ -65,8 +68,11 @@ function NewCampaign({ balance, onClose, onCreated }) {
     setBusy(true);
     setError(null);
     try {
+      const tplMsg = cloudSel && tplV ? "@@TPL@@" + JSON.stringify({ name: tplV.tpl.name, language: tplV.tpl.language, map: tplV.map, headerMedia: tplV.headerMedia }) : null;
+      if (cloudSel && !tplMsg) throw new Error("Escolha o template. No WhatsApp oficial, campanhas só podem usar templates aprovados.");
       const body = {
         ...f,
+        ...(tplMsg ? { message: tplMsg, mediaUrl: null } : {}),
         mediaUrl: f.mediaUrl.trim() || null,
         scheduledAt: f.scheduledAt ? new Date(f.scheduledAt).toISOString() : null,
         allContacts: source === "all",
@@ -95,6 +101,9 @@ function NewCampaign({ balance, onClose, onCreated }) {
         </div>
 
         <label className="login-field"><span>Nome da campanha</span><input value={f.name} onChange={set("name")} placeholder="Ex: Renovação de seguro auto - outubro" autoFocus /></label>
+        {cloudSel ? (
+          <div className="camp-tpl"><TemplateChooser channelId={channelId} value={tplV} onChange={setTplV} campaign /></div>
+        ) : (<>
         <label className="login-field">
           <span>Mensagem</span>
           <textarea rows={5} value={f.message} onChange={set("message")} placeholder="Olá {nome}! ..." />
@@ -107,6 +116,7 @@ function NewCampaign({ balance, onClose, onCreated }) {
           </label>
         ))}
         <small className="fe-hint">Cada contato recebe uma das versões, sorteada. Textos diferentes reduzem o risco de bloqueio do número.</small>
+        </>)}
         <div className="client-two">
           <label className="login-field"><span>Imagem/vídeo/PDF (link, opcional)</span><input value={f.mediaUrl} onChange={set("mediaUrl")} placeholder="https://..." /></label>
           <label className="login-field"><span>Tipo do anexo</span>
@@ -201,8 +211,8 @@ function NewCampaign({ balance, onClose, onCreated }) {
 
         {error && <div className="admin-feedback error">{error}</div>}
         <div className="gestao-row" style={{ justifyContent: "flex-end" }}>
-          <button className="pill-btn" disabled={busy || !f.message.trim() || !(count ?? pickedLabels.size)} onClick={() => submit(false)}>Salvar rascunho</button>
-          <button className="pill-btn primary" disabled={busy || !f.message.trim() || !(count ?? pickedLabels.size)} onClick={() => submit(true)}>
+          <button className="pill-btn" disabled={busy || !(cloudSel ? tplV : f.message.trim()) || !(count ?? pickedLabels.size)} onClick={() => submit(false)}>Salvar rascunho</button>
+          <button className="pill-btn primary" disabled={busy || !(cloudSel ? tplV : f.message.trim()) || !(count ?? pickedLabels.size)} onClick={() => submit(true)}>
             {f.scheduledAt ? "Agendar" : "Salvar e enviar"}
           </button>
         </div>
@@ -228,7 +238,7 @@ function CampaignDetail({ id, onBack }) {
         <h2>{c.name}</h2>
         <span className="cv-tag" style={{ "--tag": color }}>{label}</span>
         {c.pauseReason && <div className="fe-insp-warn">{c.pauseReason}</div>}
-        <div className="camp-msg">{c.message}</div>
+        <div className="camp-msg">{String(c.message || "").startsWith("@@TPL@@") ? `Template: ${(() => { try { return JSON.parse(c.message.slice(7)).name; } catch { return ""; } })()}` : c.message}</div>
         <div className="fe-insp-stats">
           <div><strong>{c.total}</strong><span>destinatários</span></div>
           <div><strong>{c.sent}</strong><span>enviadas</span></div>

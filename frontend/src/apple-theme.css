@@ -3434,3 +3434,24 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .wat-btns{display:flex;flex-direction:column;gap:4px;margin-top:10px}
 .wat-btns span{background:#fff;border-radius:8px;text-align:center;padding:7px;color:#0a84ff;font-weight:600;font-size:13px}
 .wat-rej{font-size:12px;color:#c0392b;margin-top:8px}
+.wat-editor{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+.wat-side{position:sticky;top:0;background:#efeae2;border-radius:16px;padding:16px}
+.wat-side-t{font-size:12px;font-weight:600;color:#6e6e73;margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em}
+.wat-preview{margin-top:14px;background:#efeae2;border-radius:16px;padding:16px}
+.wat-media{display:flex;align-items:center;justify-content:center;gap:8px;min-height:120px;background:rgba(0,0,0,.06);border-radius:8px;margin-bottom:8px;color:#6e6e73;font-size:13px;overflow:hidden}
+.wat-media img{width:100%;max-height:200px;object-fit:cover}
+.wat-btns span{display:flex;align-items:center;justify-content:center;gap:6px}
+.wat-muted{color:#8e8e93;font-size:13px}
+.wat-inline{display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap}
+.wat-inline select,.wat-inline input{flex:1;min-width:140px}
+.wat-btnrow{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.wat-btnrow select{width:150px}
+.wat-btnrow input{flex:1;min-width:120px}
+.wat-lib{display:flex;flex-wrap:wrap;gap:6px}
+.wat-lib button{border:1px solid rgba(0,0,0,.1);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;text-transform:capitalize}
+.wat-lib button:hover{border-color:#25D366;color:#128C7E}
+.wat-search{width:100%;margin-bottom:12px}
+.wat-window{display:flex;align-items:center;gap:12px;background:#fff7e6;border:1px solid #ffd591;color:#8a5a00;border-radius:12px;padding:10px 14px;margin:0 12px 8px;font-size:13px}
+.wat-window button{margin-left:auto;background:#25D366;color:#fff;border:0;border-radius:10px;padding:7px 12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.camp-tpl{margin:8px 0 12px}
+@media (max-width:820px){.wat-editor{grid-template-columns:1fr}.wat-side{position:static}}

@@ -659,7 +659,7 @@ export default function ChatWindow({
   const [special, setSpecial] = useState(null); // "contact" | "location"
   const [cloudCh, setCloudCh] = useState(null);
   const [tplOpen, setTplOpen] = useState(false);
-  useEffect(() => { setCloudCh(null); if (conversation?.id && conversation.platform === "whatsapp") waTemplates.convChannel(conversation.id).then(setCloudCh); }, [conversation?.id]);
+  useEffect(() => { setCloudCh(null); if (conversation?.id && conversation.platform === "whatsapp") waTemplates.convChannel(conversation.id).then((r) => setCloudCh(r?.channelId ? r : null)); }, [conversation?.id, messages?.length]);
   const [attachOpen, setAttachOpen] = useState(false);
   const [chanStatus, setChanStatus] = useState("connected");
   const [showSchedule, setShowSchedule] = useState(false);
@@ -1083,6 +1083,12 @@ export default function ChatWindow({
                 )}
               </div>
             )}
+            {cloudCh && !cloudCh.windowOpen && (
+              <div className="wat-window">
+                <span>Passaram 24h sem resposta do cliente. Pela regra da Meta, agora só dá para enviar template.</span>
+                <button type="button" onClick={() => setTplOpen(true)}>Enviar template</button>
+              </div>
+            )}
             <form className={`composer ${offline ? "disabled" : ""}`} onSubmit={handleSubmit}>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: "none" }} />
               <div className="attach-wrap">
@@ -1219,7 +1225,7 @@ export default function ChatWindow({
         />
       )}
       {showSchedule && <ScheduleModal conversation={conversation} initialText={text} defaultSign={signOn} onClose={() => setShowSchedule(false)} />}
-      {tplOpen && cloudCh && <SendTemplateSheet conversation={conversation} channelId={cloudCh} onClose={() => setTplOpen(false)} />}
+      {tplOpen && cloudCh && <SendTemplateSheet conversation={conversation} channelId={cloudCh.channelId} onClose={() => setTplOpen(false)} onSent={() => onReloadMessages?.()} />}
       {special && <SpecialModal kind={special} onClose={() => setSpecial(null)} onSend={onSendSpecial} />}
 
       {showExport && <ExportConversationModal conversation={conversation} onClose={() => setShowExport(false)} />}
