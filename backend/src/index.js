@@ -141,6 +141,34 @@ app.post("/auth/forgot", async (req, res) => {
   res.json(ok);
 });
 
+// Formulário do site (heloracrm.com.br): avisa a Helora por e-mail e, se configurado, cria o lead no CRM
+const siteHits = new Map();
+app.post("/public/site-lead", cors(), express.json({ limit: "20kb" }), async (req, res) => {
+  const b = req.body || {};
+  if (b.site) return res.json({ ok: true }); // robô
+  const now = Date.now(), recent = (siteHits.get(req.ip) || []).filter((t) => now - t < 3600000);
+  if (recent.length >= 8) return res.status(429).json({ error: "Muitas tentativas." });
+  siteHits.set(req.ip, [...recent, now]);
+  const clip = (v, n = 120) => String(v || "").trim().slice(0, n);
+  const lead = { nome: clip(b.nome), empresa: clip(b.empresa), whatsapp: clip(b.whatsapp, 30), email: clip(b.email), equipe: clip(b.equipe, 40) };
+  if (!lead.nome || !lead.whatsapp || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email)) return res.status(400).json({ error: "Dados incompletos." });
+  console.log("[Site] novo lead:", JSON.stringify(lead));
+  try {
+    const accId = process.env.SITE_LEADS_ACCOUNT_ID;
+    if (accId) {
+      const { data: pipe } = await supabase.from("crm_pipelines").select("id, stages").eq("account_id", accId).order("created_at").limit(1).maybeSingle();
+      if (pipe) await supabase.from("crm_leads").insert({ account_id: accId, pipeline_id: pipe.id, stage: pipe.stages?.[0]?.id, name: lead.nome, phone: lead.whatsapp.replace(/\D/g, ""), email: lead.email, company: lead.empresa, source: "Site", custom: { equipe: lead.equipe }, stage_changed_at: new Date().toISOString() });
+    }
+    const { data: admins } = await supabase.from("profiles").select("id").eq("is_super_admin", true);
+    const to = new Set(String(process.env.SUPPORT_ALERT_EMAIL || "").split(",").map((x) => x.trim()).filter(Boolean));
+    for (const a of admins || []) { const { data: u } = await supabase.auth.admin.getUserById(a.id).catch(() => ({ data: null })); if (u?.user?.email) to.add(u.user.email); }
+    for (const t of to) await sendMail({ to: t, subject: `Novo interessado no site: ${lead.nome}`, title: "Novo interessado no Helora", label: "Site",
+      message: `Nome: ${lead.nome}\nEmpresa: ${lead.empresa}\nWhatsApp: ${lead.whatsapp}\nE-mail: ${lead.email}\nEquipe: ${lead.equipe}`,
+      buttonText: "Chamar no WhatsApp", buttonLink: `https://wa.me/${lead.whatsapp.replace(/\D/g, "").replace(/^(?!55)/, "55")}` }).catch((e) => console.warn("[Site] e-mail:", e.message));
+  } catch (e) { console.warn("[Site] lead:", e.message); }
+  res.json({ ok: true });
+});
+
 // Usado pelo healthcheck do Railway.
 app.get("/health", (req, res) => res.json({ ok: true }));
 
