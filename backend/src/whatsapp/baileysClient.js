@@ -769,6 +769,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
           let buffer = await downloadMediaMessage(msg, "buffer", {}, { logger: pino({ level: "silent" }) });
           let ext = { image: "jpg", video: "mp4", document: "pdf", audio: "ogg", sticker: "webp" }[mediaType];
           let contentType = msg.message[mediaKey]?.mimetype || "application/octet-stream";
+          if (mediaType === "document" && msg.message[mediaKey]?.fileName?.includes(".")) ext = msg.message[mediaKey].fileName.split(".").pop().toLowerCase().slice(0, 8);
           if (mediaType === "image") {
             const webp = await toWebp(buffer);
             if (webp) { buffer = webp; ext = "webp"; contentType = "image/webp"; }
