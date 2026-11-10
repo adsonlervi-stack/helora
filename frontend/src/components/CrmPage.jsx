@@ -131,7 +131,7 @@ function FunnelView({ ctx }) {
   const [dueCount, setDueCount] = useState(0);
   useEffect(() => {
     const me = ctx.profile?.id;
-    const load = () => crm.events({ done: "0", ...(me ? { ownerId: me } : {}) }).then((l) => {
+    const load = () => crm.events({ done: "0" }).then((l) => {
       const lim = Date.now() + 24 * 3600 * 1000;
       setDueCount((Array.isArray(l) ? l : l?.events || []).filter((e) => !e.done && e.startsAt && new Date(e.startsAt).getTime() <= lim).length);
     }).catch(() => {});
