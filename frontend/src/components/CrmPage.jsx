@@ -366,7 +366,7 @@ function FunnelView({ ctx }) {
               </span>
             )}
           </span>
-          <button type="button" className={`crm-act-btn ${view === "activities" ? "on" : ""}`} onClick={() => setView("activities")} title={dueCount ? `${dueCount} atividade(s) vencendo ou atrasada(s)` : ""}>Atividades{dueCount > 0 && <span className="crm-due">{dueCount > 99 ? "99+" : dueCount}</span>}</button>
+          <button type="button" className={`crm-act-btn ${view === "activities" ? "on" : ""}`} onClick={() => setView("activities")} title={dueCount ? `${dueCount} atividade(s) vencendo ou atrasada(s)` : ""}>Atividades{dueCount > 0 && <span className="crm-due-count">{dueCount > 99 ? "99+" : dueCount}</span>}</button>
           {[["list", "Lista"], ["clients", "Empresas"]].map(([k, l]) => (
             <button key={k} type="button" className={view === k ? "on" : ""} onClick={() => setView(k)}>{l}</button>
           ))}

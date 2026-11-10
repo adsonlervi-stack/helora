@@ -3549,7 +3549,7 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .la-card.c1 { left: 0; top: 18%; } .la-card.c2 { right: 0; top: 44%; } .la-card.c3 { left: 8%; bottom: 6%; }
 .la-card { animation: laMsg .45s cubic-bezier(.2,1.5,.4,1) var(--d) forwards, laFloat 5s ease-in-out calc(var(--d) + .5s) infinite; }
 .crm-act-btn { position: relative; }
-.crm-due { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: #ff3b30; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px #fff; animation: crmDue 2s ease-in-out infinite; }
+.crm-due-count { position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px; background: #ff3b30; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px #fff; animation: crmDue 2s ease-in-out infinite; }
 @keyframes crmDue { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 .lp-chan { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .lp-chan span { font-size: 13px; font-weight: 600; color: #6e6e73; }
