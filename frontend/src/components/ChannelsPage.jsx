@@ -85,7 +85,7 @@ async function waEmbeddedSignup() {
   const w = window.open("about:blank", "helora-wa", "width=620,height=760");
   let url;
   try { url = await metaApi.waSignupUrl(); } catch (e) { w?.close(); throw e; }
-  if (!w) { window.location.href = url; return new Promise(() => {}); }
+  if (!w) { window.open(url, "_blank"); return new Promise(() => {}); }
   w.location.href = url;
   return new Promise((resolve, reject) => {
     const onMsg = (ev) => {
@@ -221,7 +221,7 @@ export default function ChannelsPage() {
       q.delete("ig"); q.delete("msg"); window.history.replaceState(null, "", `${window.location.pathname}?${q}`);
     }
   }, []);
-  const connectIg = async () => { try { window.location.href = await instagramApi.authUrl(); } catch (e) { notify(e?.response?.data?.error || e.message, "error"); } };
+  const connectIg = async () => { try { { const t = window.open("about:blank", "_blank"); const u = await instagramApi.authUrl(); t ? (t.location.href = u) : window.open(u, "_blank"); } } catch (e) { notify(e?.response?.data?.error || e.message, "error"); } };
   const [qrChannel, setQrChannel] = useState(null);
   const [permChannel, setPermChannel] = useState(null);
   const [editChannel, setEditChannel] = useState(null);
@@ -405,7 +405,7 @@ function MetaConnect({ state, onClose, onManual, onDone }) {
   const errMsg = state === "erro" ? new URLSearchParams(window.location.search).get("msg") : null;
   const load = () => metaApi.pages().then(setPages).catch(() => setPages([]));
   useEffect(() => { if (state === "ok") load(); else setPages([]); }, [state]);
-  const go = async () => { try { window.location.href = await metaApi.authUrl(); } catch (e) { alert(e?.response?.data?.error || e.message); } };
+  const go = async () => { try { { const t = window.open("about:blank", "_blank"); const u = await metaApi.authUrl(); t ? (t.location.href = u) : window.open(u, "_blank"); } } catch (e) { alert(e?.response?.data?.error || e.message); } };
   const connect = async (p) => {
     setBusy(p.id);
     try { await metaApi.connect({ id: p.id, platform: p.platform }); await load(); onDone(); }
