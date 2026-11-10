@@ -6,51 +6,48 @@ function NeuralBrain() {
   useEffect(() => {
     const cv = ref.current, ctx = cv.getContext("2d");
     let w = 0, h = 0, raf, t = 0;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const resize = () => { w = cv.clientWidth; h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
     resize();
-    // Silhueta do cérebro (vista lateral) feita de dois lobos + cerebelo + tronco
+    // brilho pronto (desenhar sombra em cada ponto pesa demais)
+    const glow = document.createElement("canvas"); glow.width = glow.height = 32;
+    const g = glow.getContext("2d"), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(.25, "rgba(200,232,255,.9)"); gr.addColorStop(1, "rgba(120,190,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
     const inside = (x, y) => {
       const e = (cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
       return e(0.42, 0.42, 0.34, 0.27) || e(0.62, 0.45, 0.3, 0.25) || e(0.5, 0.55, 0.36, 0.2) || e(0.7, 0.66, 0.14, 0.09) || (x > 0.55 && x < 0.62 && y > 0.6 && y < 0.86);
     };
     const nodes = [];
-    while (nodes.length < 280) {
+    while (nodes.length < 170) {
       const x = Math.random(), y = Math.random();
-      if (inside(x, y)) nodes.push({ x, y, ox: x, oy: y, p: Math.random() * 6.28, r: 1 + Math.random() * 2.2 });
+      if (inside(x, y)) nodes.push({ x, y, ox: x, oy: y, p: Math.random() * 6.28, r: 5 + Math.random() * 6 });
     }
     const links = [];
-    nodes.forEach((a, i) => nodes.forEach((b, j) => { if (j > i && Math.hypot(a.x - b.x, a.y - b.y) < 0.07) links.push([i, j]); }));
-    const pulses = Array.from({ length: 40 }, () => ({ l: links[(Math.random() * links.length) | 0], k: Math.random(), s: 0.006 + Math.random() * 0.012 }));
-    const draw = () => {
-      t += 0.016;
+    nodes.forEach((a, i) => nodes.forEach((b, j) => { if (j > i && Math.hypot(a.x - b.x, a.y - b.y) < 0.08) links.push([i, j]); }));
+    const pulses = Array.from({ length: 30 }, () => ({ l: links[(Math.random() * links.length) | 0], k: Math.random(), s: 0.008 + Math.random() * 0.012 }));
+    let last = 0;
+    const draw = (now) => {
+      raf = requestAnimationFrame(draw);
+      if (document.hidden || now - last < 30) return; // ~33fps, leve
+      last = now; t += 0.03;
       ctx.clearRect(0, 0, w, h);
       const S = Math.min(w, h * 1.25), ox = (w - S) / 2, oy = (h - S * 0.8) / 2;
-      const P = (n) => [ox + n.x * S, oy + n.y * S * 0.8];
-      for (const n of nodes) { n.x = n.ox + Math.sin(t + n.p) * 0.004; n.y = n.oy + Math.cos(t * 0.8 + n.p) * 0.004; }
-      ctx.lineWidth = 0.7;
-      for (const [i, j] of links) {
-        const [x1, y1] = P(nodes[i]), [x2, y2] = P(nodes[j]);
-        ctx.strokeStyle = `rgba(170,215,255,${0.28 + 0.15 * Math.sin(t * 2 + i)})`;
-        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-      }
-      for (const n of nodes) {
-        const [x, y] = P(n), a = 0.55 + 0.45 * Math.sin(t * 3 + n.p);
-        ctx.fillStyle = `rgba(210,235,255,${a})`;
-        ctx.shadowColor = "#7cc4ff"; ctx.shadowBlur = 10;
-        ctx.beginPath(); ctx.arc(x, y, n.r, 0, 6.28); ctx.fill();
-      }
+      const pts = nodes.map((n) => [ox + (n.ox + Math.sin(t + n.p) * 0.004) * S, oy + (n.oy + Math.cos(t * 0.8 + n.p) * 0.004) * S * 0.8]);
+      ctx.lineWidth = 0.7; ctx.strokeStyle = "rgba(170,215,255,.32)";
+      ctx.beginPath();
+      for (const [i, j] of links) { ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[j][0], pts[j][1]); }
+      ctx.stroke();
+      nodes.forEach((n, i) => { ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 2 + n.p); ctx.drawImage(glow, pts[i][0] - n.r, pts[i][1] - n.r, n.r * 2, n.r * 2); });
+      ctx.globalAlpha = 1;
       for (const p of pulses) {
         p.k += p.s;
         if (p.k >= 1) { p.k = 0; p.l = links[(Math.random() * links.length) | 0]; }
-        const [x1, y1] = P(nodes[p.l[0]]), [x2, y2] = P(nodes[p.l[1]]);
-        ctx.fillStyle = "#ffffff"; ctx.shadowColor = "#9fe0ff"; ctx.shadowBlur = 18;
-        ctx.beginPath(); ctx.arc(x1 + (x2 - x1) * p.k, y1 + (y2 - y1) * p.k, 2.4, 0, 6.28); ctx.fill();
+        const [a, b] = [pts[p.l[0]], pts[p.l[1]]];
+        ctx.drawImage(glow, a[0] + (b[0] - a[0]) * p.k - 9, a[1] + (b[1] - a[1]) * p.k - 9, 18, 18);
       }
-      ctx.shadowBlur = 0;
-      raf = requestAnimationFrame(draw);
     };
-    draw();
+    raf = requestAnimationFrame(draw);
     window.addEventListener("resize", resize);
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
   }, []);
@@ -96,7 +93,41 @@ function SceneAI() {
   );
 }
 
-const SCENES = [SceneChat, SceneAI];
+function Counter({ to, d = 0 }) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    let raf, start;
+    const run = (now) => { start ??= now + d * 1000; const k = Math.min(1, Math.max(0, (now - start) / 2200)); setV(Math.round(to * (1 - (1 - k) ** 3))); if (k < 1) raf = requestAnimationFrame(run); };
+    raf = requestAnimationFrame(run); return () => cancelAnimationFrame(raf);
+  }, [to, d]);
+  return <>{v.toLocaleString("pt-BR")}</>;
+}
+
+function SceneCRM() {
+  return (
+    <div className="la-scene la-crm">
+      <span className="login2-pill la-in" style={{ "--d": "0s" }}>CRM Helora</span>
+      <h2 className="la-in" style={{ "--d": ".1s" }}>Seu funil de vendas andando, sem planilha.</h2>
+      <div className="la-kpis la-in" style={{ "--d": ".25s" }}>
+        <div><small>Ganho no mês</small><b>R$ <Counter to={48700} d={0.6} /></b></div>
+        <div><small>Negócios abertos</small><b><Counter to={37} d={0.6} /></b></div>
+        <div><small>Conversão</small><b><Counter to={32} d={0.6} />%</b></div>
+      </div>
+      <div className="la-board la-pop" style={{ "--d": ".4s" }}>
+        {["Novo", "Proposta", "Ganho"].map((c, i) => (
+          <div key={c} className="la-col"><div className="la-col-h"><span className={`dot d${i}`} />{c}</div>
+            <div className="la-k ghost">{["Ana Lima", "Carlos M.", "Júlia P."][i]}<small>{["Seguro auto", "Consórcio", "Saúde"][i]}</small></div>
+            {i === 1 && <div className="la-k ghost">Pedro R.<small>Vida</small></div>}
+          </div>
+        ))}
+        <div className="la-k la-mover"><b>Maria Souza</b><small>Seguro residencial · R$ 2.400</small><span className="la-won">✓ Ganho</span></div>
+        <div className="la-task la-msg" style={{ "--d": "2.2s" }}>📅 Ligar para Maria hoje 14h</div>
+      </div>
+    </div>
+  );
+}
+
+const SCENES = [SceneChat, SceneAI, SceneCRM];
 const STAY = 9000, OUT = 700;
 
 /** Painel animado do login: as cenas entram, ficam, saem e voltam em ciclo. */
