@@ -3761,10 +3761,10 @@ body .chat-header { background: #fff; border-bottom: 1px solid #e9ecf1 !importan
 body .chat-body, body .message-list { background: #f7f8fa !important; }
 /* balões: cliente branco, IA azul claro, atendente verde claro */
 body .bubble { border-radius: 10px !important; box-shadow: none !important; }
-body .bubble.in { background: #fff !important; color: #0f1b2d !important; border: 1px solid #e9ecf1 !important; }
+body .bubble.in { background: #eef5ff !important; color: #0f1b2d !important; border: 1px solid #dbe8fb !important; }
 body .bubble.out { background: #eaf8ee !important; color: #0f1b2d !important; border: 1px solid #cdeed6 !important; }
-body .bubble.out.by-bot { background: #eef6ff !important; border-color: #d7e7fb !important; }
-body .bubble.out.by-bot::before { content: "✦ Helora IA"; display: block; font-size: 11.5px; font-weight: 600; color: #0071e3; margin-bottom: 3px; }
+body .bubble.out.by-bot { background: #f5f1ff !important; border-color: #e5dcfb !important; }
+body .bubble.out.by-bot::before { content: "✦ Helora IA"; display: block; font-size: 11.5px; font-weight: 600; color: #7a4fd6; margin-bottom: 3px; }
 body .bubble.out .bubble-meta, body .bubble.out .bubble-meta * { color: #7a8394 !important; }
 body .bubble.out strong:first-child { color: #1c8f3c; }
 body .bubble.out a { color: #0062c4; }
