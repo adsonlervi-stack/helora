@@ -387,7 +387,7 @@ export default function App() {
             <button onClick={leaveAccount}>Sair da empresa</button>
           </div>
         )}
-        {!["home", "channels", "campaigns", "agents", "connections", "ia", "conversations", "settings"].includes(activeSection) && <TopBar section={activeSection} hideNotifications={isHeloraPanel} />}
+        {!["home", "channels", "campaigns", "agents", "connections", "ia", "conversations", "settings", "contacts"].includes(activeSection) && <TopBar section={activeSection} hideNotifications={isHeloraPanel} />}
 
         <div className="shell-content">
           <PageLoader section={activeSection} />
