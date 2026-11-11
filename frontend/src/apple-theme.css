@@ -3589,3 +3589,13 @@ a.ih-src:hover { border-color: #0071e3; background: rgba(0,113,227,.05); }
 .rp-rules li svg { opacity: .3; }
 .rp-rules li.ok { color: #1e8e3e; } .rp-rules li.ok svg { opacity: 1; }
 .rp-miss { color: #c0392b; font-size: 12.5px; margin-top: -6px; }
+
+/* Seleção: lista branca do CRM em todo o sistema (selectMenu.js) */
+select:not([multiple]):not([size]) { -webkit-appearance: none; appearance: none; background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px !important; cursor: pointer; }
+select.hs-open { border-color: #0071e3 !important; box-shadow: 0 0 0 3px rgba(0,113,227,.12); }
+.hs-native { max-width: 360px; }
+.hs-native .hsel-opt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hs-native .hsel-opt.placeholder { color: #8e8e93; }
+.hs-native .hsel-opt:disabled { opacity: .45; cursor: default; }
+.hs-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #8e8e93; }
+.hs-native .hsel-opt:focus { outline: none; }

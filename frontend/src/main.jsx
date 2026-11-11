@@ -4,6 +4,7 @@ import App from "./App.jsx";
 import "./styles.css";
 import "./apple-theme.css";
 import "./dialogs.js";
+import "./selectMenu.js";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
