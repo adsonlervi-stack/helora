@@ -150,6 +150,7 @@ import {
   resolveWhatsAppNumber,
   fetchWhatsAppAvatar,
   deleteWhatsAppMessage,
+  clearCallCache,
   sendWhatsAppMediaUrl,
   getWhatsAppStatus as waStatus,
   sendPresence,
@@ -521,6 +522,21 @@ router.post("/team/:profileId/departments", requireOwner, async (req, res) => {
 });
 
 // ---------- Canais (dispositivos de WhatsApp + Messenger/Instagram) ----------
+
+// Ligações do canal de WhatsApp: aceitar ou recusar (e mensagem automática ao recusar)
+router.get("/channels/:id/calls", async (req, res) => {
+  const { data } = await whDb.from("account_integrations").select("config").eq("account_id", req.accountId).eq("provider", "channel_calls").maybeSingle();
+  res.json(data?.config?.[req.params.id] || { accept: true, message: "" });
+});
+router.put("/channels/:id/calls", requireOwner, async (req, res) => {
+  const { data } = await whDb.from("account_integrations").select("config").eq("account_id", req.accountId).eq("provider", "channel_calls").maybeSingle();
+  const item = { accept: req.body?.accept !== false, message: String(req.body?.message || "").slice(0, 1000) };
+  const config = { ...(data?.config || {}), [req.params.id]: item };
+  const { error } = await whDb.from("account_integrations").upsert({ account_id: req.accountId, provider: "channel_calls", status: "connected", config, updated_at: new Date().toISOString() }, { onConflict: "account_id,provider" });
+  if (error) return res.status(500).json({ error: error.message });
+  clearCallCache(req.accountId);
+  res.json(item);
+});
 
 router.get("/channels", async (req, res) => {
   const channels = await listChannels(req.accountId);

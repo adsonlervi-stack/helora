@@ -1,6 +1,6 @@
 import { askConfirm } from "../dialogs.js";
 import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Smartphone, QrCode, Pencil, Workflow, ChevronDown, ChevronRight, Wifi, WifiOff, RotateCw, Power, Users, Clock, Instagram, Facebook, Mail, MessageCircle , History } from "lucide-react";
+import { Plus, Trash2, Smartphone, QrCode, Pencil, Workflow, ChevronDown, ChevronRight, Wifi, WifiOff, RotateCw, Power, Users, Clock, Instagram, Facebook, Mail, MessageCircle , History, Phone } from "lucide-react";
 import {
   getChannels,
   createChannelApi,
@@ -19,7 +19,7 @@ import {
 } from "../api.js";
 import WhatsAppConnectModal from "./WhatsAppConnectModal.jsx";
 import WaTemplatesSheet from "./WaTemplates.jsx";
-import { meta as metaApi, instagramApi } from "../api.js";
+import { meta as metaApi, instagramApi, api } from "../api.js";
 import { notify } from "../dialogs.js";
 import { Sheet, Group, Row, Button } from "./ui.jsx";
 
@@ -96,6 +96,43 @@ async function waEmbeddedSignup() {
     const cleanup = () => { clearInterval(t); window.removeEventListener("message", onMsg); };
     window.addEventListener("message", onMsg);
   });
+}
+
+
+const CALL_MSG = "Oi! No momento não conseguimos atender ligações por aqui. Mande sua mensagem que respondemos rapidinho. 😊";
+/** Pergunta se o número aceita ligações; se não, oferece mensagem automática. */
+function CallsSheet({ channel, onClose }) {
+  const [accept, setAccept] = useState(true);
+  const [send, setSend] = useState(true);
+  const [msg, setMsg] = useState(CALL_MSG);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.get(`/channels/${channel.id}/calls`).then((r) => { setAccept(r.data.accept !== false); if (r.data.message) { setMsg(r.data.message); setSend(true); } else if (r.data.accept === false) setSend(false); }).catch(() => {}); }, [channel.id]);
+  const save = async () => { setBusy(true); await api.put(`/channels/${channel.id}/calls`, { accept, message: !accept && send ? msg : "" }).catch(() => {}); setBusy(false); onClose(); };
+  return (
+    <div className="nc-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="nc-modal" style={{ width: "min(520px,100%)" }}>
+        <div className="nc-head"><span className="nc-ico"><Phone size={18} /></span><div><b>Ligações no WhatsApp</b><small>{channel.name}</small></div></div>
+        <div style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="nc-f"><span>Este número vai receber ligações?</span></div>
+          <div className="call-opts">
+            <button type="button" className={accept ? "on" : ""} onClick={() => setAccept(true)}><b>Sim, deixar ativadas</b><small>As ligações tocam normalmente no celular.</small></button>
+            <button type="button" className={!accept ? "on" : ""} onClick={() => setAccept(false)}><b>Não, recusar ligações</b><small>A Helora recusa a chamada automaticamente.</small></button>
+          </div>
+          {!accept && (
+            <>
+              <div className="nc-f"><span>Deseja enviar uma mensagem para quem ligou?</span></div>
+              <div className="call-opts">
+                <button type="button" className={send ? "on" : ""} onClick={() => setSend(true)}><b>Sim, enviar mensagem</b></button>
+                <button type="button" className={!send ? "on" : ""} onClick={() => setSend(false)}><b>Não enviar</b></button>
+              </div>
+              {send && <label className="nc-f"><span>Mensagem</span><textarea rows={4} value={msg} onChange={(e) => setMsg(e.target.value)} /></label>}
+            </>
+          )}
+        </div>
+        <div className="nc-foot"><button type="button" className="nc-btn" onClick={onClose}>Agora não</button><button type="button" className="nc-btn p" disabled={busy || (!accept && send && !msg.trim())} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button></div>
+      </div>
+    </div>
+  );
 }
 
 function NewChannelModal({ departments, flows, initial, preset, onClose, onCreate }) {
@@ -223,6 +260,7 @@ export default function ChannelsPage() {
   }, []);
   const connectIg = async () => { try { { const t = window.open("about:blank", "_blank"); const u = await instagramApi.authUrl(); t ? (t.location.href = u) : window.open(u, "_blank"); } } catch (e) { notify(e?.response?.data?.error || e.message, "error"); } };
   const [qrChannel, setQrChannel] = useState(null);
+  const [callsChannel, setCallsChannel] = useState(null);
   const [permChannel, setPermChannel] = useState(null);
   const [editChannel, setEditChannel] = useState(null);
   const [tplChannel, setTplChannel] = useState(null);
@@ -249,7 +287,7 @@ export default function ChannelsPage() {
     setShowNew(false);
     load();
     // WhatsApp novo: já abre o QR Code, sem precisar procurar o botão.
-    if (created?.platform === "whatsapp" && created.provider !== "cloud") setQrChannel(created);
+    if (created?.platform === "whatsapp" && created.provider !== "cloud") { setCallsChannel({ ...created, __thenQr: true }); }
   };
 
   const handleEdit = async (data) => {
@@ -344,6 +382,7 @@ export default function ChannelsPage() {
                 {wa && c.provider !== "cloud" && <button className="ch2-icon" title="Reiniciar conexão" onClick={() => restart(c)}><RotateCw size={15} /></button>}
                 {wa && c.provider !== "cloud" && <HistoryButton channel={c} onImport={() => importHistory(c)} />}
                 {wa && c.provider === "cloud" && <button className="ch2-btn ghost" onClick={() => setTplChannel(c)}>Templates</button>}
+                {wa && c.provider !== "cloud" && <button className="ch2-btn ghost" onClick={() => setCallsChannel(c)}><Phone size={14} /> Ligações</button>}
                 <button className="ch2-btn ghost" onClick={() => setPermChannel(c)}>Permissões</button>
                 <span className="ch2-sp" />
                 <button className="ch2-icon del" title="Remover canal" onClick={() => handleDelete(c.id)}><Trash2 size={15} /></button>
@@ -363,6 +402,7 @@ export default function ChannelsPage() {
         <NewChannelModal departments={departments} flows={flows} initial={editChannel} onClose={() => setEditChannel(null)} onCreate={handleEdit} />
       )}
 
+      {callsChannel && <CallsSheet channel={callsChannel} onClose={() => { const c = callsChannel; setCallsChannel(null); if (c.__thenQr) setQrChannel(c); }} />}
       {qrChannel && (
         <WhatsAppConnectModal
           channelId={qrChannel.id}

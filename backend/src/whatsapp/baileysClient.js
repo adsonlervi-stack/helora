@@ -8,6 +8,17 @@ import makeWASocket, {
 } from "baileys";
 import { supabase } from "../config/db.js";
 import QRCode from "qrcode";
+const callCache = new Map();
+/** Configuração de ligações do canal (guardada em account_integrations, provider "channel_calls"). */
+export async function getCallSettings(accountId, channelId) {
+  const k = accountId, hit = callCache.get(k);
+  if (hit && Date.now() - hit.t < 60000) return hit.v[channelId] || null;
+  const { data } = await supabase.from("account_integrations").select("config").eq("account_id", accountId).eq("provider", "channel_calls").maybeSingle();
+  const v = data?.config || {};
+  callCache.set(k, { t: Date.now(), v });
+  return v[channelId] || null;
+}
+export function clearCallCache(accountId) { callCache.delete(accountId); }
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -579,6 +590,19 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
       if (r.imported) console.log(`[Histórico] ${channelId}: +${r.imported} mensagens em ${r.conversations} conversa(s)`);
     } catch (err) {
       console.warn("[Histórico] importação falhou:", err.message);
+    }
+  });
+
+  // Ligações recebidas: aceita (padrão) ou recusa e, se configurado, manda uma mensagem automática
+  sock.ev.on("call", async (calls) => {
+    for (const c of calls || []) {
+      if (c.status !== "offer" || c.isGroup) continue;
+      try {
+        const cfg = await getCallSettings(accountId, channelId);
+        if (!cfg || cfg.accept !== false) continue;
+        await sock.rejectCall(c.id, c.from).catch(() => {});
+        if (cfg.message?.trim()) await sock.sendMessage(c.from, { text: cfg.message.trim() }).catch(() => {});
+      } catch {}
     }
   });
 
