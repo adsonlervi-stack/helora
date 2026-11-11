@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { HelpCircle, LogOut, Camera, UserRound } from "lucide-react";
+import { HelpCircle, LogOut, Camera, UserRound, Moon, Sun } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
 import { uploadAvatar } from "../api.js";
 import Avatar from "./Avatar.jsx";
@@ -14,6 +14,13 @@ function roleLabel(profile) {
 // (como no sistema de referência). No mobile ela some e quem assume a
 // navegação é o BottomTabBar.
 export default function IconRail({ items, section, onChange, unreadTotal, profile, onAvatarUpdated, onHelp, onOpenProfile }) {
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
+  const toggleTheme = () => {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.dataset.theme = next ? "dark" : "light";
+    try { localStorage.setItem("helora:theme", next ? "dark" : "light"); } catch {}
+  };
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem("helora_sidebar_collapsed") === "1";
@@ -96,6 +103,11 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
           </a>
         ))}
       </div>
+
+      <button className="nav-sidebar-item nav-sidebar-help" title={dark ? "Usar tema claro" : "Usar tema escuro"} onClick={toggleTheme}>
+        {dark ? <Sun size={18} strokeWidth={2} /> : <Moon size={18} strokeWidth={2} />}
+        <span>{dark ? "Tema claro" : "Tema escuro"}</span>
+      </button>
 
       <button className="nav-sidebar-item nav-sidebar-help" title="Falar com o suporte" onClick={onHelp}>
         <HelpCircle size={18} strokeWidth={2} />

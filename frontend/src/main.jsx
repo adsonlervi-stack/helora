@@ -5,6 +5,7 @@ import "./styles.css";
 import "./apple-theme.css";
 import "./dialogs.js";
 import "./selectMenu.js";
+try { if (localStorage.getItem("helora:theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch {}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
