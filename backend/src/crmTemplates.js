@@ -4,7 +4,7 @@ import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "./insuranceLists.js";
 const RAMO_LIST = Object.keys(RAMOS);
 const HORARIOS = ["Manhã", "Tarde", "Noite", "Qualquer horário"];
 
-export const FIELD_TYPES = ["text", "textarea", "number", "currency", "date", "select", "document"];
+export const FIELD_TYPES = ["text", "textarea", "number", "currency", "percent", "cep", "date", "select", "document"];
 
 export const TEMPLATES = [
   {

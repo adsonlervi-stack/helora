@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
+import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput, isCepField, fillFromCep } from "./CrmFieldBits.jsx";
 import { createPortal } from "react-dom";
 import SlotPicker from "./SlotPicker.jsx";
 import { loadQuickReplies } from "./QuickReplies.jsx";
@@ -427,7 +427,11 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
                     ) : fd.type === "date" ? (
                       <input type="date" value={v} onChange={(e) => setV(e.target.value)} />
                     ) : (
-                      <input value={v} onChange={(e) => setV(e.target.value)} inputMode={fd.type === "number" || fd.type === "currency" ? "decimal" : undefined} placeholder="—" />
+                      <input value={v} onChange={(e) => {
+                        let val = e.target.value;
+                        if (isCepField(fd)) { const d = val.replace(/\D/g, "").slice(0, 8); val = d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d; if (d.length === 8) fillFromCep(d, pipe?.fields, (id, x) => { setCustom((c) => ({ ...c, [id]: x })); schedule(); }); }
+                        setV(val);
+                      }} inputMode={fd.type === "number" || fd.type === "currency" || fd.type === "percent" || isCepField(fd) ? "decimal" : undefined} placeholder={isCepField(fd) ? "00000-000" : "—"} />
                     )}
                   </label>
                 );
@@ -815,7 +819,7 @@ function MessageBox({ ctx, pipe, lead, f, custom, value, stageName, ownerName, o
   const boxFile = useRef(null);
   const addBoxFile = async (file) => { try { const r = await crm.uploadMessageFile(file); setFiles((l) => [...l, r].slice(0, 5)); } catch (e) { notify(errText(e), "error"); } };
   const fieldVars = (pipe?.fields || []).map((fd) => [fd.id, fd.label]);
-  const fmt = (fd, v) => (fd?.type === "date" && v ? String(v).slice(0, 10).split("-").reverse().join("/") : fd?.type === "currency" && v ? brl(v) : v);
+  const fmt = (fd, v) => (fd?.type === "date" && v ? String(v).slice(0, 10).split("-").reverse().join("/") : fd?.type === "percent" && v !== "" && v != null ? `${Number(String(v).replace(",", ".")).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%` : fd?.type === "currency" && v ? brl(v) : v);
   const fill = (t) => String(t || "")
     .replace(/\{nome\}/g, String(f.name || "").split(" ")[0])
     .replace(/\{nome_completo\}/g, f.name || "")

@@ -116,6 +116,7 @@ function leadVars(lead) {
   const fmt = (f, v) => {
     if (v == null || v === "") return "";
     if (f?.type === "date") return String(v).slice(0, 10).split("-").reverse().join("/");
+    if (f?.type === "percent") return `${Number(String(v).replace(",", ".")).toLocaleString("pt-BR")}%`;
     if (f?.type === "currency") return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
     return String(v);
   };

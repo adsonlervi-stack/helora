@@ -13,7 +13,29 @@ export const api = axios.create({
 export const netBusy = { n: 0, emit() { window.dispatchEvent(new CustomEvent("helora:net", { detail: this.n })); } };
 api.interceptors.request.use((config) => { netBusy.n++; netBusy.emit(); config.__counted = true; return config; });
 api.interceptors.response.use((r) => { if (r.config?.__counted) { netBusy.n = Math.max(0, netBusy.n - 1); netBusy.emit(); } return r; },
-  (e) => { if (e.config?.__counted) { netBusy.n = Math.max(0, netBusy.n - 1); netBusy.emit(); } return Promise.reject(e); });
+  (e) => { if (e.config?.__counted) { netBusy.n = Math.max(0, netBusy.n - 1); netBusy.emit(); } return Promise.reject(friendlyError(e)); });
+
+// Erros técnicos (em inglês, 500, sem conexão) viram uma mensagem clara em português.
+const EN = /\b(error|failed|fail|invalid|server|unauthori[sz]ed|forbidden|cannot|can't|undefined|null|timeout|not found|network|exception|unexpected|violates|duplicate key|column|relation|syntax|ECONN|fetch)\b/i;
+function friendlyError(e) {
+  try {
+    const st = e.response?.status;
+    const raw = e.response?.data?.error || e.response?.data?.message || "";
+    const looksTech = !raw || (EN.test(raw) && !/[áéíóúãõçâêô]/i.test(raw));
+    let msg = null;
+    if (!e.response) msg = e.code === "ECONNABORTED" ? "O servidor demorou para responder. Tente de novo em instantes." : "Sem conexão com a Helora agora. Confira sua internet e tente de novo.";
+    else if (st >= 500 && looksTech) msg = "Ops, algo deu errado do nosso lado. Já fomos avisados. Tente de novo em instantes.";
+    else if ((st === 401) && looksTech) msg = "Sua sessão expirou. Entre de novo para continuar.";
+    else if ((st === 403) && looksTech) msg = "Você não tem permissão para fazer isso. Fale com o gestor da sua empresa.";
+    else if ((st === 404) && looksTech) msg = "Não encontramos o que você procurou. Ele pode ter sido apagado.";
+    else if (looksTech && raw) msg = "Não deu para concluir agora. Confira os dados e tente de novo.";
+    if (msg) {
+      if (e.response) e.response.data = { ...(typeof e.response.data === "object" ? e.response.data : {}), error: msg, technical: raw };
+      e.message = msg;
+    }
+  } catch {}
+  return e;
+}
 api.interceptors.request.use(async (config) => {
   const { data } = await supabase.auth.getSession();
   if (data.session) {

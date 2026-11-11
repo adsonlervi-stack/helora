@@ -253,3 +253,26 @@ export function PhoneInput({ value, onChange, className }) {
     </span>
   );
 }
+
+/** Campo de CEP: tipo "cep" ou campo cujo nome tem "CEP". */
+export const isCepField = (fd) => fd?.type === "cep" || /\bcep\b/i.test(fd?.label || "");
+
+/** Busca o endereço do CEP (ViaCEP) e preenche os campos de endereço do funil que existirem. */
+export async function fillFromCep(raw, fields, setValue) {
+  const cep = String(raw || "").replace(/\D/g, "");
+  if (cep.length !== 8) return;
+  try {
+    const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+    const d = await r.json();
+    if (!d || d.erro) return;
+    const find = (re) => (fields || []).find((f) => !isCepField(f) && re.test(f.label || ""));
+    const rua = find(/\b(rua|logradouro)\b/i), end = find(/endere[cç]o/i), bai = find(/bairro/i), cid = find(/cidade|munic[ií]pio/i), uf = find(/\buf\b|estado/i);
+    const full = [d.logradouro, d.bairro, d.localidade && `${d.localidade} - ${d.uf}`].filter(Boolean).join(", ");
+    if (rua) setValue(rua.id, d.logradouro || "");
+    if (end) setValue(end.id, rua || cid ? d.logradouro || "" : full);
+    if (bai) setValue(bai.id, d.bairro || "");
+    if (cid) setValue(cid.id, d.localidade || "");
+    if (uf) setValue(uf.id, d.uf || "");
+    return d;
+  } catch { return null; }
+}

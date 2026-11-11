@@ -16,7 +16,7 @@ function todaySP() {
 }
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86400000);
 function fill(text, lead, pipe) {
-  const fmt = (f, v) => (v == null || v === "" ? "" : f?.type === "date" ? String(v).slice(0, 10).split("-").reverse().join("/") : f?.type === "currency" ? Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : String(v));
+  const fmt = (f, v) => (v == null || v === "" ? "" : f?.type === "date" ? String(v).slice(0, 10).split("-").reverse().join("/") : f?.type === "percent" ? `${Number(String(v).replace(",", ".")).toLocaleString("pt-BR")}%` : f?.type === "currency" ? Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : String(v));
   const vars = {
     nome: String(lead.name || "").split(" ")[0], nome_completo: lead.name || "", empresa: lead.company || "",
     valor: lead.value != null ? Number(lead.value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "",

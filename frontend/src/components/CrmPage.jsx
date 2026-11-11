@@ -14,7 +14,7 @@ import AutomationsSheet from "./CrmAutomations.jsx";
 import { fmtDoc } from "../docs.js";
 import Avatar from "./Avatar.jsx";
 import CadenceSheet from "./CrmCadence.jsx";
-import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput } from "./CrmFieldBits.jsx";
+import { SelectField, ProductOptions, makeAddOption, DocumentField, applyCnpjData, runAfterClose, isDocField, PhoneInput, isCepField, fillFromCep } from "./CrmFieldBits.jsx";
 import { SEGURADORAS, RAMOS, PRODUTO_OPTIONS } from "../insuranceLists.js";
 import { createTaskApi } from "../api.js";
 import CrmCliente from "./CrmCliente.jsx";
@@ -45,6 +45,7 @@ const fmtField = (f, v) => {
   if (v == null || v === "") return "—";
   if (f.type === "date") return String(v).split("-").reverse().join("/");
   if (f.type === "currency") return brl(Number(v));
+  if (f.type === "percent") return `${Number(String(v).replace(",", ".")).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
   if (isDocField(f)) return fmtDoc(v);
   return String(v);
 };
@@ -683,14 +684,14 @@ function NewPipelineSheet({ onClose, onCreated }) {
   );
 }
 
-const FIELD_TYPE_LABEL = { text: "Texto", textarea: "Texto longo", number: "Número", currency: "Valor (R$)", date: "Data", select: "Lista de opções", document: "CPF / CNPJ" };
+const FIELD_TYPE_LABEL = { text: "Texto", textarea: "Texto longo", number: "Número", currency: "Valor (R$)", percent: "Porcentagem (%)", cep: "CEP (puxa o endereço)", date: "Data", select: "Lista de opções", document: "CPF / CNPJ" };
 function FieldsSheet({ pipeline, onClose, onSaved }) {
   const [list, setList] = useState(() => (pipeline.fields || []).map((f) => ({ ...f, options: (f.options || []).join("\n") })));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [openI, setOpenI] = useState(null);
   const [picker, setPicker] = useState(false);
-  const TYPE_ICON = { text: "Aa", textarea: "¶", number: "#", currency: "R$", date: "📅", select: "☰", document: "ID" };
+  const TYPE_ICON = { text: "Aa", textarea: "¶", number: "#", currency: "R$", percent: "%", cep: "📍", date: "📅", select: "☰", document: "ID" };
   const TYPE_HINT = { text: "Nome, apólice, placa…", textarea: "Observações, negociação", number: "Nº de vidas, parcelas", currency: "Prêmio, comissão", date: "Vigência, nascimento", select: "Seguradora, ramo, status", document: "Valida e busca dados do CNPJ" };
   const upd = (i, patch) => setList((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const move = (i, d) => setList((l) => { const a = [...l]; const j = i + d; if (j < 0 || j >= a.length) return a; [a[i], a[j]] = [a[j], a[i]]; return a; });
@@ -1015,7 +1016,10 @@ function LeadSheet({ ctx, lead, onClose, onSaved }) {
                     <input type="date" value={v} onChange={(e) => setV(e.target.value)} style={{ width: "auto" }} />
                   </span>
                 ) : (
-                  <input value={v} onChange={(e) => setV(fd.type === "number" || fd.type === "currency" ? e.target.value.replace(/[^\d.,-]/g, "") : e.target.value)} inputMode={fd.type === "number" || fd.type === "currency" ? "decimal" : undefined} placeholder={fd.type === "currency" ? "R$ 0,00" : ""} />
+                  <input value={v} onChange={(e) => {
+                    if (isCepField(fd)) { const d = e.target.value.replace(/\D/g, "").slice(0, 8); setV(d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d); if (d.length === 8) fillFromCep(d, curPipe?.fields, (id, x) => setCustom((c) => ({ ...c, [id]: x }))); return; }
+                    setV(fd.type === "number" || fd.type === "currency" || fd.type === "percent" ? e.target.value.replace(/[^\d.,-]/g, "") : e.target.value);
+                  }} inputMode={fd.type === "number" || fd.type === "currency" || fd.type === "percent" || isCepField(fd) ? "decimal" : undefined} placeholder={fd.type === "currency" ? "R$ 0,00" : fd.type === "percent" ? "0%" : isCepField(fd) ? "00000-000" : ""} />
                 )}
               </Row>
             );

@@ -3820,3 +3820,7 @@ body .composer-text { border-radius: 999px !important; background: #f0f2f5 !impo
 body .composer-send { border-radius: 50% !important; background: #25b85a !important; }
 body .composer-send:disabled { background: #a8e3bd !important; }
 body .bubble.in, body .bubble.out, body .bubble.out.by-bot { border: 0 !important; }
+
+/* Avisos de erro mais amigáveis */
+.admin-feedback.error { display: flex !important; align-items: flex-start; gap: 10px; background: #fff7f5 !important; border: 1px solid #ffd9d2 !important; color: #8a2c1d !important; border-radius: 10px !important; padding: 12px 14px !important; font-size: 13.5px; line-height: 1.5; }
+.admin-feedback.error::before { content: "!"; flex: none; width: 22px; height: 22px; border-radius: 50%; background: #ff6b4a; color: #fff; font-weight: 800; font-size: 13px; display: grid; place-items: center; margin-top: -1px; }
