@@ -11,6 +11,11 @@ const fmtPhone = (d) => {
   }
   return s ? `+${s}` : "";
 };
+const ago = (d) => {
+  if (!d) return "—";
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 864e5);
+  return days <= 0 ? "Hoje" : days === 1 ? "Ontem" : days < 7 ? `${days} dias` : days < 14 ? "1 semana" : days < 30 ? `${Math.floor(days / 7)} semanas` : new Date(d).toLocaleDateString("pt-BR");
+};
 const SOURCE = { whatsapp: "Agenda do WhatsApp", conversa: "Veio por conversa", manual: "Cadastrado", importacao: "Importado" };
 
 function ContactEditor({ contact, onClose, onSaved, canDelete }) {
@@ -75,6 +80,7 @@ function ContactEditor({ contact, onClose, onSaved, canDelete }) {
 
 export default function ContactsPage({ onStartConversation, canDelete }) {
   const [list, setList] = useState([]);
+  const [kind, setKind] = useState("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null); // contato | "new" | null
   const [importing, setImporting] = useState(false);
@@ -124,7 +130,11 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
     <div className="page contacts-page">
       <div className="pg-top">
         <h1>Contatos</h1>
-        <div className="pg-tabs"><button className="on">Todos<span>{total}</span></button></div>
+        <div className="pg-tabs">
+          {[["all", "Todos", total], ["cliente", "Clientes"], ["lead", "Leads"]].map(([k, l, n]) => (
+            <button key={k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>{l}{n != null && <span>{n}</span>}</button>
+          ))}
+        </div>
         <span className="pg-sp" />
         <div className="pg-search"><Search size={15} /><input placeholder="Buscar por nome ou número" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
         <button className="pg-btn" onClick={runImport} disabled={importing}><Download size={15} /> {importing ? "Importando…" : "Importar do WhatsApp"}</button>
@@ -134,8 +144,8 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
       {msg && <div className={`admin-feedback ${msg.type}`} style={{ marginBottom: 14 }}>{msg.text}</div>}
 
       <div className="ct-table">
-        <div className="ct-tr ct-th"><span>Nome</span><span>WhatsApp</span><span>Origem</span><span /></div>
-        {list.map((c) => (
+        <div className="ct-tr ct-th"><span>Nome</span><span>Telefone</span><span>Empresa</span><span>Etiquetas</span><span>Último contato</span><span /></div>
+        {list.filter((c) => kind === "all" || c.kind === kind).map((c) => (
           <div className="ct-tr" key={c.id}>
             <span className="ct-name">
               <Avatar name={c.name || c.pushName || c.phone} size={32} />
@@ -143,7 +153,9 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
                 {c.pushName && c.name && c.pushName !== c.name && <small>"{c.pushName}" no WhatsApp</small>}</span>
             </span>
             <span className="ct-phone">{fmtPhone(c.phone)}</span>
-            <span><span className={`ct-pill ${c.source || ""}`}>{SOURCE[c.source] || c.source}</span></span>
+            <span className="ct-co">{c.company || "—"}</span>
+            <span className="ct-tags">{c.labels?.length ? c.labels.slice(0, 2).map((l) => <span key={l.id} className="ct-pill" style={{ color: l.color, background: `color-mix(in srgb, ${l.color} 12%, #fff)` }}>{l.title}</span>) : c.kind ? <span className={`ct-pill ${c.kind}`}>{c.kind === "cliente" ? "Cliente" : "Lead"}</span> : <span className="ct-pill">{SOURCE[c.source] || "Contato"}</span>}</span>
+            <span className="ct-phone">{ago(c.lastContactAt)}</span>
             <span className="ct-r ct-acts">
               <button className="ct-btn" onClick={() => onStartConversation(c)}><MessageCircle size={14} /> Conversar</button>
               <button className="ct-btn icon" title="Editar" onClick={() => setEditing(c)}><Pencil size={14} /></button>

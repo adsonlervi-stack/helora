@@ -1677,7 +1677,28 @@ export async function listContacts(accountId, search = "", page = null, pageSize
   }
   const { data, error, count } = await q;
   if (error) throw error;
-  if (page) return { items: data.map(mapContact), total: count || 0, page, pageSize };
+  if (page) {
+    const items = data.map(mapContact);
+    const phones = items.map((c) => c.phone).filter(Boolean);
+    if (phones.length) {
+      // empresa e tipo (cliente/lead) vêm do CRM; última conversa e etiquetas vêm das conversas
+      const [{ data: leads }, { data: convs }] = await Promise.all([
+        supabase.from("crm_leads").select("phone, company, outcome").eq("account_id", accountId).in("phone", phones),
+        supabase.from("conversations").select("phone, external_id, last_message_at, conversation_labels(labels(*))").eq("account_id", accountId).in("phone", phones)
+      ]);
+      for (const c of items) {
+        const ls = (leads || []).filter((l) => l.phone === c.phone);
+        c.company = ls.find((l) => l.company)?.company || null;
+        c.kind = ls.some((l) => l.outcome === "won") ? "cliente" : ls.length ? "lead" : null;
+        const cs = (convs || []).filter((v) => v.phone === c.phone);
+        c.lastContactAt = cs.map((v) => v.last_message_at).filter(Boolean).sort().pop() || null;
+        const seen = new Map();
+        for (const v of cs) for (const cl of v.conversation_labels || []) if (cl.labels) seen.set(cl.labels.id, { id: cl.labels.id, title: cl.labels.title, color: cl.labels.color });
+        c.labels = [...seen.values()];
+      }
+    }
+    return { items, total: count || 0, page, pageSize };
+  }
   return data.map(mapContact);
 }
 

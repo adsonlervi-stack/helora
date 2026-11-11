@@ -3785,3 +3785,16 @@ body .conv-panel .cv-item.active { background: #f3f7fd !important; box-shadow: i
 body .cv-unread { border-radius: 6px !important; background: #0071e3 !important; }
 body .composer-wrap { background: #fff !important; border-top: 1px solid #e9ecf1 !important; }
 body .conv-panel .cv-search > svg:first-child { width: 16px !important; height: 16px !important; color: #98a0ad; flex: none; }
+
+/* Contatos: colunas da proposta */
+body .ct-table:not(.cp-table):not(.fl-table) .ct-tr { grid-template-columns: minmax(200px, 1.6fr) 1.1fr 1.2fr 1fr .9fr 150px; }
+.ct-co { color: #0f1b2d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ct-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.ct-pill.cliente { background: #eaf8ee; color: #1c8f3c; } .ct-pill.lead { background: #f1f3f6; color: #5d6676; }
+
+/* Cabeçalho colado no topo, de ponta a ponta (como na proposta) */
+body .page:has(> .pg-top) { max-width: none; padding: 0 0 90px; background: #f7f8fa; min-height: 100%; }
+body .page:has(> .pg-top) > .pg-top { border-radius: 0; border: 0; border-bottom: 1px solid #e7eaf0; margin: 0 0 24px; padding: 16px 32px; }
+body .page:has(> .pg-top) > :not(.pg-top):not(.modal-overlay):not(.nc-overlay) { margin-left: 32px; margin-right: 32px; }
+body .page:has(> .pg-top) > .pg-desc { margin-left: 34px; }
+@media (max-width: 760px) { body .page:has(> .pg-top) > .pg-top { padding: 12px 14px; } body .page:has(> .pg-top) > :not(.pg-top) { margin-left: 14px; margin-right: 14px; } }
