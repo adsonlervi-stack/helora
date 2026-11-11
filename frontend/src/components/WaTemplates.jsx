@@ -297,7 +297,7 @@ export function useTemplatePicker(channelId) {
 const favKey = "helora_tpl_favs";
 const readFavs = () => { try { return JSON.parse(localStorage.getItem(favKey) || "[]"); } catch { return []; } };
 
-export function TemplateChooser({ channelId, who, value, onChange, campaign }) {
+export function TemplateChooser({ channelId, who, value, onChange, campaign, wide }) {
   const { list, maps } = useTemplatePicker(channelId);
   const [q, setQ] = useState("");
   const [tab, setTab] = useState("all");
@@ -311,7 +311,41 @@ export function TemplateChooser({ channelId, who, value, onChange, campaign }) {
   if (list === null) return <div className="ch2-empty">Carregando templates...</div>;
   if (!list.length) return <div className="ch2-empty">Nenhum template aprovado neste número. Crie em Canais → Templates.</div>;
   const shown = list.filter((t) => (tab === "all" || favs.includes(keyOf(t))) && t.name.includes(q.toLowerCase().replace(/\s+/g, "_")));
-  return (
+
+  if (wide) return (
+    <div className="wat-wide">
+      <div className="wat-wide-l">
+        <div className="wat-wide-bar">
+          <input className="wat-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar template" autoFocus />
+          <button type="button" className={`wat-wide-chip ${tab === "all" ? "on" : ""}`} onClick={() => setTab("all")}>Todos {list.length}</button>
+          <button type="button" className={`wat-wide-chip ${tab === "fav" ? "on" : ""}`} onClick={() => setTab("fav")}>★ Favoritos</button>
+        </div>
+        <div className="wat-wide-grid">
+          {shown.map((t) => {
+            const btns = comp(t, "BUTTONS")?.buttons || [];
+            return (
+              <div key={t.id} className={`wat-card ${sel && keyOf(sel) === keyOf(t) ? "on" : ""}`} onClick={() => choose(t)}>
+                <div className="wat-card-h"><b>{t.name}</b><button type="button" className={`wat-star ${favs.includes(keyOf(t)) ? "on" : ""}`} onClick={(e) => { e.stopPropagation(); toggleFav(keyOf(t)); }}>★</button></div>
+                <small>{CATS[t.category] || t.category} · {LANGS[t.language] || t.language}{MEDIA.includes(comp(t, "HEADER")?.format) ? ` · ${HEAD[comp(t, "HEADER").format]}` : ""}</small>
+                <p>{comp(t, "BODY")?.text}</p>
+                {btns.slice(0, 2).map((x, i) => <span key={i} className="wat-card-btn">↳ {x.text}</span>)}
+              </div>
+            );
+          })}
+          {!shown.length && <div className="ch2-empty">{tab === "fav" ? "Marque a estrela dos templates que você mais usa." : "Nenhum template encontrado."}</div>}
+        </div>
+      </div>
+      <div className="wat-wide-r">
+        {sel && value ? (
+          <>
+            <div className="wat-side-t">Como o cliente vai ver</div>
+            <div className="wat-wide-prev"><Bubble f={{ ...toForm(sel), mediaUrl: value.headerMedia?.url || comp(sel, "HEADER")?.example?.header_handle?.[0], mediaName: value.headerMedia?.name }} fill={fillVars(value.map, who || { name: "Maria Silva", phone: "5561999999999" })} /></div>
+            <TemplateFill t={sel} who={who} value={value} onChange={onChange} campaign={campaign} />
+          </>
+        ) : <div className="wat-wide-empty">Escolha um template ao lado para ver como o cliente vai receber.</div>}
+      </div>
+    </div>
+  );  return (
     <>
       {!sel ? (
         <div className="wat-pick">

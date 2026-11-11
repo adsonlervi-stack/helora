@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Search, Paperclip, X, FileText } from "lucide-react";
+import { Search, Paperclip, X, FileText, Check, MessageSquarePlus, ArrowLeft, ArrowRight, Send } from "lucide-react";
 import { getContacts, startConversationApi, sendMediaMessage, getDepartments, getChannels } from "../api.js";
 import { TemplateChooser, fillVars } from "./WaTemplates.jsx";
 import { waTemplates } from "../api.js";
 import Avatar from "./Avatar.jsx";
-import { Sheet, Group, Row, Button } from "./ui.jsx";
 
 const fmtPhone = (d) => {
   const s = String(d || "");
@@ -66,82 +65,97 @@ export default function NewConversationModal({ onClose, onStarted, initialContac
     }
     setBusy(false);
   };
-  const label = isCloud ? "Iniciar com template" : text.trim() || files.length ? "Iniciar e enviar" : "Abrir conversa";
+  const [step, setStep] = useState(1);
+  const canNext = channelId && phone.length >= 12 && !(departments.length > 0 && !departmentId);
+  const label = isCloud ? "Escolher template" : text.trim() || files.length ? "Iniciar e enviar" : "Abrir conversa";
+  const chan = chans.find((c) => c.id === channelId);
 
   return (
-    <Sheet
-      title="Nova conversa"
-      subtitle="Escolha um contato ou digite o número. A mensagem é opcional."
-      onClose={onClose}
-      width={620}
-      footer={<>
-        <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-        <Button disabled={busy || !channelId || phone.length < 12 || (isCloud && !tplV) || (departments.length > 0 && !departmentId)} onClick={submit}>{busy ? "Abrindo…" : label}</Button>
-      </>}
-    >
-      <div className="crm-search" style={{ width: "100%", boxSizing: "border-box", marginTop: 4 }}>
-        <Search size={15} />
-        <input placeholder="Buscar nos contatos" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
-      </div>
-      <div className="ap-group-box newconv-list2">
-        {contacts.map((c) => {
-          const n = realName(c);
-          return (
-            <button key={c.id} type="button" className={`newconv-row ${phone === c.phone ? "active" : ""}`} onClick={() => pick(c)}>
-              <Avatar name={n || "?"} size={36} />
-              <span>
-                <strong>{n || fmtPhone(c.phone)}</strong>
-                <small>{n ? fmtPhone(c.phone) : "Sem nome salvo"}</small>
-              </span>
-            </button>
-          );
-        })}
-        {contacts.length === 0 && <div className="ap-empty" style={{ padding: 16 }}>Nenhum contato encontrado. Digite o número abaixo.</div>}
-      </div>
-
-      <Group title="Contato">
-        <Row label="WhatsApp"><input value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="5584999998888" /></Row>
-        <Row label="Nome"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Opcional" /></Row>
-        {departments.length > 0 && (
-          <Row label="Setor *">
-            <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-              <option value="">Escolha o setor</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </Row>
-        )}
-      </Group>
-
-      {(
-        <Group title="Canal">
-          <Row label="Enviar por *">
-            <select value={channelId} onChange={(e) => { setChannelId(e.target.value); setTplV(null); }}>
-              <option value="">Escolha o número…</option>
-              {chans.map((c) => <option key={c.id} value={c.id}>{c.name}{c.provider === "cloud" ? " · API oficial" : " · QR Code"}</option>)}
-            </select>
-          </Row>
-        </Group>
-      )}
-      {isCloud ? (
-        <div style={{ marginTop: 12 }}><TemplateChooser channelId={channelId} who={{ name, phone }} value={tplV} onChange={setTplV} /></div>
-      ) : (
-      <Group title="Primeira mensagem (opcional)" hint="Deixe em branco para só abrir a conversa.">
-        <Row label="" stack><textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="Olá! Aqui é da ..." /></Row>
-        {files.map((f, i) => (
-          <div key={i} className="ap-row">
-            <span className="ap-row-label" style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <FileText size={15} color="#0071e3" /> <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-            </span>
-            <span className="ap-row-control"><button type="button" className="icon-btn" onClick={() => setFiles((c) => c.filter((_, j) => j !== i))}><X size={14} /></button></span>
+    <div className="nc-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={`nc-modal ${step === 2 ? "wide" : ""}`} role="dialog" aria-label="Nova conversa">
+        {step === 1 ? (
+          <div className="nc-head">
+            <span className="nc-ico"><MessageSquarePlus size={18} /></span>
+            <div><b>Nova conversa</b><small>Escolha um contato ou digite o número</small></div>
+            <button type="button" className="nc-x" onClick={onClose} aria-label="Fechar"><X size={16} /></button>
           </div>
-        ))}
-        <div style={{ padding: "6px 10px" }}>
-          <Button variant="ghost" onClick={() => fileRef.current?.click()}><Paperclip size={14} /> Anexar arquivo</Button>
-          <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={(e) => { const l = [...(e.target.files || [])]; e.target.value = ""; setFiles((c) => [...c, ...l].slice(0, 10)); }} />
+        ) : (
+          <div className="nc-head">
+            <button type="button" className="nc-back" onClick={() => setStep(1)}><ArrowLeft size={15} /> Voltar</button>
+            <div><b>Escolha o template</b><small>Para <strong>{name || fmtPhone(phone)}</strong> · {chan?.name} (API oficial)</small></div>
+            <span className="nc-step">Passo 2 de 2</span>
+            <button type="button" className="nc-x" onClick={onClose} aria-label="Fechar"><X size={16} /></button>
+          </div>
+        )}
+
+        {step === 1 ? (
+          <div className="nc-body">
+            <div className="nc-left">
+              <div className="nc-search"><Search size={15} /><input placeholder="Buscar nos contatos" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus /></div>
+              <div className="nc-k">{search ? "Resultados" : "Contatos"}</div>
+              <div className="nc-list">
+                {contacts.map((c) => {
+                  const n = realName(c);
+                  return (
+                    <button key={c.id} type="button" className={`nc-row ${phone === c.phone ? "on" : ""}`} onClick={() => pick(c)}>
+                      <Avatar name={n || "?"} size={34} />
+                      <span><strong>{n || fmtPhone(c.phone)}</strong><small>{n ? fmtPhone(c.phone) : "Sem nome salvo"}</small></span>
+                      {phone === c.phone && <Check size={15} />}
+                    </button>
+                  );
+                })}
+                {contacts.length === 0 && <div className="nc-empty">Nenhum contato encontrado. Digite o número ao lado.</div>}
+              </div>
+            </div>
+            <div className="nc-right">
+              <div className="nc-two">
+                <label className="nc-f"><span>WhatsApp <i>*</i></span><input value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="5584999998888" /></label>
+                <label className="nc-f"><span>Nome</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Opcional" /></label>
+              </div>
+              <div className="nc-two">
+                {departments.length > 0 && (
+                  <label className="nc-f"><span>Setor <i>*</i></span>
+                    <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+                      <option value="">Escolha o setor</option>
+                      {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </label>
+                )}
+                <label className="nc-f"><span>Enviar por <i>*</i></span>
+                  <select value={channelId} onChange={(e) => { setChannelId(e.target.value); setTplV(null); }}>
+                    <option value="">Escolha o número…</option>
+                    {chans.map((c) => <option key={c.id} value={c.id}>{c.name}{c.provider === "cloud" ? " · API oficial" : " · QR Code"}</option>)}
+                  </select>
+                </label>
+              </div>
+              {isCloud ? (
+                <div className="nc-note">Este número é da API oficial: a conversa começa com um template aprovado. No próximo passo você escolhe e vê como o cliente vai receber.</div>
+              ) : (
+                <>
+                  <label className="nc-f"><span>Primeira mensagem <em>(opcional)</em></span>
+                    <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Olá! Aqui é da ..." />
+                  </label>
+                  {files.map((f, i) => (
+                    <div key={i} className="nc-file"><FileText size={15} /><span>{f.name}</span><button type="button" onClick={() => setFiles((c) => c.filter((_, j) => j !== i))}><X size={14} /></button></div>
+                  ))}
+                  <button type="button" className="nc-attach" onClick={() => fileRef.current?.click()}><Paperclip size={14} /> Anexar arquivo</button>
+                  <input ref={fileRef} type="file" multiple style={{ display: "none" }} onChange={(e) => { const l = [...(e.target.files || [])]; e.target.value = ""; setFiles((c) => [...c, ...l].slice(0, 10)); }} />
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="nc-tpl"><TemplateChooser wide channelId={channelId} who={{ name, phone }} value={tplV} onChange={setTplV} /></div>
+        )}
+
+        {error && <div className="admin-feedback error" style={{ margin: "0 22px 12px" }}>{error}</div>}
+        <div className="nc-foot">
+          <button type="button" className="nc-btn" onClick={onClose}>Cancelar</button>
+          {step === 1 && isCloud
+            ? <button type="button" className="nc-btn p" disabled={!canNext} onClick={() => setStep(2)}>{label} <ArrowRight size={15} /></button>
+            : <button type="button" className="nc-btn p" disabled={busy || !canNext || (isCloud && !tplV)} onClick={submit}><Send size={15} /> {busy ? "Abrindo…" : isCloud ? "Enviar template" : label}</button>}
         </div>
-      </Group>
-      )}
-      {error && <div className="admin-feedback error" style={{ marginTop: 12 }}>{error}</div>}
-    </Sheet>
+      </div>
+    </div>
   );
 }
