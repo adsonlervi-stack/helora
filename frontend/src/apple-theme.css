@@ -3616,11 +3616,11 @@ select.hs-open { border-color: #0071e3 !important; box-shadow: 0 0 0 3px rgba(0,
 .cv-tab-pop button.on { color: #0071e3; font-weight: 600; }
 
 /* Seletores em abas: branco no lugar do cinza (todo o sistema) */
-.mode-toggle, .dash-presets, .crm-tabs, .crm-views, .settings-tabs, .cv-segment, .ac-seg, .csp-seg {
+.dash-presets, .crm-tabs, .crm-views, .settings-tabs, .cv-segment, .ac-seg, .csp-seg {
   background: #fff !important; border: 1px solid #dfe3ea !important; padding: 2px !important; gap: 2px;
 }
-.mode-toggle button, .dash-presets button, .crm-tabs button, .crm-views button, .settings-tab, .cv-segment button, .ac-seg button, .csp-seg button { box-shadow: none !important; color: #5d6676; }
-.mode-toggle button.active, .dash-presets button.active, .crm-tabs button.active, .crm-views button.on, .settings-tab.active, .cv-segment button.active, .ac-seg button.on, .ac-seg button.active, .csp-seg button.on, .csp-seg button.active {
+.dash-presets button, .crm-tabs button, .crm-views button, .settings-tab, .cv-segment button, .ac-seg button, .csp-seg button { box-shadow: none !important; color: #5d6676; }
+.dash-presets button.active, .crm-tabs button.active, .crm-views button.on, .settings-tab.active, .cv-segment button.active, .ac-seg button.on, .ac-seg button.active, .csp-seg button.on, .csp-seg button.active {
   background: #eef6ff !important; color: #0062c4 !important; font-weight: 600; box-shadow: none !important;
 }
 
@@ -3758,8 +3758,6 @@ body .conv-panel .cv-search { background: #fff !important; border: 1px solid #df
 body .conv-panel .cv-search:focus-within { border-color: #0071e3 !important; box-shadow: 0 0 0 3px rgba(0,113,227,.12); }
 body .conv-panel .cv-icon-btn.primary { border-radius: 9px !important; }
 body .chat-header { background: #fff; border-bottom: 1px solid #e9ecf1 !important; }
-body .chat-header .pill-btn, body .chat-header .cv-icon-btn, body .chat-header-right button:not(.mode-toggle button) { background: #fff !important; border: 1px solid #dfe3ea !important; border-radius: 8px !important; box-shadow: none !important; }
-body .chat-header .pill-btn.primary, body .chat-header .pill-btn.assume { background: #0071e3 !important; border-color: #0071e3 !important; color: #fff !important; }
 body .chat-body, body .message-list { background: #f7f8fa !important; }
 /* balões: cliente branco, IA azul claro, atendente verde claro */
 body .bubble { border-radius: 10px !important; box-shadow: none !important; }
