@@ -3832,3 +3832,9 @@ body .bubble.in, body .bubble.out, body .bubble.out.by-bot { border: 0 !importan
 .call-opts button b { display: block; font-size: 14px; font-weight: 600; }
 .call-opts button small { display: block; font-size: 12px; color: #6b7383; margin-top: 3px; line-height: 1.4; }
 .call-opts button.on { border-color: #0071e3; background: #eef6ff; box-shadow: 0 0 0 3px rgba(0,113,227,.12); }
+
+/* Celular: menu da mensagem vira uma folha fixa embaixo, por cima de tudo */
+.msg-sheet { position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,.3); display: flex; align-items: flex-end; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
+.msg-sheet .msg-menu { position: static !important; width: 100% !important; max-height: 75vh; overflow-y: auto; transform: none !important; border-radius: 18px !important; animation: msgsheet .18s ease-out; }
+.msg-sheet .msg-menu > button { padding: 14px 16px !important; font-size: 16px !important; }
+@keyframes msgsheet { from { transform: translateY(30px); opacity: 0; } }

@@ -142,6 +142,13 @@ function ChatImage({ src }) {
   );
 }
 
+// No celular o menu da mensagem abre como folha por cima de tudo (fora do quadro da conversa)
+const isPhone = () => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches;
+function wrapMenu(node, close) {
+  if (!isPhone()) return node;
+  return createPortal(<div className="msg-sheet" onClick={close}>{node}</div>, document.body);
+}
+
 function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onStartChat, isGroup, onDownload, onButton }) {
   if (message.author === "system" || message.extra?.type === "event") return <EventPill message={message} />;
   const deleted = !!message.deletedAt;
@@ -275,7 +282,7 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
           </div>
         )}
 
-        {menuOpen && (
+        {menuOpen && wrapMenu(
           <div className="msg-menu" onClick={(e) => e.stopPropagation()}>
             <div className="msg-menu-emojis">
               {QUICK_EMOJIS.map((emoji) => (
@@ -291,7 +298,7 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
             {message.direction === "out" && (
               <button type="button" className="danger" onClick={() => onAction("delete", message)}><Trash2 size={15} /> Apagar para todos</button>
             )}
-          </div>
+          </div>, () => onToggleMenu(message.id)
         )}
       </div>
     </div>
