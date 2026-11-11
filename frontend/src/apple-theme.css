@@ -3804,3 +3804,29 @@ html[data-theme="dark"] body { filter: invert(.92) hue-rotate(180deg); backgroun
 html[data-theme="dark"] img, html[data-theme="dark"] video, html[data-theme="dark"] canvas, html[data-theme="dark"] iframe,
 html[data-theme="dark"] .av3d, html[data-theme="dark"] [style*="background-image"] { filter: invert(1) hue-rotate(180deg); }
 html[data-theme="dark"] img[src*="helora-wordmark"] { filter: none; }
+
+/* ===== Conversas · opção B (mensageiro) com fundo branco ===== */
+body .conv-panel .cv-icon-btn.primary { border-radius: 50% !important; background: #25b85a !important; color: #fff !important; }
+body .conv-panel .cv-search { border-radius: 999px !important; background: #f0f2f5 !important; border-color: transparent !important; }
+body .cv-tabs { border-bottom: 0 !important; gap: 6px !important; justify-content: flex-start !important; flex-wrap: nowrap; }
+body .cv-tab { border-radius: 999px !important; background: #f0f2f5; padding: 6px 12px !important; box-shadow: none !important; color: #54656f; }
+body .cv-tab.on { background: #dcf6e3 !important; color: #157a3c !important; box-shadow: none !important; }
+body .cv-tab-n { background: #25b85a !important; color: #fff !important; }
+body .cv-tab-more { margin-left: auto; }
+body .conv-panel .cv-item.active { background: #f0f2f5 !important; box-shadow: none !important; }
+body .cv-unread { border-radius: 999px !important; background: #25b85a !important; min-width: 20px; }
+body .cv-item.unread .cv-time, body .cv-item.unread time { color: #1f9e4c !important; }
+/* fundo branco e balões */
+body .chat-body, body .message-list { background: #fff !important; }
+body .bubble { border-radius: 10px !important; border: 0 !important; box-shadow: 0 1px 1.5px rgba(0,0,0,.12) !important; }
+body .bubble.in { background: #f1f3f6 !important; border-bottom-left-radius: 4px !important; }
+body .bubble.out { background: #dcf6e3 !important; border-bottom-right-radius: 4px !important; }
+body .bubble.out strong:first-child { color: #157a3c; }
+body .bubble.out.by-bot { background: #e4eeff !important; }
+body .bubble.out.by-bot::before { color: #0062c4 !important; }
+/* barra de mensagem */
+body .composer-wrap { background: #fff !important; }
+body .composer-text { border-radius: 999px !important; background: #f0f2f5 !important; border-color: transparent !important; }
+body .composer-send { border-radius: 50% !important; background: #25b85a !important; }
+body .composer-send:disabled { background: #a8e3bd !important; }
+body .bubble.in, body .bubble.out, body .bubble.out.by-bot { border: 0 !important; }
