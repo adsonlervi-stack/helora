@@ -300,29 +300,42 @@ export default function CampaignsPage({ canEdit }) {
       </div>
       {error && <div className="admin-feedback error" style={{ margin: "12px 0" }}>{error}</div>}
 
-      <div className="lg-card contacts-list" style={{ marginTop: 14 }}>
+      <div className="cp-kpis">
+        <div className="cp-kpi"><small>Mensagens enviadas</small><b>{list.reduce((n, c) => n + (c.sent || 0), 0).toLocaleString("pt-BR")}</b></div>
+        <div className="cp-kpi"><small>Em andamento</small><b>{list.filter((c) => ["running", "scheduled"].includes(c.status)).length}</b></div>
+        <div className="cp-kpi"><small>Falhas</small><b>{list.reduce((n, c) => n + (c.failed || 0), 0).toLocaleString("pt-BR")}</b></div>
+        <div className="cp-kpi"><small>Créditos disponíveis</small><b>{balance}</b></div>
+      </div>
+
+      <div className="ct-table cp-table">
+        <div className="ct-tr ct-th"><span>Campanha</span><span>Tipo</span><span>Público</span><span>Progresso</span><span>Status</span><span /></div>
         {list.map((c) => {
           const [label, color] = STATUS[c.status] || [c.status, "#8e8e93"];
           const pct = c.total ? Math.round(((c.sent + c.failed) / c.total) * 100) : 0;
+          const tpl = String(c.message || "").startsWith("@@TPL@@");
           return (
-            <div className="contact-row camp-row" key={c.id}>
-              <div className="contact-info" onClick={() => setOpenId(c.id)} style={{ cursor: "pointer" }}>
+            <div className="ct-tr" key={c.id}>
+              <span className="cp-name" onClick={() => setOpenId(c.id)}>
                 <strong>{c.name}</strong>
-                <span>{c.status === "scheduled" ? `Agendada para ${when(c.scheduledAt)}` : `Criada em ${when(c.createdAt)}`} · {c.sent}/{c.total} enviadas{c.failed ? ` · ${c.failed} falhas` : ""}</span>
-                <div className="camp-bar"><div style={{ width: `${pct}%`, background: color }} /></div>
+                <small>{c.status === "scheduled" ? `Agendada para ${when(c.scheduledAt)}` : `Criada em ${when(c.createdAt)}`}</small>
                 {c.pauseReason && c.status === "paused" && <small className="camp-pause">{c.pauseReason}</small>}
-              </div>
-              <span className="cv-tag" style={{ "--tag": color }}>{label}</span>
-              {canEdit && ["draft", "paused", "scheduled"].includes(c.status) && (
-                <button className="cv-icon-btn ok" title="Enviar agora" onClick={() => act(c.id, "start")}><Play size={15} /></button>
-              )}
-              {canEdit && c.status === "running" && <button className="cv-icon-btn" title="Pausar" onClick={() => act(c.id, "pause")}><Pause size={15} /></button>}
-              {canEdit && ["running", "paused", "scheduled"].includes(c.status) && (
-                <button className="cv-icon-btn" title="Cancelar" onClick={() => act(c.id, "cancel")}><XCircle size={15} /></button>
-              )}
-              {canEdit && !["running"].includes(c.status) && (
-                <button className="cv-icon-btn" title="Apagar" onClick={async () => { await deleteCampaignApi(c.id).catch(() => {}); load(); }}><Trash2 size={15} /></button>
-              )}
+              </span>
+              <span className="ct-phone">{tpl ? "Template oficial" : c.mediaUrl ? "Texto + anexo" : "Texto"}</span>
+              <span className="ct-phone">{c.total} contato(s)</span>
+              <span className="cp-prog"><span className="cp-bar"><i style={{ width: `${pct}%`, background: color }} /></span><small>{c.sent}/{c.total}{c.failed ? ` · ${c.failed} falhas` : ""}</small></span>
+              <span><span className="cp-st" style={{ "--c": color }}>{label}</span></span>
+              <span className="ct-r ct-acts">
+                {canEdit && ["draft", "paused", "scheduled"].includes(c.status) && (
+                  <button className="ct-btn icon" title="Enviar agora" onClick={() => act(c.id, "start")}><Play size={14} /></button>
+                )}
+                {canEdit && c.status === "running" && <button className="ct-btn icon" title="Pausar" onClick={() => act(c.id, "pause")}><Pause size={14} /></button>}
+                {canEdit && ["running", "paused", "scheduled"].includes(c.status) && (
+                  <button className="ct-btn icon" title="Cancelar" onClick={() => act(c.id, "cancel")}><XCircle size={14} /></button>
+                )}
+                {canEdit && !["running"].includes(c.status) && (
+                  <button className="ct-btn icon" title="Apagar" onClick={async () => { await deleteCampaignApi(c.id).catch(() => {}); load(); }}><Trash2 size={14} /></button>
+                )}
+              </span>
             </div>
           );
         })}

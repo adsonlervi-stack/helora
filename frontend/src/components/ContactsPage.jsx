@@ -137,27 +137,21 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
 
       {msg && <div className={`admin-feedback ${msg.type}`} style={{ marginBottom: 14 }}>{msg.text}</div>}
 
-      <div className="lg-card contacts-list">
-        <div className="contacts-count">
-          {total} contato(s) · página {page} de {pages}
-        </div>
+      <div className="ct-table">
+        <div className="ct-tr ct-th"><span>Nome</span><span>WhatsApp</span><span>Origem</span><span className="ct-r">{total} contato(s)</span></div>
         {list.map((c) => (
-          <div className="contact-row" key={c.id}>
-            <Avatar name={c.name || c.pushName || c.phone} size={40} />
-            <div className="contact-info">
-              <strong>{c.name || c.pushName || "Sem nome"}</strong>
-              <span>
-                {fmtPhone(c.phone)}
-                {c.pushName && c.name && c.pushName !== c.name ? ` · "${c.pushName}" no WhatsApp` : ""}
-              </span>
-            </div>
-            <span className="contact-source">{SOURCE[c.source] || c.source}</span>
-            <button className="pill-btn primary" onClick={() => onStartConversation(c)}>
-              <MessageCircle size={15} /> Conversar
-            </button>
-            <button className="cv-icon-btn" title="Editar" onClick={() => setEditing(c)}>
-              <Pencil size={15} />
-            </button>
+          <div className="ct-tr" key={c.id}>
+            <span className="ct-name">
+              <Avatar name={c.name || c.pushName || c.phone} size={32} />
+              <span><strong>{c.name || c.pushName || "Sem nome"}</strong>
+                {c.pushName && c.name && c.pushName !== c.name && <small>"{c.pushName}" no WhatsApp</small>}</span>
+            </span>
+            <span className="ct-phone">{fmtPhone(c.phone)}</span>
+            <span><span className={`ct-pill ${c.source || ""}`}>{SOURCE[c.source] || c.source}</span></span>
+            <span className="ct-r ct-acts">
+              <button className="ct-btn" onClick={() => onStartConversation(c)}><MessageCircle size={14} /> Conversar</button>
+              <button className="ct-btn icon" title="Editar" onClick={() => setEditing(c)}><Pencil size={14} /></button>
+            </span>
           </div>
         ))}
         {list.length === 0 && (
@@ -166,10 +160,10 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
           </div>
         )}
         {pages > 1 && (
-          <div className="pager">
-            <button className="pill-btn" disabled={page <= 1} onClick={() => goPage(page - 1)}>‹ Anterior</button>
-            <span>{page} / {pages}</span>
-            <button className="pill-btn" disabled={page >= pages} onClick={() => goPage(page + 1)}>Próxima ›</button>
+          <div className="ct-pager">
+            <span>Página {page} de {pages}</span>
+            <button className="ct-btn" disabled={page <= 1} onClick={() => goPage(page - 1)}>‹ Anterior</button>
+            <button className="ct-btn" disabled={page >= pages} onClick={() => goPage(page + 1)}>Próxima ›</button>
           </div>
         )}
       </div>
