@@ -13,7 +13,20 @@ export const api = axios.create({
 export const netBusy = { n: 0, emit() { window.dispatchEvent(new CustomEvent("helora:net", { detail: this.n })); } };
 api.interceptors.request.use((config) => { netBusy.n++; netBusy.emit(); config.__counted = true; return config; });
 api.interceptors.response.use((r) => { if (r.config?.__counted) { netBusy.n = Math.max(0, netBusy.n - 1); netBusy.emit(); } return r; },
-  (e) => { if (e.config?.__counted) { netBusy.n = Math.max(0, netBusy.n - 1); netBusy.emit(); } return Promise.reject(friendlyError(e)); });
+  async (e) => {
+    if (e.config?.__counted) { netBusy.n = Math.max(0, netBusy.n - 1); netBusy.emit(); }
+    // Servidor reiniciando (atualização) ou fora do ar por instantes: tenta de novo sozinho antes de mostrar erro.
+    const c = e.config, st = e.response?.status;
+    const retryable = c && (!c.method || c.method === "get") && (!e.response || [500, 502, 503, 504].includes(st));
+    if (retryable && (c.__retry || 0) < 4) {
+      c.__retry = (c.__retry || 0) + 1;
+      window.dispatchEvent(new CustomEvent("helora:reconnecting", { detail: true }));
+      await new Promise((r) => setTimeout(r, 1500 * c.__retry));
+      try { const r = await api(c); window.dispatchEvent(new CustomEvent("helora:reconnecting", { detail: false })); return r; } catch (err) { return Promise.reject(err); }
+    }
+    window.dispatchEvent(new CustomEvent("helora:reconnecting", { detail: false }));
+    return Promise.reject(friendlyError(e));
+  });
 
 // Erros técnicos (em inglês, 500, sem conexão) viram uma mensagem clara em português.
 const EN = /\b(error|failed|fail|invalid|server|unauthori[sz]ed|forbidden|cannot|can't|undefined|null|timeout|not found|network|exception|unexpected|violates|duplicate key|column|relation|syntax|ECONN|fetch)\b/i;

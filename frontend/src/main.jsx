@@ -5,6 +5,10 @@ import "./styles.css";
 import "./apple-theme.css";
 import "./dialogs.js";
 import "./selectMenu.js";
+// Aviso discreto enquanto o servidor volta
+{ let el; window.addEventListener("helora:reconnecting", (e) => {
+  if (e.detail) { if (!el) { el = document.createElement("div"); el.className = "hl-reconnect"; el.innerHTML = "<span></span>Reconectando à Helora…"; document.body.appendChild(el); } }
+  else if (el) { el.remove(); el = null; } }); }
 try { if (localStorage.getItem("helora:theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch {}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
