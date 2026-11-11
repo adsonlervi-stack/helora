@@ -56,38 +56,22 @@ export default function FlowsPage({ canEdit }) {
 
   return (
     <div className="page">
-      <div className="lg-card fl-hero">
-        <span className="fl-hero-icon"><Workflow size={22} /></span>
-        <div>
-          <h2>Fluxos</h2>
-          <p>Monte o roteiro do bot arrastando blocos. Só um fluxo fica ativo por vez e ele responde todo cliente novo.</p>
+      <div className="pg-top">
+        <h1>Fluxos</h1>
+        <div className="pg-tabs">
+          {[["all", "Todos", flows.length], ["active", "Ativo"], ["inactive", "Inativos"]].map(([k, l, n]) => (
+            <button key={k} className={filter === k ? "on" : ""} onClick={() => setFilter(k)}>{l}{n != null && <span>{n}</span>}</button>
+          ))}
         </div>
-        <div className="fl-hero-badges">
-          <span className="cv-tag blue">{flows.length} no total</span>
-          <span className="cv-tag" style={{ "--tag": "#248a3d" }}>{flows.filter((f) => f.active).length} ativo</span>
-        </div>
-        {canEdit && (
-          <button className="pill-btn primary" onClick={() => create()}>
-            <Plus size={15} /> Novo fluxo
-          </button>
-        )}
+        <span className="pg-sp" />
+        <div className="pg-search"><Search size={15} /><input placeholder="Buscar fluxo" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+        {canEdit && <button className="pg-btn p" onClick={() => create()}><Plus size={15} /> Novo fluxo</button>}
       </div>
+      <p className="pg-desc">Monte o roteiro do bot arrastando blocos. Só um fluxo fica ativo por vez e ele responde todo cliente novo.</p>
 
       {error && <div className="admin-feedback error" style={{ margin: "12px 0" }}>{error}</div>}
 
-      <div className="contacts-toolbar" style={{ marginTop: 14 }}>
-        <div className="cv-search" style={{ flex: 1, maxWidth: 420 }}>
-          <Search size={15} />
-          <input placeholder="Buscar fluxo" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <div className="cv-segment" style={{ width: "auto" }}>
-          {[["all", "Todos"], ["active", "Ativo"], ["inactive", "Inativos"]].map(([k, l]) => (
-            <button key={k} className={filter === k ? "active" : ""} onClick={() => setFilter(k)}>{l}</button>
-          ))}
-        </div>
-      </div>
-
-      <div className="lg-card contacts-list">
+      <div className="ct-table fl-table">
         {list.map((f) => (
           <div className="contact-row fl-row" key={f.id}>
             <span className="fl-row-icon"><Workflow size={16} /></span>

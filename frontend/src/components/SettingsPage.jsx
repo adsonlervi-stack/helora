@@ -15,7 +15,7 @@ import {
   Smartphone,
   Pencil,
   KeyRound,
-  Copy, Bell, ShieldCheck, History, CalendarClock, Plug, Eye, EyeOff } from "lucide-react";
+  Copy, Bell, ShieldCheck, History, CalendarClock, Plug, Eye, EyeOff, Search } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook } from "../api.js";
 import { AccessLogList } from "./AdminPage.jsx";
@@ -113,6 +113,7 @@ const CARDS = [
 
 export default function SettingsPage({ onGoToChannels, canManage = false, apiEnabled = false }) {
   const [tab, setTab] = useState(null);
+  const [cfgQ, setCfgQ] = useState("");
   useEffect(() => {
     const on = (e) => e.detail === "settings" && setTab(null);
     window.addEventListener("helora:nav-reset", on);
@@ -122,9 +123,13 @@ export default function SettingsPage({ onGoToChannels, canManage = false, apiEna
   if (tab === null) {
     return (
       <div className="page">
-        <h1 className="set-title">Configurações</h1>
-        <div className="settings-grid">
-          {CARDS.filter((c) => (!c.ownerOnly || canManage) && (c.key !== "api" || apiEnabled)).map(({ key, label, desc, icon: Icon, external }) => (
+        <div className="pg-top">
+          <h1>Configurações</h1>
+          <span className="pg-sp" />
+          <div className="pg-search"><Search size={15} /><input placeholder="Buscar configuração" value={cfgQ} onChange={(e) => setCfgQ(e.target.value)} /></div>
+        </div>
+        <div className="settings-grid set2-grid">
+          {CARDS.filter((c) => (!c.ownerOnly || canManage) && (c.key !== "api" || apiEnabled) && (!cfgQ || (c.label + " " + c.desc).toLowerCase().includes(cfgQ.toLowerCase()))).map(({ key, label, desc, icon: Icon, external }) => (
             <button
               key={key}
               className="settings-card"
@@ -133,8 +138,8 @@ export default function SettingsPage({ onGoToChannels, canManage = false, apiEna
               <div className="settings-card-icon">
                 <Icon size={20} />
               </div>
-              <div className="settings-card-label">{label}</div>
-              <div className="settings-card-desc">{desc}</div>
+              <div><div className="settings-card-label">{label}</div>
+              <div className="settings-card-desc">{desc}</div></div>
             </button>
           ))}
         </div>

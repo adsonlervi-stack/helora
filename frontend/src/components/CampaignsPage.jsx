@@ -275,6 +275,7 @@ export default function CampaignsPage({ canEdit }) {
     return () => clearInterval(t);
   }, []);
 
+  const [cFilter, setCFilter] = useState("all");
   if (openId) return <div className="page"><CampaignDetail id={openId} onBack={() => setOpenId(null)} /></div>;
 
   const act = async (id, action) => {
@@ -289,14 +290,16 @@ export default function CampaignsPage({ canEdit }) {
 
   return (
     <div className="page">
-      <div className="lg-card fl-hero">
-        <span className="fl-hero-icon camp-icon"><Megaphone size={22} /></span>
-        <div>
-          <h2>Campanhas</h2>
-          <p>Disparo em massa para seus contatos, como uma lista de transmissão. Cada mensagem enviada usa 1 crédito.</p>
+      <div className="pg-top">
+        <h1>Campanhas</h1>
+        <div className="pg-tabs">
+          {[["all", "Todas"], ["scheduled", "Agendadas"], ["done", "Enviadas"]].map(([k, l]) => (
+            <button key={k} className={cFilter === k ? "on" : ""} onClick={() => setCFilter(k)}>{l}</button>
+          ))}
         </div>
-        <div className="camp-balance"><Coins size={16} /> <strong>{balance}</strong> créditos</div>
-        {canEdit && <button className="pill-btn primary" onClick={() => setShowNew(true)}><Plus size={15} /> Nova campanha</button>}
+        <span className="pg-sp" />
+        <span className="pg-credit"><Coins size={15} /> <b>{balance}</b> créditos</span>
+        {canEdit && <button className="pg-btn p" onClick={() => setShowNew(true)}><Plus size={15} /> Nova campanha</button>}
       </div>
       {error && <div className="admin-feedback error" style={{ margin: "12px 0" }}>{error}</div>}
 
@@ -309,7 +312,7 @@ export default function CampaignsPage({ canEdit }) {
 
       <div className="ct-table cp-table">
         <div className="ct-tr ct-th"><span>Campanha</span><span>Tipo</span><span>Público</span><span>Progresso</span><span>Status</span><span /></div>
-        {list.map((c) => {
+        {list.filter((c) => cFilter === "all" || (cFilter === "scheduled" ? c.status === "scheduled" : c.status === "done")).map((c) => {
           const [label, color] = STATUS[c.status] || [c.status, "#8e8e93"];
           const pct = c.total ? Math.round(((c.sent + c.failed) / c.total) * 100) : 0;
           const tpl = String(c.message || "").startsWith("@@TPL@@");
