@@ -3796,3 +3796,4 @@ body .page:has(> .pg-top) > .pg-top { border-radius: 0; border: 0; border-bottom
 body .page:has(> .pg-top) > :not(.pg-top):not(.modal-overlay):not(.nc-overlay) { margin-left: 32px; margin-right: 32px; }
 body .page:has(> .pg-top) > .pg-desc { margin-left: 34px; }
 @media (max-width: 760px) { body .page:has(> .pg-top) > .pg-top { padding: 12px 14px; } body .page:has(> .pg-top) > :not(.pg-top) { margin-left: 14px; margin-right: 14px; } }
+@media (min-width: 900px) { body .conversations-page .conv-panel { width: 400px !important; min-width: 400px !important; } }
