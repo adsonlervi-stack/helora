@@ -3599,3 +3599,27 @@ select.hs-open { border-color: #0071e3 !important; box-shadow: 0 0 0 3px rgba(0,
 .hs-native .hsel-opt:disabled { opacity: .45; cursor: default; }
 .hs-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #8e8e93; }
 .hs-native .hsel-opt:focus { outline: none; }
+
+/* Conversas: abas da fila sem ícones, Fechados no ••• */
+.cv-tabs { display: flex; align-items: flex-end; justify-content: space-between; gap: 4px; border-bottom: 1px solid rgba(0,0,0,.08); margin: 10px 0 6px; }
+.cv-tab { border: 0; background: none; padding: 8px 4px 9px; font: 500 13px inherit; font-family: inherit; color: #5d6676; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; box-shadow: inset 0 -2px 0 transparent; transition: color .15s, box-shadow .15s; }
+.cv-tab:hover { color: #1d1d1f; }
+.cv-tab.on { color: #0071e3; font-weight: 600; box-shadow: inset 0 -2px 0 #0071e3; }
+.cv-tab-n { min-width: 18px; padding: 0 5px; border-radius: 9px; font-size: 11px; font-weight: 600; line-height: 17px; text-align: center; background: #eef0f4; color: #5d6676; }
+.cv-tab-n.active { background: #0071e3; color: #fff; }
+.cv-tab-n.pending { background: #fff1d6; color: #9a6200; }
+.cv-tab-n.groups { background: #eaf8ee; color: #1c8f3c; }
+.cv-tab-more { position: relative; }
+.cv-tab-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 150px; background: #fff; border: 1px solid rgba(0,0,0,.08); border-radius: 10px; box-shadow: 0 14px 40px rgba(0,0,0,.16); padding: 6px; }
+.cv-tab-pop button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; font: 14px inherit; font-family: inherit; cursor: pointer; color: #1d1d1f; }
+.cv-tab-pop button:hover { background: rgba(0,113,227,.07); }
+.cv-tab-pop button.on { color: #0071e3; font-weight: 600; }
+
+/* Seletores em abas: branco no lugar do cinza (todo o sistema) */
+.mode-toggle, .dash-presets, .crm-tabs, .crm-views, .settings-tabs, .cv-segment, .ac-seg, .csp-seg {
+  background: #fff !important; border: 1px solid #dfe3ea !important; padding: 2px !important; gap: 2px;
+}
+.mode-toggle button, .dash-presets button, .crm-tabs button, .crm-views button, .settings-tab, .cv-segment button, .ac-seg button, .csp-seg button { box-shadow: none !important; color: #5d6676; }
+.mode-toggle button.active, .dash-presets button.active, .crm-tabs button.active, .crm-views button.on, .settings-tab.active, .cv-segment button.active, .ac-seg button.on, .ac-seg button.active, .csp-seg button.on, .csp-seg button.active {
+  background: #eef6ff !important; color: #0062c4 !important; font-weight: 600; box-shadow: none !important;
+}

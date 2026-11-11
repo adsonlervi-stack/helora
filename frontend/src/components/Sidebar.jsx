@@ -109,6 +109,7 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
       );
   }, [conversations, search, queue, labelFilter, deptFilter, currentUserId, viewAll]);
 
+  const [moreQ, setMoreQ] = useState(false);
   const activeFilters = (labelFilter ? 1 : 0) + (deptFilter ? 1 : 0);
 
   return (
@@ -139,18 +140,25 @@ export default function Sidebar({ conversations, selectedId, onSelect, onNewConv
           </button>
         </div>
 
-        <div className="cv-segment" role="tablist">
-          {QUEUES.map((q) => (
-            <button key={q.key} className={`qtab ${queue === q.key ? "active" : ""}`} onClick={() => setQueue(q.key)} title={q.label}>
-              <span className="qtab-top">
-                <q.icon size={15} />
-                {q.key === "groups"
-                  ? counts.groupsUnread > 0 && <span className="qtab-count dot">{counts.groupsUnread}</span>
-                  : counts[q.key] > 0 && q.key !== "closed" && <span className="qtab-count">{counts[q.key]}</span>}
-              </span>
-              <span className="qtab-label">{q.label}</span>
+        <div className="cv-tabs" role="tablist">
+          {QUEUES.filter((q) => q.key !== "closed").map((q) => {
+            const n = q.key === "groups" ? counts.groupsUnread : counts[q.key];
+            return (
+              <button key={q.key} role="tab" className={`cv-tab ${queue === q.key ? "on" : ""}`} onClick={() => { setQueue(q.key); setMoreQ(false); }}>
+                {q.label}{n > 0 && <span className={`cv-tab-n ${q.key}`}>{n}</span>}
+              </button>
+            );
+          })}
+          <div className="cv-tab-more">
+            <button className={`cv-tab ${queue === "closed" ? "on" : ""}`} title="Mais" onClick={() => setMoreQ((v) => !v)}>
+              {queue === "closed" ? "Fechados" : "•••"}
             </button>
-          ))}
+            {moreQ && (
+              <div className="cv-tab-pop">
+                <button className={queue === "closed" ? "on" : ""} onClick={() => { setQueue("closed"); setMoreQ(false); }}>Fechados</button>
+              </div>
+            )}
+          </div>
         </div>
 
         {canSeeAll && (
