@@ -122,23 +122,19 @@ export default function ContactsPage({ onStartConversation, canDelete }) {
 
   return (
     <div className="page contacts-page">
-      <div className="contacts-toolbar">
-        <div className="cv-search" style={{ flex: 1, maxWidth: 420 }}>
-          <Search size={15} />
-          <input placeholder="Buscar por nome ou número" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <button className="pill-btn" onClick={runImport} disabled={importing}>
-          <Download size={15} /> {importing ? "Importando…" : "Importar do WhatsApp"}
-        </button>
-        <button className="pill-btn primary" onClick={() => setEditing("new")}>
-          <UserPlus size={15} /> Novo contato
-        </button>
+      <div className="pg-top">
+        <h1>Contatos</h1>
+        <div className="pg-tabs"><button className="on">Todos<span>{total}</span></button></div>
+        <span className="pg-sp" />
+        <div className="pg-search"><Search size={15} /><input placeholder="Buscar por nome ou número" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+        <button className="pg-btn" onClick={runImport} disabled={importing}><Download size={15} /> {importing ? "Importando…" : "Importar do WhatsApp"}</button>
+        <button className="pg-btn p" onClick={() => setEditing("new")}><UserPlus size={15} /> Novo contato</button>
       </div>
 
       {msg && <div className={`admin-feedback ${msg.type}`} style={{ marginBottom: 14 }}>{msg.text}</div>}
 
       <div className="ct-table">
-        <div className="ct-tr ct-th"><span>Nome</span><span>WhatsApp</span><span>Origem</span><span className="ct-r">{total} contato(s)</span></div>
+        <div className="ct-tr ct-th"><span>Nome</span><span>WhatsApp</span><span>Origem</span><span /></div>
         {list.map((c) => (
           <div className="ct-tr" key={c.id}>
             <span className="ct-name">
