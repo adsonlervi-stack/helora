@@ -168,7 +168,7 @@ function MessageBubble({ message, onAction, menuOpen, onToggleMenu, onRetry, onS
   return (
     <div id={`msg-${message.id}`} className={`bubble-row ${message.direction}`}>
       <div
-        className={`bubble ${message.direction} ${deleted ? "deleted" : ""} ${menuOpen ? "menu-open" : ""} ${isSticker && !deleted ? "sticker" : ""}`}
+        className={`bubble ${message.direction} by-${message.author || ""} ${deleted ? "deleted" : ""} ${menuOpen ? "menu-open" : ""} ${isSticker && !deleted ? "sticker" : ""}`}
         onClick={(e) => {
           if (pending || deleted || e.target.closest("a,button,audio,video")) return;
           onToggleMenu(message.id);

@@ -3751,3 +3751,26 @@ select.hs-open { border-color: #0071e3 !important; box-shadow: 0 0 0 3px rgba(0,
 .set2-grid .settings-card-label { font-weight: 600; font-size: 14.5px; margin: 0 0 3px; }
 .set2-grid .settings-card-desc { font-size: 12.5px; color: #6b7383; line-height: 1.45; }
 @media (max-width: 760px) { .pg-search { width: 100%; order: 5; } }
+
+/* ===== Tela de Conversas no visual aprovado ===== */
+body .conv-panel { background: #fff !important; border: 1px solid #e7eaf0 !important; border-radius: 12px !important; box-shadow: none !important; backdrop-filter: none !important; }
+body .conv-panel .cv-search { background: #fff !important; border: 1px solid #dfe3ea !important; border-radius: 9px !important; height: 38px; }
+body .conv-panel .cv-search:focus-within { border-color: #0071e3 !important; box-shadow: 0 0 0 3px rgba(0,113,227,.12); }
+body .conv-panel .cv-icon-btn.primary { border-radius: 9px !important; }
+body .chat-header { background: #fff; border-bottom: 1px solid #e9ecf1 !important; }
+body .chat-header .pill-btn, body .chat-header .cv-icon-btn, body .chat-header-right button:not(.mode-toggle button) { background: #fff !important; border: 1px solid #dfe3ea !important; border-radius: 8px !important; box-shadow: none !important; }
+body .chat-header .pill-btn.primary, body .chat-header .pill-btn.assume { background: #0071e3 !important; border-color: #0071e3 !important; color: #fff !important; }
+body .chat-body, body .message-list { background: #f7f8fa !important; }
+/* balões: cliente branco, IA azul claro, atendente verde claro */
+body .bubble { border-radius: 10px !important; box-shadow: none !important; }
+body .bubble.in { background: #fff !important; color: #0f1b2d !important; border: 1px solid #e9ecf1 !important; }
+body .bubble.out { background: #eaf8ee !important; color: #0f1b2d !important; border: 1px solid #cdeed6 !important; }
+body .bubble.out.by-bot { background: #eef6ff !important; border-color: #d7e7fb !important; }
+body .bubble.out.by-bot::before { content: "✦ Helora IA"; display: block; font-size: 11.5px; font-weight: 600; color: #0071e3; margin-bottom: 3px; }
+body .bubble.out .bubble-meta, body .bubble.out .bubble-meta * { color: #7a8394 !important; }
+body .bubble.out strong:first-child { color: #1c8f3c; }
+body .bubble.out a { color: #0062c4; }
+/* barra de mensagem */
+body .composer-text { border: 1px solid #dfe3ea !important; border-radius: 9px !important; background: #fff !important; }
+body .composer-send { border-radius: 9px !important; background: #0071e3 !important; color: #fff !important; }
+body .composer-send:disabled { background: #b9d5f7 !important; }
