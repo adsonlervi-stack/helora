@@ -112,7 +112,8 @@ export default function ClientPanel({ conversation, departments = [], team = [],
       <div className="client-body">
         {tab === "perfil" && (
           <>
-            {contact && (
+            {conversation.isGroup && <FunnelBox conversation={conversation} contact={{}} saveField={() => {}} />}
+            {contact && !conversation.isGroup && (
               <>
                 <Group title="Contato">
                   <Row label="Nome"><input defaultValue={contact.name || contact.pushName || ""} placeholder="Nome" onBlur={(e) => e.target.value !== (contact.name || "") && saveField({ name: e.target.value })} /></Row>

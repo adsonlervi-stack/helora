@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { ChevronDown, Check, Plus } from "lucide-react";
 import { crm } from "../api.js";
 import { notify } from "../dialogs.js";
-import { fmtDoc, docStatus, onlyDigits } from "../docs.js";
+import { fmtDoc, docStatus, onlyDigits, editDoc } from "../docs.js";
 
 const OTHER = "__outra__";
 
@@ -158,7 +158,7 @@ export function DocumentField({ value, onChange, onCnpjData, className }) {
   useEffect(() => { if (st === "cnpj") lookup(onlyDigits(v)); }, [st, v]);
   return (
     <span className={`crm-doc ${className || ""}`}>
-      <input value={fmtDoc(v)} onChange={(e) => onChange(fmtDoc(e.target.value))} inputMode="numeric" placeholder="CPF ou CNPJ" />
+      <input value={fmtDoc(v)} onChange={(e) => onChange(fmtDoc(editDoc(v, e)))} inputMode="numeric" placeholder="CPF ou CNPJ" />
       {busy ? <span className="crm-doc-tag wait">Buscando…</span>
         : st === "cpf" ? <span className="crm-doc-tag ok">CPF ✓</span>
         : st === "cnpj" ? <button type="button" className="crm-doc-tag ok" title="Buscar os dados de novo na Receita" onClick={() => { lastLookup.current = ""; lookup(onlyDigits(v)); }}>CNPJ ✓</button>

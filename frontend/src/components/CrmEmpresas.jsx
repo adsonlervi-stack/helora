@@ -1,3 +1,4 @@
+import { fmtDoc as fmtDocLive, editDoc } from "../docs.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search, Filter, ArrowUpDown, Columns3, Upload, Download, Plus, Building2, User, X, ChevronLeft, ChevronRight, PanelLeftClose } from "lucide-react";
@@ -7,7 +8,7 @@ import { openClient } from "./CrmCliente.jsx";
 
 const errText = (e) => e?.response?.data?.error || e.message;
 const digits = (v) => String(v || "").replace(/\D/g, "");
-export const fmtDoc = (d) => { d = digits(d); return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : d.length === 11 ? d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : d; };
+export const fmtDoc = (d) => { d = digits(d); return d.length > 0 && d.length !== 11 && d.length !== 14 ? fmtDocLive(d) : d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : d.length === 11 ? d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4") : d; };
 export const fmtPhone = (p) => { const d = digits(p); return !d ? "" : d.length >= 12 ? `+${d}` : d.length >= 10 ? `(${d.slice(0, 2)}) ${d.slice(2, -4)}-${d.slice(-4)}` : d; };
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const openRow = (r) => openClient(r.clientId ? `c:${r.clientId}` : r.leadId);
@@ -163,6 +164,8 @@ export default function CrmEmpresas({ ctx }) {
 
 /** Cadastro/edição de empresa ou pessoa. */
 export function ClientForm({ initial, team, me, onClose, onSaved }) {
+  const [cep, setCep] = useState("");
+  const [num, setNum] = useState("");
   const [f, setF] = useState({ kind: "empresa", name: "", doc: "", legalName: "", email: "", phone: "", ownerId: me?.id || "", source: "", sector: "", category: "", description: "", address: "", ...initial });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -191,7 +194,7 @@ export function ClientForm({ initial, team, me, onClose, onSaved }) {
           <button className={!pj ? "on" : ""} onClick={() => setF({ ...f, kind: "pessoa" })}><User size={14} /> Pessoa</button>
         </div>}
         <label className="full"><span>{pj ? "Nome da empresa" : "Nome completo"}</span><input value={f.name} onChange={set("name")} autoFocus /></label>
-        <label><span>{pj ? "CNPJ" : "CPF"}</span><input value={fmtDoc(f.doc)} onChange={(e) => setF({ ...f, doc: digits(e.target.value).slice(0, 14) })} onBlur={pj ? lookup : undefined} placeholder={pj ? "Preenche os dados sozinho" : ""} /></label>
+        <label><span>{pj ? "CNPJ" : "CPF"}</span><input value={fmtDoc(f.doc)} onChange={(e) => setF({ ...f, doc: editDoc(f.doc || "", e) })} onBlur={pj ? lookup : undefined} placeholder={pj ? "Preenche os dados sozinho" : ""} /></label>
         {pj ? <label><span>Razão social</span><input value={f.legalName} onChange={set("legalName")} /></label> : <label><span>Empresa onde trabalha</span><input value={f.legalName} onChange={set("legalName")} /></label>}
         <label><span>E-mail</span><input type="email" value={f.email} onChange={set("email")} /></label>
         <label><span>Telefone / WhatsApp</span><input value={f.phone} onChange={set("phone")} inputMode="tel" /></label>
@@ -199,6 +202,11 @@ export function ClientForm({ initial, team, me, onClose, onSaved }) {
         <label><span>Origem</span><input value={f.source} onChange={set("source")} placeholder="Indicação, Instagram…" /></label>
         {pj && <label><span>Setor</span><input value={f.sector} onChange={set("sector")} /></label>}
         <label><span>Categoria</span><input value={f.category} onChange={set("category")} placeholder="Cliente, prospect, parceiro…" /></label>
+        <label><span>CEP</span><input value={cep} inputMode="numeric" placeholder="00000-000" onChange={async (e) => {
+          const d = e.target.value.replace(/\D/g, "").slice(0, 8); setCep(d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d);
+          if (d.length === 8) { try { const r = await (await fetch(`https://viacep.com.br/ws/${d}/json/`)).json(); if (!r.erro) setF((x) => ({ ...x, address: [r.logradouro, r.bairro, r.localidade && `${r.localidade} - ${r.uf}`, `CEP ${d.slice(0, 5)}-${d.slice(5)}`].filter(Boolean).join(", ") })); } catch {} }
+        }} /></label>
+        <label><span>Número e complemento</span><input value={num} onChange={(e) => setNum(e.target.value)} onBlur={() => num.trim() && setF((x) => ({ ...x, address: x.address && !x.address.includes(num.trim()) ? x.address.replace(/^([^,]+)/, `$1, ${num.trim()}`) : x.address }))} placeholder="Nº 120, sala 3" /></label>
         <label className="full"><span>Endereço</span><input value={f.address} onChange={set("address")} /></label>
         <label className="full"><span>Descrição</span><textarea rows={3} value={f.description} onChange={set("description")} /></label>
         <div className="cl-form-foot"><button className="lp-btn" onClick={onClose}>Cancelar</button><button className="lp-btn primary" disabled={busy} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button></div>

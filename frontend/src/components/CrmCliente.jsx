@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Building2, History, Briefcase, Users, Plus, X, Phone, Mail, MessageCircle, Trophy, ThumbsDown } from "lucide-react";
 import { crm, integrations } from "../api.js";
@@ -31,6 +31,8 @@ export default function CrmCliente({ leadId, ctx, onClose }) {
   useEffect(() => { if (tab === "policies" && data) crm.policies({ leadIds: data.deals.map((d) => d.id).join(",") }).then((r) => setPols(r.policies || [])).catch(() => setPols([])); }, [tab, data]);
   const loadEvents = (ids) => crm.events({}).then((l) => setEvents((l || []).filter((e) => ids.includes(e.leadId)))).catch(() => {});
   const load = () => crm.client(leadId).then((d) => { setData(d); loadEvents(d.deals.map((x) => x.id)); if (!d.deals.some((x) => x.id === dealId)) setDealId(d.deals[0]?.id); }).catch((e) => { notify(errText(e), "error"); onClose(); });
+  const loadRef = useRef(); loadRef.current = load;
+  useEffect(() => { const h = () => loadRef.current?.(); window.addEventListener("helora:crm-changed", h); return () => window.removeEventListener("helora:crm-changed", h); }, []);
   useEffect(() => { setData(null); load(); }, [leadId]);
 
   const c = data?.client;

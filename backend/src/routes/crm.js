@@ -896,7 +896,8 @@ async function leadForConversation(accountId, convId) {
   const { data: conv } = await supabase.from("conversations").select("id, name, phone, external_id").eq("account_id", accountId).eq("id", convId).maybeSingle();
   if (!conv) return { conv: null, lead: null };
   let { data: lead } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", accountId).eq("conversation_id", convId).is("deleted_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  const phone = onlyDigits(conv.phone || String(conv.external_id || "").split("@")[0]);
+  const isGroup = /@g\.us$/.test(String(conv.external_id || ""));
+  const phone = isGroup ? "" : onlyDigits(conv.phone || String(conv.external_id || "").split("@")[0]);
   if (!lead && phone.length >= 10) {
     const tail = phone.slice(-8);
     ({ data: lead } = await supabase.from("crm_leads").select(LEAD_SELECT).eq("account_id", accountId).ilike("phone", `%${tail}`).is("deleted_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle());

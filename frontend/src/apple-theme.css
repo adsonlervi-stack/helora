@@ -3838,3 +3838,4 @@ body .bubble.in, body .bubble.out, body .bubble.out.by-bot { border: 0 !importan
 .msg-sheet .msg-menu { position: static !important; width: 100% !important; max-height: 75vh; overflow-y: auto; transform: none !important; border-radius: 18px !important; animation: msgsheet .18s ease-out; }
 .msg-sheet .msg-menu > button { padding: 14px 16px !important; font-size: 16px !important; }
 @keyframes msgsheet { from { transform: translateY(30px); opacity: 0; } }
+.lp-autogrow { min-height: 80px; max-height: 70vh; overflow-y: auto; resize: vertical; }

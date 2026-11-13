@@ -236,7 +236,7 @@ export default function CrmLeadPage({ ctx, lead: initial, onClose, onChanged }) 
       <div className="lp-note">
         {editNote?.id === h.id ? (
           <div className="lp-note-edit">
-            <textarea rows={3} spellCheck lang="pt-BR" value={editNote.text} onChange={(e) => setEditNote({ ...editNote, text: e.target.value })} autoFocus />
+            <textarea className="lp-autogrow" rows={Math.max(3, String(editNote.text || "").split("\n").length + 1)} spellCheck lang="pt-BR" value={editNote.text} ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + 4 + "px"; } }} onChange={(e) => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + 4 + "px"; setEditNote({ ...editNote, text: e.target.value }); }} autoFocus />
             <div className="lp-row-end">
               <button className="lp-ghost" onClick={() => setEditNote(null)}>Cancelar</button>
               <button className="lp-primary" disabled={!editNote.text.trim()} onClick={async () => { try { changed(await crm.editLeadNote(lead.id, h.id, editNote.text.trim())); setEditNote(null); } catch (e) { notify(errText(e), "error"); } }}>Salvar</button>

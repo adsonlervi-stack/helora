@@ -45,3 +45,15 @@ export function docStatus(v) {
   if (d.length === 11) return isCPF(d) ? "cpf" : "invalid";
   return isCNPJ(d) ? "cnpj" : "invalid";
 }
+
+/** Edição de CPF/CNPJ com máscara: apagar um ponto, barra ou traço apaga o número de antes (senão a máscara volta e "não deixa corrigir"). */
+export function editDoc(prev, e) {
+  const el = e.target, next = el.value, pos = el.selectionStart ?? next.length;
+  const pd = onlyDigits(prev), nd = onlyDigits(next);
+  if (next.length < String(fmtDoc(prev)).length && nd === pd && pd.length) {
+    const before = onlyDigits(next.slice(0, pos)).length;
+    const cut = Math.max(0, before - 1);
+    return pd.slice(0, cut) + pd.slice(cut + 1);
+  }
+  return nd.slice(0, 14);
+}

@@ -200,6 +200,8 @@ function FunnelView({ ctx }) {
   // "Perdido" e "Perdidos", "Lead novo" e "Leads novos" viram a mesma coluna
   const colKey = (x) => normName(x).split(/\s+/).map((w) => (w.length > 3 ? w.replace(/s$/, "") : w)).join(" ");
   const load = () => (all ? crm.leads() : pipelineId ? crm.leads({ pipelineId }) : Promise.resolve([])).then(setLeads).catch(() => setLeads([]));
+  const loadRef = useRef(); loadRef.current = load;
+  useEffect(() => { const h = () => loadRef.current?.(); window.addEventListener("helora:crm-changed", h); return () => window.removeEventListener("helora:crm-changed", h); }, []);
   const deletePipeline = async () => {
     const n = (leads || []).length;
     if (!(await askConfirm(`Apagar o funil "${pipeline.name}"?${n ? `\n\n${n} lead(s) deste funil também serão apagados.` : ""}\nEssa ação não pode ser desfeita.`, { okText: "Apagar funil", danger: true }))) return;
@@ -1141,6 +1143,8 @@ function ContactsView({ ctx }) {
   const [open, setOpen] = useState(null);
   const [importing, setImporting] = useState(false);
   const load = () => crm.leads(search ? { search } : {}).then(setLeads).catch(() => setLeads([]));
+  const loadRef = useRef(); loadRef.current = load;
+  useEffect(() => { const h = () => loadRef.current?.(); window.addEventListener("helora:crm-changed", h); return () => window.removeEventListener("helora:crm-changed", h); }, []);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
   const tagById = useMemo(() => new Map(tags.map((t) => [t.id, t])), [tags]);
   const stageName = (l) => pipelines.find((p) => p.id === l.pipelineId)?.stages?.find((s) => s.id === l.stage)?.name || l.stage;

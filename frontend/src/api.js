@@ -413,6 +413,8 @@ export const getAccountTabsApi = () => api.get("/account/tabs").then((r) => r.da
 export const setAgentTabsApi = (tabs) => api.put("/account/agent-tabs", { tabs }).then((r) => r.data);
 
 // ---- V6: CRM ----
+/** Avisa as telas do CRM que algo mudou, para atualizarem sozinhas. */
+export const crmChanged = () => { try { window.dispatchEvent(new Event("helora:crm-changed")); } catch {} };
 export const crm = {
   pipelines: () => api.get("/crm/pipelines").then((r) => r.data),
   createPipeline: (d) => api.post("/crm/pipelines", d).then((r) => r.data),
@@ -435,7 +437,7 @@ export const crm = {
   deletePolicy: (id) => api.delete(`/crm/policies/${id}`),
   setInstallmentPaid: (id, paid) => api.patch(`/crm/installments/${id}`, { paid }).then((r) => r.data),
   client: (leadId) => api.get(`/crm/client/${leadId}`).then((r) => r.data),
-  createLead: (d) => api.post("/crm/leads", d).then((r) => r.data),
+  createLead: (d) => api.post("/crm/leads", d).then((r) => { crmChanged(); return r.data; }),
   updateLead: (id, d) => api.patch(`/crm/leads/${id}`, d).then((r) => r.data),
   deleteLead: (id) => api.delete(`/crm/leads/${id}`),
   importLeads: (d) => api.post("/crm/leads/import", d).then((r) => r.data),
