@@ -142,7 +142,7 @@ h3 {
 }
 
 .nav-sidebar-logo-img {
-  height: 26px;
+  height: 20px;
   width: auto;
   max-width: 172px;
   object-fit: contain;
@@ -150,7 +150,7 @@ h3 {
 }
 
 .nav-sidebar.collapsed .nav-sidebar-logo-img {
-  height: 24px;
+  height: 32px;
   max-width: 44px;
 }
 

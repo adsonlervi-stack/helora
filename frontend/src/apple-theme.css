@@ -829,7 +829,7 @@ input, select, textarea { font-family: var(--font-body); }
 .login2 { display: grid; grid-template-columns: minmax(380px, 1fr) 1.15fr; min-height: 100dvh; background: #fff; }
 .login2-left { display: flex; align-items: center; justify-content: center; padding: 40px 24px; background: #fff; }
 .login2-form { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; animation: msgMenuIn .4s ease-out; }
-.login2-logo { height: 38px; width: auto; align-self: flex-start; margin-bottom: 18px; }
+.login2-logo { height: 28px; width: auto; align-self: flex-start; margin-bottom: 18px; }
 .login2-form h1 { margin: 0; font-size: 30px; letter-spacing: -0.6px; color: #1d1d1f; }
 .login2-sub { margin: 0 0 10px; color: #6e6e73; font-size: 15px; line-height: 1.45; }
 .login2-submit {
