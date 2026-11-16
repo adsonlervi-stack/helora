@@ -80,7 +80,7 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
       <div className="nav-sidebar-brand">
         <img
           className="nav-sidebar-logo-img"
-          src={collapsed ? "/brand/helora-icon.png" : "/brand/helora-wordmark.png"}
+          src={collapsed ? (dark ? "/brand/helora-icon-dark.png" : "/brand/helora-icon.png") : "/brand/helora-wordmark.png"}
           alt="Helora"
         />
         {!collapsed && <div className="nav-sidebar-brand-account">{profile?.accountName || "Sua conta"}</div>}
