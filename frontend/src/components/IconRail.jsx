@@ -79,7 +79,7 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
       title="Clique duas vezes para recolher/expandir o menu"
     >
       <div className="nav-sidebar-brand">
-        {collapsed ? <HeloraMascot size={34} /> : <img className="nav-sidebar-logo-img" src="/brand/helora-wordmark.png" alt="Helora" />}
+        {collapsed ? <HeloraMascot size={34} dark={dark} /> : <img className="nav-sidebar-logo-img" src="/brand/helora-wordmark.png" alt="Helora" />}
         {!collapsed && <div className="nav-sidebar-brand-account">{profile?.accountName || "Sua conta"}</div>}
       </div>
 

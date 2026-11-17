@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /** Mascote Helora: bola branca com olhos que piscam e seguem o mouse. */
-export default function HeloraMascot({ size = 32, tile = false }) {
+export default function HeloraMascot({ size = 32, tile = false, dark = false }) {
   const ref = useRef(null);
   const [look, setLook] = useState({ x: 0, y: 0 });
   const [blink, setBlink] = useState(false);
@@ -33,13 +33,14 @@ export default function HeloraMascot({ size = 32, tile = false }) {
       <defs>
         <linearGradient id="hmT" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stopColor="#1b7cff" /><stop offset=".55" stopColor="#0050c8" /><stop offset="1" stopColor="#0a2a8a" /></linearGradient>
         <radialGradient id="hmB" cx=".35" cy=".28" r=".85"><stop offset="0" stopColor="#fff" /><stop offset=".7" stopColor="#eef3fb" /><stop offset="1" stopColor="#cfdaeb" /></radialGradient>
+        <radialGradient id="hmG" cx=".32" cy=".25" r=".95"><stop offset="0" stopColor="#4a9bff" /><stop offset=".45" stopColor="#1b7cff" /><stop offset=".8" stopColor="#0050c8" /><stop offset="1" stopColor="#0a2a8a" /></radialGradient>
       </defs>
       {tile && <rect width="200" height="200" rx="48" fill="url(#hmT)" />}
-      <circle cx="100" cy="100" r={tile ? 66 : 90} fill="url(#hmB)" stroke="#c9d6ea" strokeWidth="5" />
+      <circle cx="100" cy="100" r={tile ? 66 : 90} fill={dark ? "url(#hmB)" : "url(#hmG)"} stroke={dark ? "#c9d6ea" : "none"} strokeWidth="5" />
       <g style={{ transform: `translate(${look.x}px, ${look.y}px)`, transition: "transform .25s ease-out" }}>
         <g style={{ transformOrigin: "100px 94px", transform: `scaleY(${sy})`, transition: "transform .08s" }}>
-          <rect x="76" y="78" width="14" height="32" rx="7" fill="#101820" />
-          <rect x="110" y="78" width="14" height="32" rx="7" fill="#101820" />
+          <rect x="76" y="78" width="14" height="32" rx="7" fill={dark ? "#101820" : "#fff"} />
+          <rect x="110" y="78" width="14" height="32" rx="7" fill={dark ? "#101820" : "#fff"} />
         </g>
       </g>
     </svg>
