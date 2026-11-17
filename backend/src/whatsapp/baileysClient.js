@@ -77,7 +77,7 @@ async function groupSubject(sock, jid) {
 }
 import { handleIncoming } from "../bot/engine.js";
 import { uploadMedia } from "../storage.js";
-import { restoreSession, scheduleBackup, deleteSessionBackup, hasBackup } from "./sessionBackup.js";
+import { restoreSession, scheduleBackup, deleteSessionBackup, hasBackup, claimSession, ownsSession, flushBackup } from "./sessionBackup.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // No Railway, aponte SESSIONS_DIR pro volume persistente (ex: /data/sessions).
@@ -92,6 +92,22 @@ const hasSavedSession = (channelId) => fs.existsSync(path.join(sessionFolder(cha
 // ter vários números de WhatsApp).
 // channelId -> { sock, status, qr, pairingCode, phone, accountId, retries, stopped }
 const connections = new Map();
+let shuttingDown = false;
+// Ao desligar (deploy novo), solta os números na hora e grava a sessão, para o processo novo assumir limpo
+async function shutdown(sig) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[WhatsApp] ${sig}: soltando ${connections.size} número(s) para o novo servidor.`);
+  await Promise.all([...connections.entries()].map(async ([id, c]) => {
+    c.stopped = true;
+    clearTimeout(c.reconnectTimer);
+    await flushBackup(id, sessionFolder(id));
+    try { c.sock?.end(undefined); } catch {}
+  }));
+  setTimeout(() => process.exit(0), 1500);
+}
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => shutdown("SIGINT"));
 
 const MEDIA_TYPE_MAP = {
   imageMessage: "image",
@@ -517,6 +533,8 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 
   // Disco do Railway some a cada deploy: traz a sessão de volta do banco
   await restoreSession(channelId, sessionFolder(channelId)).catch(() => {});
+  // Este processo passa a ser o dono do número (o antigo, se ainda estiver vivo, se retira)
+  await claimSession(channelId).catch(() => {});
   const { state, saveCreds: saveCredsDisk } = await useMultiFileAuthState(sessionFolder(channelId));
   const backup = () => scheduleBackup(channelId, sessionFolder(channelId));
   const saveCreds = async () => { await saveCredsDisk(); backup(); };
@@ -647,6 +665,16 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
     if (connection === "close") {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       conn.qr = null;
+
+      // 0) Outro processo do servidor (deploy novo) assumiu este número: sai de cena sem
+      //    reconectar, sem apagar nada e sem registrar queda. Evita o "pingue-pongue" que derrubava a sessão.
+      if (shuttingDown || !(await ownsSession(channelId).catch(() => true))) {
+        console.log(`[WhatsApp] Dispositivo ${channelId}: outro processo assumiu (código ${statusCode ?? "?"}). Este se retira.`);
+        conn.stopped = true;
+        clearTimeout(conn.reconnectTimer);
+        if (connections.get(channelId) === conn) connections.delete(channelId);
+        return;
+      }
 
       // 1) Desconectado pelo celular: sessão inválida. Limpa pra que o
       //    próximo "Conectar" gere um QR novo sem ninguém mexer no servidor.

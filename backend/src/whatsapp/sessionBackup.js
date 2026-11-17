@@ -10,6 +10,24 @@ const TABLE = "wa_sessions";
 const lastHash = new Map(); // channelId/file -> hash já salvo
 const timers = new Map();
 let tableOk = true;
+// Cada processo do servidor tem um id. Durante um deploy o Railway deixa o processo antigo e o novo
+// rodando juntos por alguns segundos; os dois abrindo o mesmo número derrubam a sessão (erro 440)
+// e o antigo podia gravar chaves velhas por cima das novas. O "dono" da sessão fica no banco.
+export const INSTANCE_ID = `${process.env.RAILWAY_DEPLOYMENT_ID || "local"}-${process.pid}-${Date.now()}`;
+const OWNER_FILE = "__owner";
+export async function claimSession(channelId) {
+  if (!tableOk) return;
+  await supabase.from(TABLE).upsert({ channel_id: channelId, file: OWNER_FILE, data: INSTANCE_ID, updated_at: new Date().toISOString() }, { onConflict: "channel_id,file" }).then(() => {}, () => {});
+}
+export async function sessionOwner(channelId) {
+  if (!tableOk) return null;
+  const { data } = await supabase.from(TABLE).select("data").eq("channel_id", channelId).eq("file", OWNER_FILE).maybeSingle();
+  return data?.data || null;
+}
+export async function ownsSession(channelId) {
+  const o = await sessionOwner(channelId).catch(() => null);
+  return !o || o === INSTANCE_ID;
+}
 
 const hash = (s) => crypto.createHash("sha1").update(s).digest("hex");
 
@@ -29,19 +47,22 @@ export async function restoreSession(channelId, folder) {
     data.push(...(rows || []));
     if (!rows || rows.length < 1000) break;
   }
-  if (!data.length || !data.some((r) => r.file === "creds.json")) return false;
+  const files = data.filter((r) => r.file !== OWNER_FILE);
+  if (!files.length || !files.some((r) => r.file === "creds.json")) return false;
   fs.mkdirSync(folder, { recursive: true });
-  for (const r of data) {
+  for (const r of files) {
     const safe = path.basename(r.file);
     fs.writeFileSync(path.join(folder, safe), r.data);
     lastHash.set(`${channelId}/${safe}`, hash(r.data));
   }
-  console.log(`[WhatsApp] Sessão de ${channelId} restaurada do banco (${data.length} arquivos).`);
+  console.log(`[WhatsApp] Sessão de ${channelId} restaurada do banco (${files.length} arquivos).`);
   return true;
 }
 
 async function backupNow(channelId, folder) {
   if (!tableOk || !fs.existsSync(folder)) return;
+  // Outro processo assumiu este número: não grava por cima da sessão dele
+  if (!(await ownsSession(channelId))) return;
   const rows = [];
   for (const file of fs.readdirSync(folder)) {
     if (!file.endsWith(".json")) continue;
@@ -84,4 +105,10 @@ export async function hasBackup(channelId) {
   if (!tableOk) return false;
   const { data } = await supabase.from(TABLE).select("file").eq("channel_id", channelId).eq("file", "creds.json").limit(1);
   return !!data?.length;
+}
+
+/** Grava agora (usado ao desligar o servidor). */
+export async function flushBackup(channelId, folder) {
+  clearTimeout(timers.get(channelId)); timers.delete(channelId);
+  await backupNow(channelId, folder).catch(() => {});
 }
