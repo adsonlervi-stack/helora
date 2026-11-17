@@ -1,3 +1,4 @@
+import HeloraMascot from "./HeloraMascot.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { HelpCircle, LogOut, Camera, UserRound, Moon, Sun } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
@@ -78,11 +79,7 @@ export default function IconRail({ items, section, onChange, unreadTotal, profil
       title="Clique duas vezes para recolher/expandir o menu"
     >
       <div className="nav-sidebar-brand">
-        <img
-          className="nav-sidebar-logo-img"
-          src={collapsed ? (dark ? "/brand/helora-icon-dark.png" : "/brand/helora-icon.png") : "/brand/helora-wordmark.png"}
-          alt="Helora"
-        />
+        {collapsed ? <HeloraMascot size={34} /> : <img className="nav-sidebar-logo-img" src="/brand/helora-wordmark.png" alt="Helora" />}
         {!collapsed && <div className="nav-sidebar-brand-account">{profile?.accountName || "Sua conta"}</div>}
       </div>
 

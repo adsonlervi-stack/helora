@@ -5,6 +5,7 @@ import "./styles.css";
 import "./apple-theme.css";
 import "./dialogs.js";
 import "./selectMenu.js";
+import "./faviconBlink.js";
 // Aviso discreto enquanto o servidor volta
 { let el; window.addEventListener("helora:reconnecting", (e) => {
   if (e.detail) { if (!el) { el = document.createElement("div"); el.className = "hl-reconnect"; el.innerHTML = "<span></span>Reconectando à Helora…"; document.body.appendChild(el); } }
