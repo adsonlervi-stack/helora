@@ -553,7 +553,10 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
     browser: wantsFull ? Browsers.macOS("Desktop") : ["Helora", "Chrome", "1.0.0"],
     syncFullHistory: wantsFull,
     shouldSyncHistoryMessage: () => true,
-    markOnlineOnConnect: false
+    markOnlineOnConnect: false,
+    // Sinal de vida mais frequente: o WhatsApp encerra menos a conexão de aparelhos vinculados
+    keepAliveIntervalMs: 15000,
+    connectTimeoutMs: 60000
   });
 
   const conn = {
@@ -571,7 +574,8 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
     reconnectTimer: null
   };
   connections.set(channelId, conn);
-  await publishStatus(channelId);
+  // Reconexão automática de um número que já estava ligado: não pisca "conectando" na tela
+  if (!everOpened) await publishStatus(channelId);
 
   sock.ev.on("creds.update", saveCreds);
 
@@ -702,14 +706,27 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
 
       // 3) Queda de rede/reinício: reconecta sozinho, com espera crescente.
       const nextRetries = conn.retries + 1;
+      // Quedas comuns (conexão encerrada 428, fora do ar 503, sem resposta 408): tenta de novo na hora
+      const quick = [428, 503, 408, 500, undefined].includes(statusCode) && conn.retries < 3;
       const delay = statusCode === DisconnectReason.restartRequired ? 0
         : statusCode === DisconnectReason.connectionReplaced ? 45000
+        : quick ? 800
         : Math.min(30000, 1000 * 2 ** conn.retries);
+      // Não mostra "conectando" nas quedas que se resolvem sozinhas em segundos:
+      // só avisa a tela se ainda não voltou depois de 20s.
       conn.status = "connecting";
-      await publishStatus(channelId);
+      const silentConn = conn;
+      setTimeout(() => {
+        const cur = connections.get(channelId);
+        const back = cur?.status === "connected";
+        if (!back) {
+          if (cur && !cur.stopped) publishStatus(channelId).catch(() => {});
+          // Só registra como queda quando não voltou sozinho em 20s
+          if (silentConn.retries === 0) logChannelDrop({ accountId, channelId, code: statusCode });
+        }
+      }, 20000);
       console.log(`[WhatsApp] Dispositivo ${channelId}: caiu (código ${statusCode}). Reconectando em ${delay}ms.`);
       // Registra só a 1ª queda de uma sequência; se não voltar em 5 tentativas, avisa os donos
-      if (conn.retries === 0) logChannelDrop({ accountId, channelId, code: statusCode });
       if (nextRetries === 6) logChannelDrop({ accountId, channelId, code: statusCode, critical: true });
       conn.reconnectTimer = setTimeout(() => {
         if (conn.stopped) return;

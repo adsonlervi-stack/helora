@@ -1,3 +1,4 @@
+import HeloraMascot from "./HeloraMascot.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Sparkles, Send, Image as ImageIcon, Palette, Workflow, Copy, Plus, Trash2, Bot, Brain, FileText, Link2, Upload, RefreshCw,
@@ -20,7 +21,7 @@ export default function IaHeloraPage({ isManager, onGo }) {
   return (
     <div className="page ih-page">
       <div className="ih-head">
-        <div className="ih-title"><span className="ih-orb"><Sparkles size={20} /></span><div><h2>Helora IA</h2><p>Cria para a sua empresa, atende os clientes e aprende com o que você ensina.</p></div></div>
+        <div className="ih-title"><span className="ih-orb mascot"><HeloraMascot size={40} /></span><div><h2>Helora IA</h2><p>Cria para a sua empresa, atende os clientes e aprende com o que você ensina.</p></div></div>
         <div className="ih-tabs">
           {[["criar", "Criar", Sparkles], ["cerebro", "Cérebro", Brain]].map(([k, l, I]) => (
             <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}><I size={15} /> {l}</button>
@@ -153,7 +154,7 @@ function Studio({ canva, isManager, status }) {
         <div className="ih-msgs">
           {!msgs.length && (
             <div className="ih-empty">
-              <span className="ih-orb big"><Sparkles size={28} /></span>
+              <span className="ih-orb big mascot"><HeloraMascot size={72} /></span>
               <h3>O que vamos criar hoje?</h3>
               <p>Textos, posts, imagens, artes e fluxos para a sua empresa.</p>
               <div className="ih-ideas">{IDEAS.map((i) => <button key={i} onClick={() => send(i)}>{i}</button>)}</div>
@@ -161,7 +162,7 @@ function Studio({ canva, isManager, status }) {
           )}
           {msgs.map((m, i) => (
             <div key={i} className={`ih-msg ${m.role} ${m.kind || ""}`}>
-              {m.role === "assistant" && <span className="ih-av"><Sparkles size={14} /></span>}
+              {m.role === "assistant" && <span className="ih-av mascot"><HeloraMascot size={26} /></span>}
               <div className="ih-bubble">
                 <div className="ih-text">{renderText(m.content)}</div>
                 {!!m.sources?.length && <SourceCards list={m.sources} />}
@@ -177,7 +178,7 @@ function Studio({ canva, isManager, status }) {
               </div>
             </div>
           ))}
-          {busy && <div className="ih-msg assistant"><span className="ih-av"><Sparkles size={14} /></span><div className="ih-bubble ih-typing">{busy === "image" ? "Gerando a imagem…" : busy === "canva" ? "Criando no Canva…" : busy === "flow" ? "Montando o fluxo…" : "Pensando…"}<span className="dots"><i /><i /><i /></span></div></div>}
+          {busy && <div className="ih-msg assistant"><span className="ih-av mascot"><HeloraMascot size={26} /></span><div className="ih-bubble ih-typing">{busy === "image" ? "Gerando a imagem…" : busy === "canva" ? "Criando no Canva…" : busy === "flow" ? "Montando o fluxo…" : "Pensando…"}<span className="dots"><i /><i /><i /></span></div></div>}
           <div ref={endRef} />
         </div>
         <div className="ih-composer">

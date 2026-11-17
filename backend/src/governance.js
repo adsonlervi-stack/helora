@@ -206,7 +206,7 @@ export async function logChannelDrop({ accountId, channelId, code, critical = fa
       await sendMail({
         to: u.user.email, name: o.name || "", label: "WhatsApp", subject: "Seu WhatsApp foi desconectado do Helora",
         title: "O WhatsApp da sua empresa desconectou",
-        message: `O número "${ch?.name || "WhatsApp"}" foi desconectado (${dropReason(code)}). Enquanto isso, as mensagens não chegam no Helora.\n\nPara voltar, entre em Canais e leia o QR Code de novo.`,
+        message: `O número "${ch?.name || "WhatsApp"}" foi desconectado (${dropReason(code)}). Enquanto isso, as mensagens não chegam no Helora.\n\nPara voltar, entre em Canais › Conectar. Longe do computador? Abra o Helora no celular, escolha \"Conectar com código\" e digite o código no WhatsApp em Dispositivos conectados › Conectar com número de telefone.`,
         buttonText: "Reconectar agora", buttonLink: `${appUrl()}/`, note: "Se foi você que desconectou pelo celular, pode ignorar."
       }).catch(() => {});
     }
