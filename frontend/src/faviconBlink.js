@@ -1,11 +1,12 @@
-// Favicon do mascote Helora: bola no degradê com olhos brancos; pisca e olha para os lados. No Safari fica parado.
+// Favicon do mascote Helora no sistema: bola branca com olhos pretos; pisca e olha para os lados. No Safari fica parado.
 (function () {
   function draw(dx, closed) {
     var c = document.createElement("canvas"); c.width = c.height = 64;
     var x = c.getContext("2d");
-    var g = x.createRadialGradient(20, 16, 2, 32, 32, 34); g.addColorStop(0, "#4a9bff"); g.addColorStop(.45, "#1b7cff"); g.addColorStop(.8, "#0050c8"); g.addColorStop(1, "#0a2a8a");
-    x.fillStyle = g; x.beginPath(); x.arc(32, 32, 30, 0, Math.PI * 2); x.fill();
-    x.fillStyle = "#fff";
+    var g = x.createRadialGradient(22, 18, 3, 32, 32, 32); g.addColorStop(0, "#ffffff"); g.addColorStop(.75, "#eef3fb"); g.addColorStop(1, "#c9d6ea");
+    x.fillStyle = g; x.beginPath(); x.arc(32, 32, 29, 0, Math.PI * 2); x.fill();
+    x.lineWidth = 2.5; x.strokeStyle = "#b9c7dd"; x.stroke();
+    x.fillStyle = "#101820";
     var h = closed ? 2.5 : 16, y = closed ? 27 : 19;
     x.beginPath(); x.roundRect(21 + dx, y, 8, h, 4); x.roundRect(35 + dx, y, 8, h, 4); x.fill();
     return c.toDataURL("image/png");
