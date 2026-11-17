@@ -1,23 +1,35 @@
-// Favicon do mascote Helora piscando (Chrome, Edge, Firefox). No Safari fica parado.
-function draw(closed) {
-  const c = document.createElement("canvas"); c.width = c.height = 64;
-  const x = c.getContext("2d"), s = 64 / 200;
-  const g = x.createLinearGradient(0, 0, 64, 64); g.addColorStop(0, "#0071e3"); g.addColorStop(1, "#5ac8fa");
-  x.fillStyle = g; x.beginPath(); x.roundRect(0, 0, 64, 64, 48 * s); x.fill();
-  x.fillStyle = "#fff"; x.beginPath(); x.arc(32, 32, 66 * s, 0, Math.PI * 2); x.fill();
-  x.fillStyle = "#101820";
-  const h = closed ? 4 * s : 32 * s, y = closed ? 92 * s : 78 * s;
-  x.beginPath(); x.roundRect(76 * s, y, 14 * s, h, 7 * s); x.roundRect(110 * s, y, 14 * s, h, 7 * s); x.fill();
-  return c.toDataURL("image/png");
-}
-try {
-  const open = draw(false), shut = draw(true);
-  let link = document.querySelector('link[rel="icon"]');
-  if (!link) { link = document.createElement("link"); link.rel = "icon"; document.head.appendChild(link); }
-  link.type = "image/png"; link.href = open;
-  const tick = () => {
-    if (!document.hidden) { link.href = shut; setTimeout(() => { link.href = open; }, 160); }
-    setTimeout(tick, 3000 + Math.random() * 3000);
-  };
-  setTimeout(tick, 2500);
-} catch {}
+// Favicon do mascote Helora (sem quadrado): pisca e olha para os lados. Chrome, Edge e Firefox. No Safari fica parado.
+(function () {
+  function draw(dx, closed) {
+    var c = document.createElement("canvas"); c.width = c.height = 64;
+    var x = c.getContext("2d");
+    var g = x.createRadialGradient(24, 20, 4, 32, 32, 32); g.addColorStop(0, "#ffffff"); g.addColorStop(.75, "#eef3fb"); g.addColorStop(1, "#c9d6ea");
+    x.fillStyle = g; x.beginPath(); x.arc(32, 32, 29, 0, Math.PI * 2); x.fill();
+    x.lineWidth = 2.5; x.strokeStyle = "#b9c7dd"; x.stroke();
+    x.fillStyle = "#101820";
+    var h = closed ? 2.5 : 15, y = closed ? 27 : 20;
+    x.beginPath(); x.roundRect(22 + dx, y, 7, h, 3.5); x.roundRect(35 + dx, y, 7, h, 3.5); x.fill();
+    return c.toDataURL("image/png");
+  }
+  try {
+    var F = { c: draw(0, false), b: draw(0, true), l: draw(-5, false), r: draw(5, false) };
+    var link = document.querySelector('link[rel="icon"]');
+    if (!link) { link = document.createElement("link"); link.rel = "icon"; document.head.appendChild(link); }
+    link.type = "image/png"; link.href = F.c;
+    var set = function (k) { link.href = F[k] };
+    var seq = [
+      [["b", 150], ["c", 0]],
+      [["l", 900], ["c", 300], ["r", 900], ["c", 0]],
+      [["b", 120], ["c", 160], ["b", 120], ["c", 0]],
+      [["r", 1100], ["b", 140], ["r", 600], ["c", 0]]
+    ];
+    var tick = function () {
+      if (!document.hidden) {
+        var s = seq[Math.floor(Math.random() * seq.length)], t = 0;
+        s.forEach(function (st) { setTimeout(function () { set(st[0]) }, t); t += st[1] });
+      }
+      setTimeout(tick, 2800 + Math.random() * 2800);
+    };
+    setTimeout(tick, 2000);
+  } catch (e) {}
+})();
