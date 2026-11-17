@@ -5,8 +5,7 @@ import {
   Plus, Search, Phone, MessageCircle, Bell, Timer, Briefcase, Clock, Upload, Download, Trash2, Pencil,
   ChevronLeft, ChevronRight, CalendarDays, Check, Tag, Package, Users, KanbanSquare, Settings2,
   Paperclip, CheckSquare, Zap, FileText, X, ExternalLink, ListChecks, MoreVertical, CheckCircle2, AlertTriangle, RefreshCw, SlidersHorizontal, GripVertical, ArrowUp, ArrowDown, MoreHorizontal, Mail
-  , AlertTriangle as AlertTriangleIc, CalendarCheck, ChevronDown, CircleDollarSign, Building2, User as UserIc
-} from "lucide-react";
+  , AlertTriangle as AlertTriangleIc, CalendarCheck, ChevronDown, CircleDollarSign, Building2, User as UserIc, Sigma } from "lucide-react";
 import { crm, getTeam, getDepartments, googleStatusApi, googleAuthUrlApi, googleDisconnectApi } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import CrmLeadPage, { notifyText } from "./CrmLeadPage.jsx";
@@ -129,6 +128,7 @@ function FunnelView({ ctx }) {
   const [flt, setFlt] = useState({ owner: "", tag: "", outcome: "", fields: {} });
   const [fltOpen, setFltOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [showSum, setShowSum] = useState(() => { try { return localStorage.getItem("helora:crm-sum") === "1"; } catch { return false; } });
   const [dueCount, setDueCount] = useState(0);
   useEffect(() => {
     const me = ctx.profile?.id;
@@ -397,6 +397,7 @@ function FunnelView({ ctx }) {
             isManager && !all && pipeline && [ListChecks, "Modelo de atividades", () => setCadOpen(true)],
             isManager && !all && pipeline && [SlidersHorizontal, `Campos${pipeline.fields?.length ? ` (${pipeline.fields.length})` : ""}`, () => setEditFields(true)],
             !all && [Upload, "Importar planilha", () => setImporting(true)],
+            [Sigma, showSum ? "Ocultar soma das colunas" : "Mostrar soma das colunas", () => setShowSum((v) => { try { localStorage.setItem("helora:crm-sum", v ? "0" : "1"); } catch {} return !v; })],
             [FileText, "Relatório em planilha (Excel)", () => setReporting(true)],
             isManager && [Download, "Baixar CRM (com anexos)", () => setExporting(true)],
             isManager && !all && pipeline && pipelines.length > 1 && [Trash2, "Apagar este funil", deletePipeline, true]
@@ -479,6 +480,7 @@ function FunnelView({ ctx }) {
                 <span className="crm-dot" style={{ background: st.color }} />
                 <span className="crm-col-title">
                   <strong title={st.name}>{st.name}</strong>
+                  {showSum && <small className="crm-col-sum">{brl(items.reduce((a, l) => a + (Number(l.value) || 0), 0))}</small>}
                 </span>
                 {(st.automations || []).some((a) => a.active !== false) && <span className="crm-auto-ind" title="Esta coluna tem automações"><Zap size={12} /></span>}
                 <span className="crm-count">{items.length}</span>
