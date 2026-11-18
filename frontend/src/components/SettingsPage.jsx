@@ -15,8 +15,9 @@ import {
   Smartphone,
   Pencil,
   KeyRound,
-  Copy, Bell, ShieldCheck, History, CalendarClock, Plug, Eye, EyeOff, Search } from "lucide-react";
+  Copy, Bell, ShieldCheck, History, CalendarClock, Plug, Target, Eye, EyeOff, Search } from "lucide-react";
 import ScheduledMessagesTab from "./ScheduledMessagesTab.jsx";
+import { GoalsTab } from "./Goals.jsx";
 import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook } from "../api.js";
 import { AccessLogList } from "./AdminPage.jsx";
 import { crm as crmApi } from "../api.js";
@@ -86,6 +87,7 @@ const CARDS = [
     icon: MessagesSquare
   },
   { key: "perms", label: "Abas do atendente", desc: "O que o atendente pode ver no menu", icon: ShieldCheck },
+  { key: "goals", label: "Metas", desc: "Metas de vendas em valor e quantidade, medidas pelo CRM", icon: Target, ownerOnly: true },
   { key: "access", label: "Log de acessos", desc: "Quem entrou no sistema, quando e de onde (IP)", icon: History },
   { key: "labels", label: "Etiquetas", desc: "Categorize as conversas por cor", icon: Tag },
   { key: "departments", label: "Setores", desc: "Times/filas de atendimento", icon: Building2 },
@@ -164,6 +166,7 @@ export default function SettingsPage({ onGoToChannels, canManage = false, apiEna
       {tab === "notify" && <NotifyTab />}
       {tab === "labels" && <LabelsTab />}
       {tab === "perms" && canManage && <AgentTabsTab />}
+      {tab === "goals" && canManage && <GoalsTab />}
       {tab === "access" && canManage && <AccessTab />}
       {tab === "departments" && <DepartmentsTab />}
       {tab === "team" && <TeamTab canManage={canManage} />}

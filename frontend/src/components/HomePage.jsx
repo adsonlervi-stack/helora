@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { PlusCircle, UserPlus, MessageCirclePlus, Upload, Briefcase, MessageCircle, RefreshCw, Plus, Megaphone, HelpCircle, BookOpen, AlertTriangle } from "lucide-react";
 import Avatar from "./Avatar.jsx";
+import { GoalsWidget } from "./Goals.jsx";
 import { crm, getAnnouncements } from "../api.js";
 
 function greeting() {
@@ -75,6 +76,8 @@ export default function HomePage({ profile, conversations = [], onNavigate, onOp
           </button>
         ))}
       </div>
+
+      <GoalsWidget />
 
       <div className="home2-cols">
         <section className="home2-box">

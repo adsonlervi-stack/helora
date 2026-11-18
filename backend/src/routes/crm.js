@@ -1679,4 +1679,106 @@ export async function runPolicyJobs() {
   } catch (e) { console.warn("[apólices] rotina:", e.message); }
 }
 
+// ---------------------------------------------------------------- Metas de vendas
+// Guardadas em account_integrations (provider "crm_goals"): { goals: [{ id, name, period, start, end, scope, ownerId, pipelineId, tagId, targetValue, targetCount, entries: [] }] }
+const goalPeriod = (g, now = new Date()) => {
+  const y = now.getFullYear(), m = now.getMonth();
+  if (g.period === "custom" && g.start && g.end) return [new Date(g.start + "T00:00:00"), new Date(g.end + "T23:59:59.999")];
+  if (g.period === "quarter") { const q = Math.floor(m / 3) * 3; return [new Date(y, q, 1), new Date(y, q + 3, 0, 23, 59, 59, 999)]; }
+  if (g.period === "year") return [new Date(y, 0, 1), new Date(y, 11, 31, 23, 59, 59, 999)];
+  return [new Date(y, m, 1), new Date(y, m + 1, 0, 23, 59, 59, 999)];
+};
+const readGoals = async (accountId) => (await getIntegration(accountId, "crm_goals"))?.config?.goals || [];
+const writeGoals = (accountId, goals) => saveIntegration(accountId, "crm_goals", { goals });
+const cleanGoal = (b, old = {}) => ({
+  id: old.id || randomUUID(),
+  name: String(b.name ?? old.name ?? "Meta").slice(0, 80),
+  period: ["month", "quarter", "year", "custom"].includes(b.period) ? b.period : old.period || "month",
+  start: b.start ?? old.start ?? null, end: b.end ?? old.end ?? null,
+  ownerId: b.ownerId ?? old.ownerId ?? null,
+  pipelineId: b.pipelineId ?? old.pipelineId ?? null,
+  tagId: b.tagId ?? old.tagId ?? null,
+  targetValue: Math.max(0, Number(b.targetValue ?? old.targetValue ?? 0) || 0),
+  targetCount: Math.max(0, parseInt(b.targetCount ?? old.targetCount ?? 0) || 0),
+  entries: old.entries || []
+});
+
+router.get("/goals", async (req, res) => {
+  try { res.json(await readGoals(req.accountId)); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post("/goals", async (req, res) => {
+  if (!isManager(req)) return res.status(403).json({ error: "Só o gestor cria metas." });
+  try { const goals = await readGoals(req.accountId); const g = cleanGoal(req.body || {}); goals.push(g); await writeGoals(req.accountId, goals); res.json(g); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.patch("/goals/:id", async (req, res) => {
+  if (!isManager(req)) return res.status(403).json({ error: "Só o gestor edita metas." });
+  try {
+    const goals = await readGoals(req.accountId); const i = goals.findIndex((g) => g.id === req.params.id);
+    if (i < 0) return res.status(404).json({ error: "Meta não encontrada." });
+    goals[i] = cleanGoal(req.body || {}, goals[i]); await writeGoals(req.accountId, goals); res.json(goals[i]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.delete("/goals/:id", async (req, res) => {
+  if (!isManager(req)) return res.status(403).json({ error: "Só o gestor exclui metas." });
+  try { await writeGoals(req.accountId, (await readGoals(req.accountId)).filter((g) => g.id !== req.params.id)); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Lançamento manual (venda fora do CRM): { value, count, note, date }
+router.post("/goals/:id/entries", async (req, res) => {
+  if (!isManager(req)) return res.status(403).json({ error: "Só o gestor lança resultados." });
+  try {
+    const goals = await readGoals(req.accountId); const g = goals.find((x) => x.id === req.params.id);
+    if (!g) return res.status(404).json({ error: "Meta não encontrada." });
+    const b = req.body || {};
+    const e = { id: randomUUID(), value: Number(b.value) || 0, count: parseInt(b.count) || 0, note: String(b.note || "").slice(0, 140), date: b.date || new Date().toISOString().slice(0, 10), by: req.userId };
+    g.entries = [...(g.entries || []), e]; await writeGoals(req.accountId, goals); res.json(e);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.delete("/goals/:id/entries/:entryId", async (req, res) => {
+  if (!isManager(req)) return res.status(403).json({ error: "Só o gestor remove lançamentos." });
+  try {
+    const goals = await readGoals(req.accountId); const g = goals.find((x) => x.id === req.params.id);
+    if (!g) return res.status(404).json({ error: "Meta não encontrada." });
+    g.entries = (g.entries || []).filter((e) => e.id !== req.params.entryId); await writeGoals(req.accountId, goals); res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+// Progresso: vendas ganhas no CRM (outcome = won, pela data do ganho) + lançamentos manuais.
+router.get("/goals/progress", async (req, res) => {
+  try {
+    const goals = await readGoals(req.accountId);
+    if (!goals.length) return res.json([]);
+    const now = new Date();
+    const ranges = goals.map((g) => goalPeriod(g, now));
+    const minStart = new Date(Math.min(...ranges.map((r) => r[0].getTime())));
+    // Metas da empresa contam as vendas de todos; por isso a consulta não filtra pelo dono aqui.
+    const won = [];
+    for (let from = 0; from < 50000; from += 1000) {
+      let q = supabase.from("crm_leads").select("id, value, outcome_at, owner_id, pipeline_id, tag_ids, owner:profiles!crm_leads_owner_id_fkey(name)")
+        .eq("account_id", req.accountId).eq("outcome", "won").gte("outcome_at", minStart.toISOString()).range(from, from + 999);
+      if (await hasArchiveCols()) q = q.is("deleted_at", null);
+      const { data, error } = await q; if (error) throw error;
+      won.push(...data); if (data.length < 1000) break;
+    }
+    const mine = !isManager(req);
+    const out = goals
+      .filter((g) => !mine || !g.ownerId || g.ownerId === req.userId)
+      .map((g) => {
+        const [s, e] = goalPeriod(g, now);
+        const rows = won.filter((l) => { const t = new Date(l.outcome_at); return t >= s && t <= e && (!g.ownerId || l.owner_id === g.ownerId) && (!g.pipelineId || l.pipeline_id === g.pipelineId) && (!g.tagId || (l.tag_ids || []).includes(g.tagId)); });
+        const ents = (g.entries || []).filter((x) => { const t = new Date(x.date + "T12:00:00"); return t >= s && t <= e; });
+        const value = rows.reduce((a, l) => a + (Number(l.value) || 0), 0) + ents.reduce((a, x) => a + x.value, 0);
+        const count = rows.length + ents.reduce((a, x) => a + x.count, 0);
+        const by = {};
+        for (const l of rows) { const k = l.owner_id || "none"; by[k] ||= { ownerId: l.owner_id, name: l.owner?.name || "Sem responsável", value: 0, count: 0 }; by[k].value += Number(l.value) || 0; by[k].count++; }
+        const total = e - s, elapsed = Math.min(total, Math.max(1, now - s)), f = total / elapsed;
+        return { ...g, entries: ents, start: s.toISOString(), end: e.toISOString(), value, count, wonCount: rows.length,
+          projectedValue: Math.round(value * f), projectedCount: Math.round(count * f), timePct: Math.round(elapsed / total * 100),
+          daysLeft: Math.max(0, Math.ceil((e - now) / 86400000)),
+          ranking: mine ? [] : Object.values(by).sort((a, b) => b.value - a.value) };
+      });
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 export default router;
