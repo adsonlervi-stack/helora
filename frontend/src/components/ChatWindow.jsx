@@ -14,6 +14,18 @@ import { waTemplates } from "../api.js";
 import Avatar from "./Avatar.jsx";
 import ClientPanel from "./ClientPanel.jsx";
 import TransferModal from "./TransferModal.jsx";
+
+// Separador de dia como no WhatsApp: Hoje, Ontem, dia da semana (até 6 dias) ou data.
+const dayKey = (t) => { if (!t) return null; const d = new Date(t); return isNaN(d) ? null : d.toDateString(); };
+function dayLabel(t) {
+  const d = new Date(t), now = new Date();
+  const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((start(now) - start(d)) / 86400000);
+  if (diff === 0) return "Hoje";
+  if (diff === 1) return "Ontem";
+  if (diff > 1 && diff < 7) { const w = d.toLocaleDateString("pt-BR", { weekday: "long" }); return w[0].toUpperCase() + w.slice(1); }
+  return d.toLocaleDateString("pt-BR", d.getFullYear() === now.getFullYear() ? { day: "2-digit", month: "long" } : { day: "2-digit", month: "2-digit", year: "numeric" });
+}
 import {
   getCannedResponses, getDepartments, getTeam, getConversationChannelStatus, sendTypingApi, getPresenceApi,
   getStickersApi, sendStickerApi, createScheduledMessageApi, getScheduledMessages, cancelScheduledMessageApi, getContactsPage
@@ -992,7 +1004,12 @@ export default function ChatWindow({
           <div className="message-list" ref={listRef} onScroll={onListScroll}>
             {hasMore && <div className="msg-older">Role para cima para ver mensagens anteriores</div>}
             {!hasMore && conversation.platform === "whatsapp" && <OlderFromWhatsApp conversationId={conversation.id} onLoaded={onReloadMessages} />}
-            {messages.map((m) => (
+            {messages.map((m, i) => {
+              const day = dayKey(m.timestamp || m.createdAt);
+              const prev = i > 0 ? dayKey(messages[i - 1].timestamp || messages[i - 1].createdAt) : null;
+              return (
+              <React.Fragment key={m.id}>
+              {day && day !== prev && <div className="msg-day-sep"><span>{dayLabel(m.timestamp || m.createdAt)}</span></div>}
               <MessageBubble
                 key={m.id}
                 message={m}
@@ -1005,7 +1022,9 @@ export default function ChatWindow({
                 onStartChat={onStartChat}
                 onButton={offline ? null : (b, msg) => onSend(b.text, signOn, quotedOf(msg))}
               />
-            ))}
+              </React.Fragment>
+              );
+            })}
             {clientTyping && (
               <div className="bubble-row in">
                 <div className="bubble in typing-bubble" title={clientTyping === "recording" ? "gravando áudio…" : "digitando…"}>

@@ -3882,3 +3882,8 @@ html[data-theme="dark"] .helora-mascot{filter:invert(1) hue-rotate(180deg)}
 .goals-empty { color: var(--text-muted, #8e8e93); font-size: 13px; }
 html[data-theme="dark"] .goal-card, html[data-theme="dark"] .goals-form input, html[data-theme="dark"] .goals-form select { border-color: rgba(255,255,255,.12); }
 html[data-theme="dark"] .goal-track b { background: rgba(255,255,255,.5); }
+
+/* Separador de dia nas conversas (Hoje / Ontem / data) */
+.msg-day-sep { display: flex; justify-content: center; margin: 12px 0 8px; position: sticky; top: 6px; z-index: 2; pointer-events: none; }
+.msg-day-sep span { font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 8px; background: var(--surface, #fff); color: var(--text-muted, #54656f); box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+html[data-theme="dark"] .msg-day-sep span { background: #1f2c33; color: #aebac1; }
