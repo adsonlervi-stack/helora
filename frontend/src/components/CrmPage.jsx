@@ -55,6 +55,14 @@ function DueBadge({ date }) {
   const cls = n < 0 ? "late" : n <= 15 ? "soon" : n <= 30 ? "near" : "ok";
   return <span className={`crm-due ${cls}`}>{n < 0 ? `Venceu há ${-n} dia${n === -1 ? "" : "s"}` : n === 0 ? "Vence hoje" : `Vence em ${n} dia${n === 1 ? "" : "s"}`}</span>;
 }
+// Valor que entra na soma da coluna: o valor do negócio; se estiver vazio, o primeiro campo de moeda preenchido no card (ex.: prêmio).
+const toNum = (v) => { if (v == null || v === "") return 0; if (typeof v === "number") return v; const t = String(v).replace(/[^\d,.-]/g, ""); const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t); return isNaN(n) ? 0 : n; };
+const leadAmount = (l, flds) => {
+  const v = toNum(l.value); if (v) return v;
+  const cur = (flds || []).filter((f) => f.type === "currency" && l.custom?.[f.id]);
+  const f = cur.find((x) => x.card) || cur[0];
+  return f ? toNum(l.custom[f.id]) : 0;
+};
 const initials = (n) => String(n || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 const toLocalInput = (d) => {
   const p = (n) => String(n).padStart(2, "0");
@@ -480,7 +488,7 @@ function FunnelView({ ctx }) {
                 <span className="crm-dot" style={{ background: st.color }} />
                 <span className="crm-col-title">
                   <strong title={st.name}>{st.name}</strong>
-                  {showSum && <small className="crm-col-sum">{brl(items.reduce((a, l) => a + (Number(l.value) || 0), 0))}</small>}
+                  {showSum && <small className="crm-col-sum">{brl(items.reduce((a, l) => a + leadAmount(l, fieldsOf(l)), 0))}</small>}
                 </span>
                 {(st.automations || []).some((a) => a.active !== false) && <span className="crm-auto-ind" title="Esta coluna tem automações"><Zap size={12} /></span>}
                 <span className="crm-count">{items.length}</span>
