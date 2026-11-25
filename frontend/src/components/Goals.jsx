@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Target, Plus, Trash2, Pencil, Trophy } from "lucide-react";
 import { crm, getTeam } from "../api.js";
 import { askConfirm } from "../dialogs.js";
+import { Sheet } from "./ui.jsx";
 
 const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const PERIODS = { month: "Mês atual", quarter: "Trimestre atual", year: "Ano atual", custom: "Personalizado" };
@@ -71,7 +72,18 @@ export function GoalsWidget() {
   );
 }
 
-const empty = { name: "", period: "month", start: "", end: "", ownerId: "", pipelineId: "", tagId: "", productId: "", targetValue: "", targetCount: "" };
+const many = (g, k) => (g[k + "s"]?.length ? g[k + "s"] : g[k] ? [g[k]] : []);
+
+function Pick({ label, empty, items, value = [], onChange, none }) {
+  return (
+    <div className="goals-prods">
+      <span>{label} <small>{value.length ? `${value.length} selecionado(s)` : empty}</small></span>
+      <div>{items.length ? items.map((p) => { const on = value.includes(p.id); return <button type="button" key={p.id} className={on ? "on" : ""} onClick={() => onChange(on ? value.filter((x) => x !== p.id) : [...value, p.id])}>{p.name}</button>; }) : <small>{none || "Nada cadastrado."}</small>}</div>
+    </div>
+  );
+}
+
+const empty = { name: "", period: "month", start: "", end: "", ownerIds: [], pipelineIds: [], tagIds: [], productIds: [], targetValue: "", targetCount: "" };
 
 /** Config > Metas */
 export function GoalsTab({ canManage = true }) {
@@ -95,7 +107,7 @@ export function GoalsTab({ canManage = true }) {
   const save = async () => {
     if (!form.name.trim()) return setErr("Dê um nome à meta.");
     if (!Number(form.targetValue) && !Number(form.targetCount)) return setErr("Informe a meta em valor, em quantidade ou nos dois.");
-    const body = { ...form, ownerId: form.ownerId || null, pipelineId: form.pipelineId || null, tagId: form.tagId || null, productId: form.productId || null };
+    const body = { ...form };
     try { form.id ? await crm.updateGoal(form.id, body) : await crm.createGoal(body); setForm(null); setErr(""); load(); } catch (e) { setErr(errText(e)); }
   };
   const remove = async (g) => { if (await askConfirm(`Excluir a meta "${g.name}"?`)) { await crm.deleteGoal(g.id); load(); } };
@@ -104,18 +116,22 @@ export function GoalsTab({ canManage = true }) {
   };
   const nameOf = (id) => team.find((m) => m.id === id)?.name;
   const filtersOf = (g) => {
-    const parts = [g.productId && (products.find((p) => p.id === g.productId)?.name || "Produto"), g.pipelineId && `Funil ${pipes.find((p) => p.id === g.pipelineId)?.name || ""}`, g.tagId && `Etiqueta ${tags.find((t) => t.id === g.tagId)?.name || ""}`].filter(Boolean);
-    return parts.length ? { text: "Conta só: " + parts.join(" · ") } : { none: true, text: "Sem filtro: conta todas as vendas ganhas" + (g.ownerId ? " do vendedor" : " da empresa") + ". Edite para escolher o produto." };
+    const names = (k, list) => many(g, k).map((id) => list.find((x) => x.id === id)?.name).filter(Boolean).join(", ");
+    const parts = [names("productId", products), many(g, "pipelineId").length && `Funil ${names("pipelineId", pipes)}`, many(g, "tagId").length && `Etiqueta ${names("tagId", tags)}`].filter(Boolean);
+    return parts.length ? { text: "Conta só: " + parts.join(" · ") } : { none: true, text: "Sem filtro: conta todas as vendas ganhas" + (many(g, "ownerId").length ? " do(s) vendedor(es)" : " da empresa") + ". Edite para escolher o produto." };
   };
 
   return (
     <div className="goals-tab">
       {canManage && <p className="goals-intro">O resultado é calculado sozinho a partir dos negócios <strong>ganhos</strong> no CRM (valor e quantidade, pela data em que foram ganhos). Use “Lançar resultado” só para vendas feitas fora do CRM.</p>}
       {err && <div className="admin-feedback error">{err}</div>}
-      {!form && canManage && <button className="goals-btn" onClick={() => { setErr(""); setForm({ ...empty }); }}><Plus size={15} /> Nova meta</button>}
+      {canManage && <button className="goals-btn" onClick={() => { setErr(""); setForm({ ...empty }); }}><Plus size={15} /> Nova meta</button>}
 
       {form && (
-        <div className="card goals-form">
+        <Sheet title={form.id ? "Editar meta" : "Nova meta"} onClose={() => setForm(null)} width={620}
+          footer={<div className="goals-actions"><button className="goals-btn ghost" onClick={() => setForm(null)}>Cancelar</button><button className="goals-btn" onClick={save}>Salvar</button></div>}>
+        <div className="goals-form">
+          {err && <div className="admin-feedback error">{err}</div>}
           <label>Nome<input value={form.name} onChange={set("name")} placeholder="Ex.: Vendas de novembro" /></label>
           <div className="goals-row">
             <label>Período<select value={form.period} onChange={set("period")}>{Object.entries(PERIODS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
@@ -125,40 +141,39 @@ export function GoalsTab({ canManage = true }) {
             <label>Meta em valor (R$)<input inputMode="decimal" value={form.targetValue} onChange={set("targetValue")} placeholder="100000" /></label>
             <label>Meta em quantidade<input inputMode="numeric" value={form.targetCount} onChange={set("targetCount")} placeholder="20" /></label>
           </div>
-          <div className="goals-row">
-            <label>Vendedor<select value={form.ownerId || ""} onChange={set("ownerId")}><option value="">Empresa toda</option>{team.map((m) => <option key={m.id} value={m.id}>{m.name || m.email}</option>)}</select></label>
-            <label>Funil<select value={form.pipelineId || ""} onChange={set("pipelineId")}><option value="">Todos</option>{pipes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-            <label>Produto / ramo<select value={form.productId || ""} onChange={set("productId")}><option value="">Todos</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-            <label>Etiqueta<select value={form.tagId || ""} onChange={set("tagId")}><option value="">Todas</option>{tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
-          </div>
-          <div className="goals-actions"><button className="goals-btn" onClick={save}>Salvar</button><button className="goals-btn ghost" onClick={() => setForm(null)}>Cancelar</button></div>
+          <Pick label="Vendedores" empty="nenhum = empresa toda" items={team.map((m) => ({ id: m.id, name: m.name || m.email }))} value={form.ownerIds} onChange={(v) => setForm({ ...form, ownerIds: v })} />
+          <Pick label="Funis" empty="nenhum = todos" items={pipes} value={form.pipelineIds} onChange={(v) => setForm({ ...form, pipelineIds: v })} />
+          <Pick label="Produtos / ramos" empty="nenhum = todos" items={products} value={form.productIds} onChange={(v) => setForm({ ...form, productIds: v })} none="Nenhum produto cadastrado no CRM." />
+          <Pick label="Etiquetas" empty="nenhuma = todas" items={tags} value={form.tagIds} onChange={(v) => setForm({ ...form, tagIds: v })} />
         </div>
+        </Sheet>
       )}
 
       {entry && (
-        <div className="card goals-form">
-          <strong>Lançar resultado em “{entry.goal.name}”</strong>
+        <Sheet title="Lançar resultado" subtitle={entry.goal.name} onClose={() => setEntry(null)} width={520}
+          footer={<div className="goals-actions"><button className="goals-btn ghost" onClick={() => setEntry(null)}>Cancelar</button><button className="goals-btn" onClick={addEntry}>Lançar</button></div>}>
+        <div className="goals-form">
           <div className="goals-row">
             <label>Valor (R$)<input inputMode="decimal" value={entry.value} onChange={(e) => setEntry({ ...entry, value: e.target.value })} /></label>
             <label>Quantidade<input inputMode="numeric" value={entry.count} onChange={(e) => setEntry({ ...entry, count: e.target.value })} /></label>
             <label>Data<input type="date" value={entry.date} onChange={(e) => setEntry({ ...entry, date: e.target.value })} /></label>
           </div>
           <label>Observação<input value={entry.note} onChange={(e) => setEntry({ ...entry, note: e.target.value })} placeholder="Ex.: venda no balcão" /></label>
-          <div className="goals-actions"><button className="goals-btn" onClick={addEntry}>Lançar</button><button className="goals-btn ghost" onClick={() => setEntry(null)}>Cancelar</button></div>
         </div>
+        </Sheet>
       )}
 
-      {progress.length === 0 && !form && <div className="goals-empty">Nenhuma meta ainda.</div>}
+      {progress.length === 0 && <div className="goals-empty">Nenhuma meta ainda.</div>}
       <div className="goal-grid">
         {progress.map((g) => (
           <div key={g.id}>
             <GoalCard g={g} filters={filtersOf(g)} />
             <div className="goal-meta">
-              {PERIODS[g.period]}{g.ownerId ? ` · ${nameOf(g.ownerId) || "Vendedor"}` : " · Empresa toda"}
+              {PERIODS[g.period]}{many(g, "ownerId").length ? ` · ${many(g, "ownerId").map((id) => nameOf(id) || "Vendedor").join(", ")}` : " · Empresa toda"}
               <span className="home2-sp" />
               {canManage && <>
               <button title="Lançar resultado" onClick={() => setEntry({ goal: g, value: "", count: "1", note: "", date: new Date().toISOString().slice(0, 10) })}><Plus size={14} /></button>
-              <button title="Editar" onClick={() => { const { id, name, period, ownerId, pipelineId, tagId, productId, targetValue, targetCount } = g; window.scrollTo({ top: 0, behavior: "smooth" }); setForm({ ...empty, id, name, period, ownerId: ownerId || "", pipelineId: pipelineId || "", tagId: tagId || "", productId: productId || "", targetValue, targetCount, start: g.period === "custom" ? g.start.slice(0, 10) : "", end: g.period === "custom" ? g.end.slice(0, 10) : "" }); }}><Pencil size={14} /></button>
+              <button title="Editar" onClick={() => { setErr(""); setForm({ ...empty, id: g.id, name: g.name, period: g.period, ownerIds: many(g, "ownerId"), pipelineIds: many(g, "pipelineId"), tagIds: many(g, "tagId"), productIds: many(g, "productId"), targetValue: g.targetValue, targetCount: g.targetCount, start: g.period === "custom" ? g.start.slice(0, 10) : "", end: g.period === "custom" ? g.end.slice(0, 10) : "" }); }}><Pencil size={14} /></button>
               <button title="Excluir" onClick={() => remove(g)}><Trash2 size={14} /></button>
               </>}
             </div>

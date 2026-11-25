@@ -1692,6 +1692,10 @@ const goalPeriod = (g, now = new Date()) => {
   if (g.period === "year") return [new Date(y, 0, 1), new Date(y, 11, 31, 23, 59, 59, 999)];
   return [new Date(y, m, 1), new Date(y, m + 1, 0, 23, 59, 59, 999)];
 };
+// Filtros com vários itens (vendedores, funis, etiquetas, produtos); aceita o formato antigo de um item só.
+const arr = (nv, nOne, ov, oOne) => Array.isArray(nv) ? nv.filter(Boolean).slice(0, 50) : nOne !== undefined ? (nOne ? [nOne] : []) : Array.isArray(ov) ? ov : oOne ? [oOne] : [];
+const many = (g, k) => (g[k + "s"]?.length ? g[k + "s"] : g[k] ? [g[k]] : []);
+const pids = (g) => g.productIds?.length ? g.productIds : g.productId ? [g.productId] : [];
 const readGoals = async (accountId) => (await getIntegration(accountId, "crm_goals"))?.config?.goals || [];
 const writeGoals = (accountId, goals) => saveIntegration(accountId, "crm_goals", { goals });
 const cleanGoal = (b, old = {}) => ({
@@ -1699,10 +1703,11 @@ const cleanGoal = (b, old = {}) => ({
   name: String(b.name ?? old.name ?? "Meta").slice(0, 80),
   period: ["month", "quarter", "year", "custom"].includes(b.period) ? b.period : old.period || "month",
   start: b.start ?? old.start ?? null, end: b.end ?? old.end ?? null,
-  ownerId: b.ownerId ?? old.ownerId ?? null,
-  pipelineId: b.pipelineId ?? old.pipelineId ?? null,
-  tagId: b.tagId ?? old.tagId ?? null,
-  productId: b.productId !== undefined ? b.productId || null : old.productId ?? null,
+  ownerIds: arr(b.ownerIds, b.ownerId, old.ownerIds, old.ownerId),
+  pipelineIds: arr(b.pipelineIds, b.pipelineId, old.pipelineIds, old.pipelineId),
+  tagIds: arr(b.tagIds, b.tagId, old.tagIds, old.tagId),
+  productIds: arr(b.productIds, b.productId, old.productIds, old.productId),
+  ownerId: null, pipelineId: null, tagId: null, productId: null,
   targetValue: Math.max(0, Number(b.targetValue ?? old.targetValue ?? 0) || 0),
   targetCount: Math.max(0, parseInt(b.targetCount ?? old.targetCount ?? 0) || 0),
   entries: old.entries || []
@@ -1776,14 +1781,14 @@ router.get("/goals/progress", async (req, res) => {
     }
     const mine = !isManager(req);
     const out = goals
-      .filter((g) => !mine || !g.ownerId || g.ownerId === req.userId)
+      .filter((g) => !mine || !many(g, "ownerId").length || many(g, "ownerId").includes(req.userId))
       .map((g) => {
         const [s, e] = goalPeriod(g, now);
-        const rows = won.filter((l) => { const t = new Date(l.outcome_at); return t >= s && t <= e && (!g.ownerId || l.owner_id === g.ownerId) && (!g.pipelineId || l.pipeline_id === g.pipelineId) && (!g.tagId || (l.tag_ids || []).includes(g.tagId)) && (!g.productId || (l.crm_lead_products || []).some((p) => p.product_id === g.productId)); })
+        const rows = won.filter((l) => { const t = new Date(l.outcome_at); return t >= s && t <= e && (!many(g, "ownerId").length || many(g, "ownerId").includes(l.owner_id)) && (!many(g, "pipelineId").length || many(g, "pipelineId").includes(l.pipeline_id)) && (!many(g, "tagId").length || (l.tag_ids || []).some((t) => many(g, "tagId").includes(t))) && (!pids(g).length || (l.crm_lead_products || []).some((p) => pids(g).includes(p.product_id))); })
           .map((l) => {
             // Meta de um produto/ramo: vale o que foi vendido daquele produto no negócio (ou o valor do negócio, se não tiver preço).
             let v = Number(l.value) || 0;
-            if (g.productId) { const pv = (l.crm_lead_products || []).filter((p) => p.product_id === g.productId).reduce((a, p) => a + (Number(p.price) || 0) * (Number(p.qty) || 1), 0); if (pv) v = pv; }
+            if (pids(g).length) { const pv = (l.crm_lead_products || []).filter((p) => pids(g).includes(p.product_id)).reduce((a, p) => a + (Number(p.price) || 0) * (Number(p.qty) || 1), 0); if (pv) v = pv; }
             return { ...l, value: v };
           });
         const ents = (g.entries || []).filter((x) => { const t = new Date(x.date + "T12:00:00"); return t >= s && t <= e; });
