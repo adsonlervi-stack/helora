@@ -1764,7 +1764,7 @@ router.get("/goals/progress", async (req, res) => {
     // Metas da empresa contam as vendas de todos; por isso a consulta não filtra pelo dono aqui.
     const won = [];
     for (let from = 0; from < 50000; from += 1000) {
-      let q = supabase.from("crm_leads").select("id, name, company, value, outcome_at, owner_id, pipeline_id, stage, tag_ids, owner:profiles!crm_leads_owner_id_fkey(name), crm_lead_products(qty, price, product_id)")
+      let q = supabase.from("crm_leads").select("id, name, company, value, custom, outcome_at, owner_id, pipeline_id, stage, tag_ids, owner:profiles!crm_leads_owner_id_fkey(name), crm_lead_products(qty, price, product_id)")
         .eq("account_id", req.accountId).eq("outcome", "won").gte("outcome_at", minStart.toISOString()).range(from, from + 999);
       if (await hasArchiveCols()) q = q.is("deleted_at", null);
       const { data, error } = await q; if (error) throw error;
@@ -1779,12 +1779,20 @@ router.get("/goals/progress", async (req, res) => {
       const st = pipeMap.get(won[i].pipeline_id) || [];
       if (st.some((x) => WON_RE.test(x.name)) && !st.some((x) => x.id === won[i].stage && WON_RE.test(x.name))) won.splice(i, 1);
     }
+    // Produto/ramo: vale o produto adicionado no negócio OU um campo do card com o mesmo nome
+    // (muita corretora marca o ramo num campo "Ramo"/"Tipo de seguro" em vez de adicionar produto).
+    const allPids = [...new Set(goals.flatMap((g) => pids(g)))];
+    const { data: prodRows } = allPids.length ? await supabase.from("crm_products").select("id, name").eq("account_id", req.accountId).in("id", allPids) : { data: [] };
+    const nrm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+    const prodName = new Map((prodRows || []).map((p) => [p.id, nrm(p.name)]));
+    const hasProd = (l, ids) => (l.crm_lead_products || []).some((p) => ids.includes(p.product_id)) ||
+      Object.values(l.custom || {}).some((v) => { const vals = (Array.isArray(v) ? v : String(v ?? "").split(/[,;]/)).map(nrm).filter(Boolean); return ids.some((id) => { const n = prodName.get(id); return n && vals.some((x) => x === n || (Math.min(x.length, n.length) >= 4 && (x.startsWith(n) || n.startsWith(x)))); }); });
     const mine = !isManager(req);
     const out = goals
       .filter((g) => !mine || !many(g, "ownerId").length || many(g, "ownerId").includes(req.userId))
       .map((g) => {
         const [s, e] = goalPeriod(g, now);
-        const rows = won.filter((l) => { const t = new Date(l.outcome_at); return t >= s && t <= e && (!many(g, "ownerId").length || many(g, "ownerId").includes(l.owner_id)) && (!many(g, "pipelineId").length || many(g, "pipelineId").includes(l.pipeline_id)) && (!many(g, "tagId").length || (l.tag_ids || []).some((t) => many(g, "tagId").includes(t))) && (!pids(g).length || (l.crm_lead_products || []).some((p) => pids(g).includes(p.product_id))); })
+        const rows = won.filter((l) => { const t = new Date(l.outcome_at); return t >= s && t <= e && (!many(g, "ownerId").length || many(g, "ownerId").includes(l.owner_id)) && (!many(g, "pipelineId").length || many(g, "pipelineId").includes(l.pipeline_id)) && (!many(g, "tagId").length || (l.tag_ids || []).some((t) => many(g, "tagId").includes(t))) && (!pids(g).length || hasProd(l, pids(g))); })
           .map((l) => {
             // Meta de um produto/ramo: vale o que foi vendido daquele produto no negócio (ou o valor do negócio, se não tiver preço).
             let v = Number(l.value) || 0;
