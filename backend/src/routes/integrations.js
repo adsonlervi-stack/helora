@@ -489,7 +489,7 @@ export async function publicFormHandler(req, res) {
     import("../webhooks.js").then((m) => m.emitEvent(accountId, "lead.criado", { id: lead.id, nome: lead.name, telefone: lead.phone, email: lead.email, origem: lead.source })).catch(() => {});
     if (form.toBrain && extra.length) addDoc(accountId, { source: "formulario", title: `${form.name}: ${lead.name}`, content: [`Nome: ${lead.name}`, phone ? `Telefone: ${phone}` : "", email ? `E-mail: ${email}` : "", ...extra].filter(Boolean).join("\n") }).catch(() => {});
     // Avisa no grupo do WhatsApp escolhido (ex.: grupo do time comercial) assim que o lead chega.
-    if (form.notifyConversationId || form.notifyPhone || form.notifyEmail) {
+    if (form.notifyConversationId || form.notifyPhone) {
       (async () => {
         const fmtPhone = phone ? `+${phone}` : null;
         const text = [`🔔 *Novo lead* · ${form.name}`, "", `*Nome:* ${lead.name}`, fmtPhone && `*WhatsApp:* ${fmtPhone}`, email && `*E-mail:* ${email}`, company && `*Empresa:* ${company}`,
@@ -513,9 +513,7 @@ export async function publicFormHandler(req, res) {
             if (ch) await sendWhatsAppMessage(ch, `${n}@s.whatsapp.net`, text);
           })());
         }
-        for (const to of String(form.notifyEmail || "").split(/[,;\s]+/).filter((x) => /@/.test(x))) {
-          jobs.push(import("../email.js").then((m) => m.sendMail({ to, subject: `Novo lead: ${lead.name} (${form.name})`, title: "Chegou um lead novo", message: text.replace(/\*/g, "") })));
-        }
+        // Aviso por e-mail: desligado até existir o modelo próprio no email.js.
         const r = await Promise.allSettled(jobs);
         r.filter((x) => x.status === "rejected").forEach((x) => console.warn("[Formulário] aviso falhou:", x.reason?.message));
       })().catch((e) => console.warn("[Formulário] aviso no grupo falhou:", e.message));
