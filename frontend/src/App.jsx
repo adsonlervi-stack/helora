@@ -394,7 +394,7 @@ export default function App() {
           {activeSection === "home" && (
             <HomePage profile={profile} conversations={conversations} onNavigate={setSection} onOpenConversation={openConversation} />
           )}
-          {activeSection === "overview" && <OverviewPage refreshKey={statsVersion} />}
+          {activeSection === "overview" && <OverviewPage refreshKey={statsVersion} isManager={isManager} />}
           {activeSection === "agents" && <FlowsPage canEdit={profile.role === "owner" || profile.isSuperAdmin} />}
           {activeSection === "conversations" && (
             <ConversationsPage

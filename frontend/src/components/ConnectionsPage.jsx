@@ -316,22 +316,23 @@ function onSubmit(e) {
               {(pipes.find((p) => p.id === (f.pipelineId || pipes[0]?.id))?.stages || []).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
             </select>
           </div>
-          <div className="cx-dest">
-            <span>Avisar no grupo do WhatsApp</span>
-            <select value={f.notifyConversationId || ""} onChange={async (e) => { try { await integrations.updateForm(f.id, { notifyConversationId: e.target.value || null }); await reload(); notify(e.target.value ? "Cada lead novo vai ser avisado no grupo." : "Aviso no grupo desligado.", "success"); } catch (er) { notify(errText(er), "error"); } }}>
-              <option value="">Não avisar</option>
-              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-          </div>
-          <div className="cx-dest">
-            <span>Avisar no WhatsApp</span>
-            <input defaultValue={f.notifyPhone || ""} placeholder="84 99999-9999 (vários: separe por vírgula)" style={{ flex: 1, minWidth: 180 }}
-              onBlur={async (e) => { if ((e.target.value || "") === (f.notifyPhone || "")) return; try { await integrations.updateForm(f.id, { notifyPhone: e.target.value.trim() || null }); await reload(); notify("Número de aviso salvo.", "success"); } catch (er) { notify(errText(er), "error"); } }} />
-          </div>
-          <div className="cx-dest">
-            <span>Avisar por e-mail</span>
-            <input type="email" multiple defaultValue={f.notifyEmail || ""} placeholder="voce@empresa.com (vários: separe por vírgula)" style={{ flex: 1, minWidth: 180 }}
-              onBlur={async (e) => { if ((e.target.value || "") === (f.notifyEmail || "")) return; try { await integrations.updateForm(f.id, { notifyEmail: e.target.value.trim() || null }); await reload(); notify("E-mail de aviso salvo.", "success"); } catch (er) { notify(errText(er), "error"); } }} />
+          <div className="cx-notify">
+            <div className="cx-notify-title">Avisar quando chegar lead</div>
+            <label><span>Grupo do WhatsApp</span>
+              <select value={f.notifyConversationId || ""} onChange={async (e) => { try { await integrations.updateForm(f.id, { notifyConversationId: e.target.value || null }); await reload(); notify(e.target.value ? "Cada lead novo vai ser avisado no grupo." : "Aviso no grupo desligado.", "success"); } catch (er) { notify(errText(er), "error"); } }}>
+                <option value="">Não avisar</option>
+                {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            </label>
+            <label><span>Número de WhatsApp</span>
+              <input defaultValue={f.notifyPhone || ""} placeholder="Ex.: 84 99999-9999"
+                onBlur={async (e) => { if ((e.target.value || "") === (f.notifyPhone || "")) return; try { await integrations.updateForm(f.id, { notifyPhone: e.target.value.trim() || null }); await reload(); notify("Número de aviso salvo.", "success"); } catch (er) { notify(errText(er), "error"); } }} />
+            </label>
+            <label><span>E-mail</span>
+              <input type="text" defaultValue={f.notifyEmail || ""} placeholder="Ex.: voce@empresa.com"
+                onBlur={async (e) => { if ((e.target.value || "") === (f.notifyEmail || "")) return; try { await integrations.updateForm(f.id, { notifyEmail: e.target.value.trim() || null }); await reload(); notify("E-mail de aviso salvo.", "success"); } catch (er) { notify(errText(er), "error"); } }} />
+            </label>
+            <small>Para mais de um número ou e-mail, separe por vírgula.</small>
           </div>
           <div className="cx-inline"><input readOnly value={f.url} /><button className="pill-btn" onClick={() => copy(f.url)}><Copy size={13} /> Copiar link</button></div>
           <div className="cx-pick sm">

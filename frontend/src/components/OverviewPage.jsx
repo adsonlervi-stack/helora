@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import FunnelChart from "./FunnelChart.jsx";
 import MessagesChart from "./MessagesChart.jsx";
+import { GoalsTab } from "./Goals.jsx";
 import { getOverviewStats, getDepartments, getTeam, getChannels } from "../api.js";
 
 const PLATFORM_LABELS = { whatsapp: "WhatsApp", messenger: "Messenger", instagram: "Instagram" };
@@ -127,7 +128,15 @@ const PRESETS = [
   { key: "custom", label: "Personalizado", days: null }
 ];
 
-export default function OverviewPage({ refreshKey }) {
+export default function OverviewPage({ refreshKey, isManager = false }) {
+  const [sub, setSub] = useState(() => { try { return localStorage.getItem("helora:dash-sub") || "atend"; } catch { return "atend"; } });
+  const pick = (k) => { setSub(k); try { localStorage.setItem("helora:dash-sub", k); } catch {} };
+  const tabs = <div className="dash-subtabs"><button className={sub === "atend" ? "on" : ""} onClick={() => pick("atend")}>Atendimento</button><button className={sub === "metas" ? "on" : ""} onClick={() => pick("metas")}>Metas</button></div>;
+  if (sub === "metas") return <div className="page">{tabs}<GoalsTab canManage={isManager} /></div>;
+  return <OverviewStats refreshKey={refreshKey} tabs={tabs} />;
+}
+
+function OverviewStats({ refreshKey, tabs }) {
   const [customOpen, setCustomOpen] = useState(false);
   const [stats, setStats] = useState(null);
   const [period, setPeriod] = useState(defaultRange());
@@ -189,6 +198,7 @@ export default function OverviewPage({ refreshKey }) {
 
   return (
     <div className="page">
+      {tabs}
       <div className="dash-filters">
         <div className="dash-presets">
           {PRESETS.map((p) => (

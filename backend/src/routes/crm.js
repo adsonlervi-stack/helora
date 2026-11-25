@@ -1702,6 +1702,7 @@ const cleanGoal = (b, old = {}) => ({
   ownerId: b.ownerId ?? old.ownerId ?? null,
   pipelineId: b.pipelineId ?? old.pipelineId ?? null,
   tagId: b.tagId ?? old.tagId ?? null,
+  productId: b.productId !== undefined ? b.productId || null : old.productId ?? null,
   targetValue: Math.max(0, Number(b.targetValue ?? old.targetValue ?? 0) || 0),
   targetCount: Math.max(0, parseInt(b.targetCount ?? old.targetCount ?? 0) || 0),
   entries: old.entries || []
@@ -1758,7 +1759,7 @@ router.get("/goals/progress", async (req, res) => {
     // Metas da empresa contam as vendas de todos; por isso a consulta não filtra pelo dono aqui.
     const won = [];
     for (let from = 0; from < 50000; from += 1000) {
-      let q = supabase.from("crm_leads").select("id, value, outcome_at, owner_id, pipeline_id, stage, tag_ids, owner:profiles!crm_leads_owner_id_fkey(name)")
+      let q = supabase.from("crm_leads").select("id, name, company, value, outcome_at, owner_id, pipeline_id, stage, tag_ids, owner:profiles!crm_leads_owner_id_fkey(name), crm_lead_products(qty, price, product_id)")
         .eq("account_id", req.accountId).eq("outcome", "won").gte("outcome_at", minStart.toISOString()).range(from, from + 999);
       if (await hasArchiveCols()) q = q.is("deleted_at", null);
       const { data, error } = await q; if (error) throw error;
@@ -1778,7 +1779,13 @@ router.get("/goals/progress", async (req, res) => {
       .filter((g) => !mine || !g.ownerId || g.ownerId === req.userId)
       .map((g) => {
         const [s, e] = goalPeriod(g, now);
-        const rows = won.filter((l) => { const t = new Date(l.outcome_at); return t >= s && t <= e && (!g.ownerId || l.owner_id === g.ownerId) && (!g.pipelineId || l.pipeline_id === g.pipelineId) && (!g.tagId || (l.tag_ids || []).includes(g.tagId)); });
+        const rows = won.filter((l) => { const t = new Date(l.outcome_at); return t >= s && t <= e && (!g.ownerId || l.owner_id === g.ownerId) && (!g.pipelineId || l.pipeline_id === g.pipelineId) && (!g.tagId || (l.tag_ids || []).includes(g.tagId)) && (!g.productId || (l.crm_lead_products || []).some((p) => p.product_id === g.productId)); })
+          .map((l) => {
+            // Meta de um produto/ramo: vale o que foi vendido daquele produto no negócio (ou o valor do negócio, se não tiver preço).
+            let v = Number(l.value) || 0;
+            if (g.productId) { const pv = (l.crm_lead_products || []).filter((p) => p.product_id === g.productId).reduce((a, p) => a + (Number(p.price) || 0) * (Number(p.qty) || 1), 0); if (pv) v = pv; }
+            return { ...l, value: v };
+          });
         const ents = (g.entries || []).filter((x) => { const t = new Date(x.date + "T12:00:00"); return t >= s && t <= e; });
         const value = rows.reduce((a, l) => a + (Number(l.value) || 0), 0) + ents.reduce((a, x) => a + x.value, 0);
         const count = rows.length + ents.reduce((a, x) => a + x.count, 0);
@@ -1788,7 +1795,9 @@ router.get("/goals/progress", async (req, res) => {
         return { ...g, entries: ents, start: s.toISOString(), end: e.toISOString(), value, count, wonCount: rows.length,
           projectedValue: Math.round(value * f), projectedCount: Math.round(count * f), timePct: Math.round(elapsed / total * 100),
           daysLeft: Math.max(0, Math.ceil((e - now) / 86400000)),
-          ranking: mine ? [] : Object.values(by).sort((a, b) => b.value - a.value) };
+          ranking: mine ? [] : Object.values(by).sort((a, b) => b.value - a.value),
+          deals: rows.filter((l) => !mine || l.owner_id === req.userId).sort((a, b) => new Date(b.outcome_at) - new Date(a.outcome_at)).slice(0, 300)
+            .map((l) => ({ id: l.id, name: l.name, company: l.company, value: l.value, wonAt: l.outcome_at, owner: l.owner?.name || null, pipelineId: l.pipeline_id })) };
       });
     res.json(out);
   } catch (e) { res.status(500).json({ error: e.message }); }

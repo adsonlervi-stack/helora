@@ -3887,3 +3887,29 @@ html[data-theme="dark"] .goal-track b { background: rgba(255,255,255,.5); }
 .msg-day-sep { display: flex; justify-content: center; margin: 12px 0 8px; position: sticky; top: 6px; z-index: 2; pointer-events: none; }
 .msg-day-sep span { font-size: 12px; font-weight: 500; padding: 4px 12px; border-radius: 8px; background: var(--surface, #fff); color: var(--text-muted, #54656f); box-shadow: 0 1px 1px rgba(0,0,0,.08); }
 html[data-theme="dark"] .msg-day-sep span { background: #1f2c33; color: #aebac1; }
+
+/* Formulários: bloco de avisos */
+.cx-notify { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: rgba(0,113,227,.05); margin: 4px 0 10px; }
+.cx-notify-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted, #8e8e93); }
+.cx-notify label { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 10px; font-size: 13.5px; }
+.cx-notify select, .cx-notify input { width: 100%; height: 34px; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(0,0,0,.12); background: var(--surface, #fff); color: var(--text, #1d1d1f); font: inherit; font-size: 13.5px; box-sizing: border-box; }
+.cx-notify input:focus, .cx-notify select:focus { outline: none; border-color: #0071e3; box-shadow: 0 0 0 3px rgba(0,113,227,.15); }
+.cx-notify small { font-size: 12px; color: var(--text-muted, #8e8e93); padding-left: 160px; }
+@media (max-width: 560px) { .cx-notify label { grid-template-columns: 1fr; gap: 4px; } .cx-notify small { padding-left: 0; } }
+html[data-theme="dark"] .cx-notify { background: rgba(255,255,255,.04); }
+html[data-theme="dark"] .cx-notify select, html[data-theme="dark"] .cx-notify input { border-color: rgba(255,255,255,.14); }
+
+/* Metas: filtros e vendas */
+.goal-filters { font-size: 12px; color: var(--text-muted, #8e8e93); margin-top: -4px; }
+.goal-filters.warn { color: #b45309; background: rgba(217,119,6,.1); padding: 6px 8px; border-radius: 8px; }
+.goal-deals-btn { align-self: flex-start; border: 0; background: transparent; color: #0071e3; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 0; }
+.goal-deals { display: flex; flex-direction: column; max-height: 260px; overflow: auto; border-top: 1px solid rgba(0,0,0,.06); }
+.goal-deals > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(0,0,0,.05); font-size: 13px; }
+.goal-deals > div span { display: flex; flex-direction: column; min-width: 0; }
+.goal-deals > div small { color: var(--text-muted, #8e8e93); font-size: 11.5px; }
+.goal-deals > div b { white-space: nowrap; }
+.dash-subtabs { display: flex; gap: 4px; margin-bottom: 16px; padding: 3px; border-radius: 10px; background: rgba(0,0,0,.05); width: max-content; }
+.dash-subtabs button { border: 0; background: transparent; padding: 6px 16px; border-radius: 8px; font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; color: var(--text-muted, #6e6e73); }
+.dash-subtabs button.on { background: var(--surface, #fff); color: var(--text, #1d1d1f); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+html[data-theme="dark"] .dash-subtabs { background: rgba(255,255,255,.06); }
+html[data-theme="dark"] .dash-subtabs button.on { background: rgba(255,255,255,.12); }
