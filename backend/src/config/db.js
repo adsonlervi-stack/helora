@@ -722,8 +722,9 @@ export async function findOrCreateConversation({ accountId, platform, externalId
     .limit(1);
   if (findError) throw findError;
   let existing = found?.[0];
-  // Ainda não achou: tenta pelo número real guardado (conversas abertas pelo painel)
-  if (!existing && phone) {
+  // Também procura pelo número real guardado (conversas abertas pelo painel) e fica com a mais recente,
+  // para a resposta do cliente não cair numa conversa antiga do mesmo contato.
+  if (phone) {
     const { data: byPhone } = await supabase
       .from("conversations")
       .select(CONVERSATION_SELECT)
@@ -733,7 +734,8 @@ export async function findOrCreateConversation({ accountId, platform, externalId
       .eq("is_group", false)
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(1);
-    existing = byPhone?.[0];
+    const p = byPhone?.[0];
+    if (p && (!existing || new Date(p.last_message_at || 0) > new Date(existing.last_message_at || 0))) existing = p;
   }
   if (existing) return mapConversation(existing);
 

@@ -866,7 +866,16 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         const phone = pjid.split("@")[0].split(":")[0];
         groupSender = { name: msg.pushName || null, phone: /^\d{8,15}$/.test(phone) ? phone : null, id: msg.key.participant || pjid };
       }
-      const pnJid = [msg.key.senderPn, msg.key.remoteJidAlt, jid].find((j) => j && /@s\.whatsapp\.net$/.test(j)) || "";
+      let pnJid = [msg.key.senderPn, msg.key.remoteJidAlt, jid].find((j) => j && /@s\.whatsapp\.net$/.test(j)) || "";
+      // A mesma pessoa pode ter conversa salva pelo número e outra pelo ID interno (@lid).
+      // Pergunta ao WhatsApp o par (número <-> lid) para achar sempre a mesma conversa.
+      let lidJid = [msg.key.senderLid, msg.key.remoteJidAlt, jid].find((j) => j && /@lid$/.test(j)) || "";
+      if (!isGroup) {
+        const lm = sock.signalRepository?.lidMapping;
+        try { if (!pnJid && lidJid && lm?.getPNForLID) pnJid = (await lm.getPNForLID(lidJid)) || ""; } catch {}
+        try { if (!lidJid && pnJid && lm?.getLIDForPN) lidJid = (await lm.getLIDForPN(pnJid)) || ""; } catch {}
+        pnJid = String(pnJid).replace(/:\d+@/, "@"); lidJid = String(lidJid).replace(/:\d+@/, "@");
+      }
       const phoneFromJid = pnJid.split("@")[0].split(":")[0];
       if (/^\d{10,15}$/.test(phoneFromJid)) {
         upsertContacts(accountId, channelId, [{ phone: phoneFromJid, pushName: msg.pushName }], "conversa").catch(() => {});
@@ -877,7 +886,7 @@ export async function startWhatsAppForChannel(channelId, accountId, { pairingPho
         accountId,
         platform: "whatsapp",
         externalId: jid,
-        altExternalIds: isGroup ? [] : [pnJid, phoneFromJid ? `${phoneFromJid}@s.whatsapp.net` : null].filter((j) => j && j !== jid),
+        altExternalIds: isGroup ? [] : [pnJid, lidJid, phoneFromJid ? `${phoneFromJid}@s.whatsapp.net` : null].filter((j) => j && j !== jid),
         phone: isGroup ? null : phoneFromJid || null,
         name,
         channelId
