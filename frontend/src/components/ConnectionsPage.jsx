@@ -323,6 +323,16 @@ function onSubmit(e) {
               {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
+          <div className="cx-dest">
+            <span>Avisar no WhatsApp</span>
+            <input defaultValue={f.notifyPhone || ""} placeholder="84 99999-9999 (vários: separe por vírgula)" style={{ flex: 1, minWidth: 180 }}
+              onBlur={async (e) => { if ((e.target.value || "") === (f.notifyPhone || "")) return; try { await integrations.updateForm(f.id, { notifyPhone: e.target.value.trim() || null }); await reload(); notify("Número de aviso salvo.", "success"); } catch (er) { notify(errText(er), "error"); } }} />
+          </div>
+          <div className="cx-dest">
+            <span>Avisar por e-mail</span>
+            <input type="email" multiple defaultValue={f.notifyEmail || ""} placeholder="voce@empresa.com (vários: separe por vírgula)" style={{ flex: 1, minWidth: 180 }}
+              onBlur={async (e) => { if ((e.target.value || "") === (f.notifyEmail || "")) return; try { await integrations.updateForm(f.id, { notifyEmail: e.target.value.trim() || null }); await reload(); notify("E-mail de aviso salvo.", "success"); } catch (er) { notify(errText(er), "error"); } }} />
+          </div>
           <div className="cx-inline"><input readOnly value={f.url} /><button className="pill-btn" onClick={() => copy(f.url)}><Copy size={13} /> Copiar link</button></div>
           <div className="cx-pick sm">
             {FORM_BRANDS.map((b) => (

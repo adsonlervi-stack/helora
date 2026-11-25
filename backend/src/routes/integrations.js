@@ -153,7 +153,7 @@ router.post("/forms", requireOwner, async (req, res) => {
     const forms = it?.config?.forms || [];
     const b = req.body || {};
     if (forms.length >= 30) return res.status(400).json({ error: "Máximo de 30 formulários." });
-    forms.push({ id: crypto.randomUUID(), token: crypto.randomBytes(18).toString("hex"), name: String(b.name || "Formulário do site").slice(0, 80), pipelineId: b.pipelineId || null, stage: b.stage || null, toBrain: !!b.toBrain, notifyConversationId: b.notifyConversationId || null, createdAt: new Date().toISOString(), count: 0 });
+    forms.push({ id: crypto.randomUUID(), token: crypto.randomBytes(18).toString("hex"), name: String(b.name || "Formulário do site").slice(0, 80), pipelineId: b.pipelineId || null, stage: b.stage || null, toBrain: !!b.toBrain, notifyConversationId: b.notifyConversationId || null, notifyPhone: b.notifyPhone || null, notifyEmail: b.notifyEmail || null, createdAt: new Date().toISOString(), count: 0 });
     await saveIntegration(req.accountId, "forms", { forms });
     res.status(201).json({ ok: true });
   } catch (err) { fail(res, err); }
@@ -161,7 +161,7 @@ router.post("/forms", requireOwner, async (req, res) => {
 router.patch("/forms/:id", requireOwner, async (req, res) => {
   try {
     const it = await getIntegration(req.accountId, "forms");
-    const forms = (it?.config?.forms || []).map((f) => (f.id === req.params.id ? { ...f, ...["name", "pipelineId", "stage", "toBrain", "notifyConversationId"].reduce((o, k) => (req.body?.[k] !== undefined ? { ...o, [k]: req.body[k] } : o), {}) } : f));
+    const forms = (it?.config?.forms || []).map((f) => (f.id === req.params.id ? { ...f, ...["name", "pipelineId", "stage", "toBrain", "notifyConversationId", "notifyPhone", "notifyEmail"].reduce((o, k) => (req.body?.[k] !== undefined ? { ...o, [k]: req.body[k] } : o), {}) } : f));
     await saveIntegration(req.accountId, "forms", { forms });
     res.json({ ok: true });
   } catch (err) { fail(res, err); }
@@ -489,18 +489,35 @@ export async function publicFormHandler(req, res) {
     import("../webhooks.js").then((m) => m.emitEvent(accountId, "lead.criado", { id: lead.id, nome: lead.name, telefone: lead.phone, email: lead.email, origem: lead.source })).catch(() => {});
     if (form.toBrain && extra.length) addDoc(accountId, { source: "formulario", title: `${form.name}: ${lead.name}`, content: [`Nome: ${lead.name}`, phone ? `Telefone: ${phone}` : "", email ? `E-mail: ${email}` : "", ...extra].filter(Boolean).join("\n") }).catch(() => {});
     // Avisa no grupo do WhatsApp escolhido (ex.: grupo do time comercial) assim que o lead chega.
-    if (form.notifyConversationId) {
+    if (form.notifyConversationId || form.notifyPhone || form.notifyEmail) {
       (async () => {
-        const { getConversation } = await import("../config/db.js");
-        const { sendTextToConversation } = await import("../messaging.js");
-        const conv = await getConversation(accountId, form.notifyConversationId);
-        if (!conv) return;
         const fmtPhone = phone ? `+${phone}` : null;
         const text = [`🔔 *Novo lead* · ${form.name}`, "", `*Nome:* ${lead.name}`, fmtPhone && `*WhatsApp:* ${fmtPhone}`, email && `*E-mail:* ${email}`, company && `*Empresa:* ${company}`,
           ...Object.entries(custom).map(([k, v]) => `*${(pipe.fields || []).find((x) => x.id === k)?.label || k}:* ${v}`),
           ...extra.map((x) => { const i = x.indexOf(": "); return i > 0 ? `*${x.slice(0, i)}:* ${x.slice(i + 2)}` : x; }),
           fmtPhone && "", fmtPhone && `Chamar: https://wa.me/${phone}`].filter((x) => x !== null && x !== undefined && x !== false).join("\n").slice(0, 3500);
-        await sendTextToConversation(accountId, conv, text, { senderName: "Helora" });
+        const jobs = [];
+        if (form.notifyConversationId) jobs.push((async () => {
+          const { getConversation } = await import("../config/db.js");
+          const { sendTextToConversation } = await import("../messaging.js");
+          const conv = await getConversation(accountId, form.notifyConversationId);
+          if (conv) await sendTextToConversation(accountId, conv, text, { senderName: "Helora" });
+        })());
+        // Número avulso: manda pelo WhatsApp conectado da empresa, sem abrir conversa no painel.
+        for (const raw of String(form.notifyPhone || "").split(/[,;\s]+/)) {
+          let n = raw.replace(/\D/g, ""); if (!n) continue; if (n.length === 10 || n.length === 11) n = `55${n}`;
+          jobs.push((async () => {
+            const { getPrimaryWhatsAppChannel } = await import("../config/db.js");
+            const { sendWhatsAppMessage } = await import("../whatsapp/baileysClient.js");
+            const ch = await getPrimaryWhatsAppChannel(accountId);
+            if (ch) await sendWhatsAppMessage(ch, `${n}@s.whatsapp.net`, text);
+          })());
+        }
+        for (const to of String(form.notifyEmail || "").split(/[,;\s]+/).filter((x) => /@/.test(x))) {
+          jobs.push(import("../email.js").then((m) => m.sendMail({ to, subject: `Novo lead: ${lead.name} (${form.name})`, title: "Chegou um lead novo", message: text.replace(/\*/g, "") })));
+        }
+        const r = await Promise.allSettled(jobs);
+        r.filter((x) => x.status === "rejected").forEach((x) => console.warn("[Formulário] aviso falhou:", x.reason?.message));
       })().catch((e) => console.warn("[Formulário] aviso no grupo falhou:", e.message));
     }
     const forms = all.map((f) => (f.id === form.id ? { ...f, count: (f.count || 0) + 1, lastAt: new Date().toISOString() } : f));
