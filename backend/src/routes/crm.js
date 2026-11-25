@@ -1772,8 +1772,8 @@ router.get("/goals/progress", async (req, res) => {
     }
     // Só conta o que está numa etapa de ganho de verdade (se o funil tiver uma); evita contar card que
     // foi marcado como ganho por estar numa etapa intermediária com nome parecido.
-    const pids = [...new Set(won.map((l) => l.pipeline_id).filter(Boolean))];
-    const { data: pipesW } = pids.length ? await supabase.from("crm_pipelines").select("id, stages").in("id", pids) : { data: [] };
+    const wonPipeIds = [...new Set(won.map((l) => l.pipeline_id).filter(Boolean))];
+    const { data: pipesW } = wonPipeIds.length ? await supabase.from("crm_pipelines").select("id, stages").in("id", wonPipeIds) : { data: [] };
     const pipeMap = new Map((pipesW || []).map((p) => [p.id, p.stages || []]));
     for (let i = won.length - 1; i >= 0; i--) {
       const st = pipeMap.get(won[i].pipeline_id) || [];
