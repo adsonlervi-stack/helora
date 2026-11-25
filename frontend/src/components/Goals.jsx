@@ -36,6 +36,13 @@ export function GoalCard({ g, filters }) {
       <div className="goal-head"><Target size={16} /><strong>{g.name}</strong><span className="goal-days">{g.daysLeft} dia(s) restantes</span></div>
       <Bar label="Valor vendido" done={g.value} target={g.targetValue} projected={g.projectedValue} fmt={brl} timePct={g.timePct} />
       <Bar label="Vendas" done={g.count} target={g.targetCount} projected={g.projectedCount} fmt={(n) => String(n)} timePct={g.timePct} />
+      {(g.pipeCount > 0 || g.pipeValue > 0) && (
+        <div className="goal-pipe" title="Negócios abertos no CRM com este filtro. Ainda não contam na meta.">
+          <div className="goal-bar-top"><span>Em prospecção</span><strong>{g.targetValue ? brl(g.pipeValue) : g.pipeCount} <small>{g.targetValue ? `· ${g.pipeCount} negócio(s)` : "negócio(s)"}</small></strong></div>
+          <div className="goal-track pipe"><i style={{ width: Math.min(100, g.targetValue ? pct(g.pipeValue, Math.max(1, g.targetValue - g.value)) : pct(g.pipeCount, Math.max(1, g.targetCount - g.count))) + "%" }} /></div>
+          <div className="goal-bar-foot"><span>{(g.targetValue ? g.pipeValue >= g.targetValue - g.value : g.pipeCount >= g.targetCount - g.count) ? "Não conta na meta · se fechar tudo, bate" : "Não conta na meta · mesmo fechando tudo, ainda falta"}</span></div>
+        </div>
+      )}
       <button type="button" className="goal-deals-btn" onClick={() => setOpen((v) => !v)}>{open ? "Ocultar vendas" : `Ver vendas desta meta (${deals.length + (g.entries?.length || 0)})`}</button>
       {open && (
         <div className="goal-deals">

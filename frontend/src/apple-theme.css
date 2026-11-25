@@ -3921,3 +3921,7 @@ html[data-theme="dark"] .dash-subtabs button.on { background: rgba(255,255,255,.
 .goals-prods button { border: 1px solid rgba(0,0,0,.12); background: var(--surface, #fff); color: var(--text, #1d1d1f); border-radius: 99px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
 .goals-prods button.on { background: #0071e3; border-color: #0071e3; color: #fff; }
 html[data-theme="dark"] .goals-prods button:not(.on) { border-color: rgba(255,255,255,.14); }
+.goal-pipe { border-top: 1px dashed rgba(0,0,0,.08); padding-top: 10px; }
+.goal-track.pipe { background: rgba(0,0,0,.06); }
+.goal-track.pipe i { background: repeating-linear-gradient(135deg, rgba(0,113,227,.45) 0 6px, rgba(0,113,227,.25) 6px 12px); }
+html[data-theme="dark"] .goal-track.pipe { background: rgba(255,255,255,.08); }

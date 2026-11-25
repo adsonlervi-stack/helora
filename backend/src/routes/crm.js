@@ -1770,6 +1770,15 @@ router.get("/goals/progress", async (req, res) => {
       const { data, error } = await q; if (error) throw error;
       won.push(...data); if (data.length < 1000) break;
     }
+    // Em prospecção: negócios abertos (ainda não ganhos nem perdidos) que batem com o filtro da meta.
+    const openDeals = [];
+    for (let from = 0; from < 50000; from += 1000) {
+      let q = supabase.from("crm_leads").select("id, value, custom, owner_id, pipeline_id, tag_ids, crm_lead_products(qty, price, product_id)")
+        .eq("account_id", req.accountId).is("outcome", null).range(from, from + 999);
+      if (await hasArchiveCols()) q = q.is("deleted_at", null).is("archived_at", null);
+      const { data, error } = await q; if (error) throw error;
+      openDeals.push(...data); if (data.length < 1000) break;
+    }
     // Só conta o que está numa etapa de ganho de verdade (se o funil tiver uma); evita contar card que
     // foi marcado como ganho por estar numa etapa intermediária com nome parecido.
     const wonPipeIds = [...new Set(won.map((l) => l.pipeline_id).filter(Boolean))];
@@ -1802,12 +1811,16 @@ router.get("/goals/progress", async (req, res) => {
         const ents = (g.entries || []).filter((x) => { const t = new Date(x.date + "T12:00:00"); return t >= s && t <= e; });
         const value = rows.reduce((a, l) => a + (Number(l.value) || 0), 0) + ents.reduce((a, x) => a + x.value, 0);
         const count = rows.length + ents.reduce((a, x) => a + x.count, 0);
+        const matchG = (l) => (!many(g, "ownerId").length || many(g, "ownerId").includes(l.owner_id)) && (!many(g, "pipelineId").length || many(g, "pipelineId").includes(l.pipeline_id)) && (!many(g, "tagId").length || (l.tag_ids || []).some((t) => many(g, "tagId").includes(t))) && (!pids(g).length || hasProd(l, pids(g)));
+        const opens = openDeals.filter((l) => matchG(l) && (!mine || l.owner_id === req.userId));
+        const pipeValue = opens.reduce((a, l) => { let v = Number(l.value) || 0; if (pids(g).length) { const pv = (l.crm_lead_products || []).filter((p) => pids(g).includes(p.product_id)).reduce((x, p) => x + (Number(p.price) || 0) * (Number(p.qty) || 1), 0); if (pv) v = pv; } return a + v; }, 0);
         const by = {};
         for (const l of rows) { const k = l.owner_id || "none"; by[k] ||= { ownerId: l.owner_id, name: l.owner?.name || "Sem responsável", value: 0, count: 0 }; by[k].value += Number(l.value) || 0; by[k].count++; }
         const total = e - s, elapsed = Math.min(total, Math.max(1, now - s)), f = total / elapsed;
         return { ...g, entries: ents, start: s.toISOString(), end: e.toISOString(), value, count, wonCount: rows.length,
           projectedValue: Math.round(value * f), projectedCount: Math.round(count * f), timePct: Math.round(elapsed / total * 100),
           daysLeft: Math.max(0, Math.ceil((e - now) / 86400000)),
+          pipeValue, pipeCount: opens.length,
           ranking: mine ? [] : Object.values(by).sort((a, b) => b.value - a.value),
           deals: rows.filter((l) => !mine || l.owner_id === req.userId).sort((a, b) => new Date(b.outcome_at) - new Date(a.outcome_at)).slice(0, 300)
             .map((l) => ({ id: l.id, name: l.name, company: l.company, value: l.value, wonAt: l.outcome_at, owner: l.owner?.name || null, pipelineId: l.pipeline_id })) };
