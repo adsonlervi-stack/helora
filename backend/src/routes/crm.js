@@ -354,7 +354,11 @@ function leadRow(b) {
   return row;
 }
 
-const WON_RE = /fechad|ganh|vendid|conclu|indeniz/i;
+// Etapa de ganho só quando o nome diz que a venda saiu. "Cotação concluída", "Proposta enviada",
+// "Vistoria concluída", "Em fechamento" etc. são etapas do caminho, não venda ganha.
+const WON_WORDS = /fechad|ganh|vendid|conclu|indeniz/i;
+const NOT_WON = /cota|propost|vistori|aguard|an[aá]lis|pendent|document|envi|negocia|fechamento|^\s*em\s/i;
+const WON_RE = { test: (n) => WON_WORDS.test(n || "") && !NOT_WON.test(n || "") };
 const LOST_RE = /perdid|cancel|desist|negad|n[aã]o fechou/i;
 let archiveColsOk = null;
 async function hasArchiveCols() {
@@ -1754,11 +1758,20 @@ router.get("/goals/progress", async (req, res) => {
     // Metas da empresa contam as vendas de todos; por isso a consulta não filtra pelo dono aqui.
     const won = [];
     for (let from = 0; from < 50000; from += 1000) {
-      let q = supabase.from("crm_leads").select("id, value, outcome_at, owner_id, pipeline_id, tag_ids, owner:profiles!crm_leads_owner_id_fkey(name)")
+      let q = supabase.from("crm_leads").select("id, value, outcome_at, owner_id, pipeline_id, stage, tag_ids, owner:profiles!crm_leads_owner_id_fkey(name)")
         .eq("account_id", req.accountId).eq("outcome", "won").gte("outcome_at", minStart.toISOString()).range(from, from + 999);
       if (await hasArchiveCols()) q = q.is("deleted_at", null);
       const { data, error } = await q; if (error) throw error;
       won.push(...data); if (data.length < 1000) break;
+    }
+    // Só conta o que está numa etapa de ganho de verdade (se o funil tiver uma); evita contar card que
+    // foi marcado como ganho por estar numa etapa intermediária com nome parecido.
+    const pids = [...new Set(won.map((l) => l.pipeline_id).filter(Boolean))];
+    const { data: pipesW } = pids.length ? await supabase.from("crm_pipelines").select("id, stages").in("id", pids) : { data: [] };
+    const pipeMap = new Map((pipesW || []).map((p) => [p.id, p.stages || []]));
+    for (let i = won.length - 1; i >= 0; i--) {
+      const st = pipeMap.get(won[i].pipeline_id) || [];
+      if (st.some((x) => WON_RE.test(x.name)) && !st.some((x) => x.id === won[i].stage && WON_RE.test(x.name))) won.splice(i, 1);
     }
     const mine = !isManager(req);
     const out = goals

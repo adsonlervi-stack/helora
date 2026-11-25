@@ -48,7 +48,9 @@ const toLocalInput = (d) => {
 };
 const daysUntil = (d) => { if (!d) return null; return Math.round((new Date(`${String(d).slice(0, 10)}T12:00:00`) - new Date()) / 86400000); };
 export const EV_KIND = { reuniao: "Reunião", call: "Ligação", followup: "Follow-up", tarefa: "Tarefa", email: "E-mail", whatsapp: "WhatsApp", proposta: "Proposta", visita: "Visita", cobranca: "Cobrança", cad_call: "Ligação", cad_whats: "WhatsApp", cad_email: "E-mail", cad_task: "Tarefa", cad_meeting: "Reunião" };
-const WON_RE = /fechad|ganh|vendid|conclu|indeniz/i;
+const WON_WORDS = /fechad|ganh|vendid|conclu|indeniz/i;
+const NOT_WON = /cota|propost|vistori|aguard|an[aá]lis|pendent|document|envi|negocia|fechamento|^\s*em\s/i;
+const WON_RE = { test: (n) => WON_WORDS.test(n || "") && !NOT_WON.test(n || "") };
 const LOST_RE = /perdid|cancel|desist|negad|n[aã]o fechou/i;
 
 /** Card do CRM aberto em tela cheia (modelo Pipedrive): etapas no topo, resumo à esquerda, atividades e histórico à direita. */

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Plug, Check, Search, Settings2, Mail, FileText, Sheet as SheetIcon, Palette, Copy, Trash2, RefreshCw, Plus, ExternalLink, Download, Sparkles, Link2 } from "lucide-react";
-import { integrations, crm, googleStatusApi, googleAuthUrlApi, googleDisconnectApi, googleDrive } from "../api.js";
+import { integrations, crm, getConversations, googleStatusApi, googleAuthUrlApi, googleDisconnectApi, googleDrive } from "../api.js";
 import { Sheet, Group, Row, Switch, Button } from "./ui.jsx";
 import { askConfirm, notify } from "../dialogs.js";
 
@@ -253,6 +253,8 @@ function MailSheet({ current, preset: presetBrand, onClose, onSaved, onRemove, o
 function FormsSheet({ forms, onClose, reload }) {
   const [pipes, setPipes] = useState([]);
   const [nf, setNf] = useState(null);
+  const [groups, setGroups] = useState([]);
+  useEffect(() => { getConversations().then((l) => setGroups((Array.isArray(l) ? l : l?.conversations || []).filter((c) => c.isGroup && c.platform === "whatsapp").sort((a, b) => String(a.name).localeCompare(String(b.name))))).catch(() => {}); }, []);
   const [show, setShow] = useState(null);
   const [tool, setTool] = useState({});
   useEffect(() => { crm.pipelines().then(setPipes).catch(() => {}); }, []);
@@ -312,6 +314,13 @@ function onSubmit(e) {
             <span>na etapa</span>
             <select value={f.stage || ""} onChange={async (e) => { try { await integrations.updateForm(f.id, { stage: e.target.value }); await reload(); notify("Etapa atualizada.", "success"); } catch (er) { notify(errText(er), "error"); } }}>
               {(pipes.find((p) => p.id === (f.pipelineId || pipes[0]?.id))?.stages || []).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+            </select>
+          </div>
+          <div className="cx-dest">
+            <span>Avisar no grupo do WhatsApp</span>
+            <select value={f.notifyConversationId || ""} onChange={async (e) => { try { await integrations.updateForm(f.id, { notifyConversationId: e.target.value || null }); await reload(); notify(e.target.value ? "Cada lead novo vai ser avisado no grupo." : "Aviso no grupo desligado.", "success"); } catch (er) { notify(errText(er), "error"); } }}>
+              <option value="">Não avisar</option>
+              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
           <div className="cx-inline"><input readOnly value={f.url} /><button className="pill-btn" onClick={() => copy(f.url)}><Copy size={13} /> Copiar link</button></div>
