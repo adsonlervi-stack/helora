@@ -1786,7 +1786,7 @@ router.get("/goals/progress", async (req, res) => {
     const nrm = (x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
     const prodName = new Map((prodRows || []).map((p) => [p.id, nrm(p.name)]));
     const hasProd = (l, ids) => (l.crm_lead_products || []).some((p) => ids.includes(p.product_id)) ||
-      Object.values(l.custom || {}).some((v) => { const vals = (Array.isArray(v) ? v : String(v ?? "").split(/[,;]/)).map(nrm).filter(Boolean); return ids.some((id) => { const n = prodName.get(id); return n && vals.some((x) => x === n || (Math.min(x.length, n.length) >= 4 && (x.startsWith(n) || n.startsWith(x)))); }); });
+      Object.values(l.custom || {}).some((v) => { const vals = (Array.isArray(v) ? v : String(v ?? "").split(/[,;]/)).map(nrm).filter(Boolean); return ids.some((id) => { const n = prodName.get(id); return n && vals.some((x) => x === n || x.startsWith(n + " ")); }); });
     const mine = !isManager(req);
     const out = goals
       .filter((g) => !mine || !many(g, "ownerId").length || many(g, "ownerId").includes(req.userId))
