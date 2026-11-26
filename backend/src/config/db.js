@@ -2563,7 +2563,9 @@ export async function listStickerUrls(accountId) {
 /** Atendente/setor padrão do contato desta conversa (null se não houver). */
 export async function getContactRouting(accountId, conversation) {
   if (conversation.isGroup) return null;
-  const phone = String(conversation.externalId || "").split("@")[0].split(":")[0];
+  // @lid é ID interno do WhatsApp, não telefone: usa o número real guardado na conversa.
+  const ext = String(conversation.externalId || "");
+  const phone = String(conversation.phone || (ext.includes("@lid") ? "" : ext.split("@")[0].split(":")[0])).replace(/\D/g, "");
   if (!/^\d{10,15}$/.test(phone)) return null;
   const phones = [phone, BR_TWIN(phone)].filter(Boolean);
   const { data, error } = await supabase
